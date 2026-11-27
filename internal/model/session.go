@@ -98,6 +98,17 @@ func Key(s Session) string {
 	return s.Source + ":" + hex.EncodeToString(sum[:8])
 }
 
+// Ref identifies an open Rex session across hosts, or is "" for a row with
+// no session ID. A session ID is unique only on its own server, so a host's
+// session is qualified by the host label; a session on this machine is its
+// bare ID.
+func (s Session) Ref() string {
+	if s.SessionID == "" || s.Machine == "" {
+		return s.SessionID
+	}
+	return s.Machine + "\x00" + s.SessionID
+}
+
 // DisplayName identifies remote sessions without changing their configured name.
 func (s Session) DisplayName() string {
 	name := s.Name

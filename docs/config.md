@@ -238,7 +238,7 @@ with parent elements added where two directories would share a name, such as
 
 | Field | Default | Effect |
 | --- | --- | --- |
-| `last_workspace_label` | `"last"` | Accepted, but has no effect. rex-sesh records no session history. |
+| `last_workspace_label` | `"last"` | Accepted, but has no effect yet. Nothing shows the last session's label. |
 
 The value must be at most 80 characters, must not contain control characters,
 and must not start or end with whitespace.
@@ -300,12 +300,12 @@ preview command.
 | --- | --- |
 | `REX_SESH_CONFIG` | Config file to load. It must exist. |
 | `REX_SESH_CONFIG_DIR` | Directory searched for `config.toml` and `sesh.toml`, before `~/.config/rex-sesh`. |
-| `REX_SESH_STATE_DIR` | Directory for the `list` cache. Defaults to `$XDG_STATE_HOME/rex-sesh` or `~/.local/state/rex-sesh`. |
+| `REX_SESH_STATE_DIR` | Directory for the `list` cache and the [session history](rex-app.md#session-history). Defaults to `$XDG_STATE_HOME/rex-sesh` or `~/.local/state/rex-sesh`. |
 | `REX_SESH_REX_BIN` | The `rex` binary to run. Defaults to `rex` in `REX_BIN_DIR`, which Rex sets in its terminals, then `rex` on `PATH`. |
 | `REX_SESH_PICKER` | Set to `fzf` to use the fzf picker. |
 | `REX_SESH_REDUCE_MOTION` | Set to `1` or `true` to turn off picker animations. |
 | `REX_SESH_SMEAR_PRESET` | Cursor animation: `crisp` (default), `gooey`, or `ghost`. See [Picker](config/picker.md#cursor-and-status-indicators). |
-| `REX_CLIENT` | The Rex app the picker switches when `--client` isn't given. |
+| `REX_CLIENT` | The Rex app the picker switches when neither `--client` nor `--opener` is given. |
 | `HERDR_CONFIG_PATH` | The Herdr config file that supplies picker colors. See [Picker colors](config/picker.md#picker-colors). |
 
 ## Legacy migration

@@ -128,7 +128,7 @@ native format. `rex-sesh config migrate` converts a legacy file.
 | --- | --- |
 | `REX_SESH_CONFIG` | Config file to load. |
 | `REX_SESH_CONFIG_DIR` | Directory searched for `config.toml` and `sesh.toml`. |
-| `REX_SESH_STATE_DIR` | Directory for the session cache. Defaults to `$XDG_STATE_HOME/rex-sesh` or `~/.local/state/rex-sesh`. |
+| `REX_SESH_STATE_DIR` | Directory for the session cache and session history. Defaults to `$XDG_STATE_HOME/rex-sesh` or `~/.local/state/rex-sesh`. |
 | `REX_SESH_REX_BIN` | The `rex` binary to run. Defaults to the Rex server's own copy, then `rex` on `PATH`. |
 | `REX_SESH_PICKER` | Set to `fzf` to use the fzf picker. |
 | `REX_SESH_REDUCE_MOTION` | Set to `1` or `true` to turn off picker animations. |

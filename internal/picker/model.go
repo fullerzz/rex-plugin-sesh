@@ -68,10 +68,13 @@ func (m *Model) Move(delta int) {
 	m.Selected += delta
 	m.clampSelected()
 }
+
+// UpdateAgentStatuses sets each Rex session's status from statuses, keyed by
+// Session.Ref, and clears it for a session missing from the map.
 func (m *Model) UpdateAgentStatuses(statuses map[string]string) {
 	for i := range m.All {
 		if m.All[i].SessionID != "" {
-			m.All[i].AgentStatus = statuses[m.All[i].SessionID]
+			m.All[i].AgentStatus = statuses[m.All[i].Ref()]
 		}
 	}
 	m.Filter(m.Query)

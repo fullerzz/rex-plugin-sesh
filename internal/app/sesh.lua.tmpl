@@ -21,10 +21,11 @@ rex.action{
     -- picker finds its own session from REX_BLOCK.
     local start = {{ lua .Start }}
     local argv = { "/bin/sh", "-c", start, bin, "picker" }
-    -- From a key or the palette, ctx.client_id is the app to switch. From the
+    -- From a key or the palette, ctx.client_id is the app that opened the
+    -- picker: the app to switch, which shows the picker's session. From the
     -- CLI it is the rex command itself, so the picker finds the app instead.
     if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
-      argv[#argv + 1] = "--client"
+      argv[#argv + 1] = "--opener"
       argv[#argv + 1] = ctx.client_id
     end
     return assert(rex.session.new_layer{

@@ -1,11 +1,10 @@
 package state
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -14,479 +13,197 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHistoryPreservesQualifiedRemoteWorkspaceIDs(t *testing.T) {
+func local(id string) Visit { return Visit{SessionID: id} }
+
+// recordNow records a switch that began with app's history as it is now, as
+// a switch does when no other picker switches the app meanwhile.
+func recordNow(dir, app string, from, to Visit) error {
+	h, _ := LoadHistory(dir)
+	return RecordSwitch(dir, app, from, to, h.Revision(app))
+}
+
+func visits(t *testing.T, dir, app string) []Visit {
+	t.Helper()
+	h, err := LoadHistory(dir)
+	require.NoError(t, err)
+	return h.Visits(app)
+}
+
+func TestLoadHistoryWithoutAFileIsEmpty(t *testing.T) {
+	h, err := LoadHistory(t.TempDir())
+	require.NoError(t, err)
+	assert.Empty(t, h.Visits("label:mac"))
+	h, err = LoadHistory("")
+	require.NoError(t, err)
+	assert.Empty(t, h.Visits("label:mac"))
+}
+
+func TestRecordSwitchPutsTheOriginSecond(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, RecordSwitch(dir, "sp1", "buntu26/sp1", 0))
-	got, err := LoadHistory(dir)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"buntu26/sp1", "sp1"}, got.Workspaces)
-	previous, ok := got.PreviousWorkspace("buntu26/sp1")
-	assert.True(t, ok)
-	assert.Equal(t, "sp1", previous)
+	require.NoError(t, recordNow(dir, "label:mac", local("A"), local("C")))
+	assert.Equal(t, []Visit{local("C"), local("A")}, visits(t, dir, "label:mac"))
+	require.NoError(t, recordNow(dir, "label:mac", local("C"), local("A")))
+	assert.Equal(t, []Visit{local("A"), local("C")}, visits(t, dir, "label:mac"))
 }
 
-func TestSessionHistoryDirIsolatesSockets(t *testing.T) {
-	stateDir := t.TempDir()
-	firstDir, err := SessionHistoryDir(stateDir, "/tmp/herdr-a.sock")
-	require.NoError(t, err)
-	secondDir, err := SessionHistoryDir(stateDir, "/tmp/herdr-b.sock")
-	require.NoError(t, err)
-	require.NotEqual(t, secondDir, firstDir)
-
-	require.NoError(t, SaveHistory(firstDir, History{Workspaces: []string{"w1", "first-only"}}))
-	require.NoError(t, SaveHistory(secondDir, History{Workspaces: []string{"w1", "second-only"}}))
-	require.NoError(t, RecordSwitch(firstDir, "w1", "first-only", 0))
-	require.NoError(t, RemoveWorkspace(secondDir, "w1"))
-
-	first, err := LoadHistory(firstDir)
-	require.NoError(t, err)
-	second, err := LoadHistory(secondDir)
-	require.NoError(t, err)
-	require.Equal(t, []string{"first-only", "w1"}, first.Workspaces)
-	assert.Equal(t, []string{"second-only"}, second.Workspaces)
+// Repeated visits move a session forward instead of listing it twice.
+func TestRecordSwitchListsEachSessionOnce(t *testing.T) {
+	dir := t.TempDir()
+	for _, step := range [][2]string{{"A", "C"}, {"C", "B"}, {"B", "C"}, {"C", "A"}} {
+		require.NoError(t, recordNow(dir, "label:mac", local(step[0]), local(step[1])))
+	}
+	assert.Equal(t, []Visit{local("A"), local("C"), local("B")}, visits(t, dir, "label:mac"))
 }
 
-func TestSessionHistoryDirMigratesOnlyDefaultSessionHistory(t *testing.T) {
-	stateDir := t.TempDir()
-	legacy := History{Workspaces: []string{"current", "previous"}}
-	require.NoError(t, SaveHistory(stateDir, legacy))
-
-	namedDir, err := SessionHistoryDir(stateDir, filepath.Join("/config", "herdr", "sessions", "work", "herdr.sock"))
-	require.NoError(t, err)
-	named, err := LoadHistory(namedDir)
-	require.NoError(t, err)
-	require.Empty(t, named.Workspaces)
-
-	defaultDir, err := SessionHistoryDir(stateDir, filepath.Join("/config", "herdr", "herdr.sock"))
-	require.NoError(t, err)
-	migrated, err := LoadHistory(defaultDir)
-	require.NoError(t, err)
-	assert.Equal(t, legacy, migrated)
+// After a switch rex-sesh did not see, such as one made with Change Session…,
+// the session the picker opened in is recorded as the origin even when the
+// destination already heads the history.
+func TestRecordSwitchRecordsAnOriginItDidNotSwitchTo(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, recordNow(dir, "label:mac", local("A"), local("C")))
+	require.NoError(t, recordNow(dir, "label:mac", local("B"), local("C")))
+	assert.Equal(t, []Visit{local("C"), local("B"), local("A")}, visits(t, dir, "label:mac"))
 }
 
-func TestSessionHistoryDirMigrationWaitsForDestinationLock(t *testing.T) {
-	stateDir := t.TempDir()
-	socketPath := filepath.Join(t.TempDir(), "herdr", "herdr.sock")
-	sessionDir, err := SessionHistoryDir(stateDir, socketPath)
+// B heads the history, and the app moves to A outside rex-sesh. Two pickers
+// in A take Enter at once: one picks B, the other C, after waiting for the
+// first. The first left B at the head, but its switch still advanced the
+// revision, so the second knows the app had left A.
+func TestRecordSwitchDropsAnOriginThatAnotherSwitchLeft(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, recordNow(dir, "label:mac", local("X"), local("B")))
+	h, err := LoadHistory(dir)
 	require.NoError(t, err)
-	legacy := History{Workspaces: []string{"legacy"}}
-	require.NoError(t, SaveHistory(stateDir, legacy))
-	require.NoError(t, os.MkdirAll(sessionDir, 0700))
+	atEnter := h.Revision("label:mac")
+	require.NoError(t, RecordSwitch(dir, "label:mac", local("A"), local("B"), atEnter))
+	require.NoError(t, RecordSwitch(dir, "label:mac", local("A"), local("C"), atEnter))
+	assert.Equal(t, []Visit{local("C"), local("B"), local("A"), local("X")}, visits(t, dir, "label:mac"))
+	h, err = LoadHistory(dir)
+	require.NoError(t, err)
+	assert.Equal(t, atEnter+2, h.Revision("label:mac"))
+	assert.Zero(t, h.Revision("label:ipad"), "each app has its own revision")
+}
 
-	//nolint:gosec // Test lock path is derived from t.TempDir().
-	lock, err := os.OpenFile(filepath.Join(sessionDir, "history.lock"), os.O_CREATE|os.O_RDWR, 0600)
+func TestRecordSwitchToTheCurrentSessionRecordsNothing(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, recordNow(dir, "label:mac", local("C"), local("C")))
+	assert.NoFileExists(t, HistoryPath(dir))
+	require.NoError(t, recordNow(dir, "label:mac", local("A"), local("C")))
+	require.NoError(t, recordNow(dir, "label:mac", local("C"), local("C")))
+	assert.Equal(t, []Visit{local("C"), local("A")}, visits(t, dir, "label:mac"))
+}
+
+func TestRecordSwitchWithoutAnOriginRecordsTheDestination(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, recordNow(dir, "label:mac", Visit{}, local("C")))
+	assert.Equal(t, []Visit{local("C")}, visits(t, dir, "label:mac"))
+}
+
+func TestRecordSwitchKeepsEachAppsHistory(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, recordNow(dir, "label:mac", local("A"), local("B")))
+	require.NoError(t, recordNow(dir, "label:ipad", local("C"), local("A")))
+	assert.Equal(t, []Visit{local("B"), local("A")}, visits(t, dir, "label:mac"))
+	assert.Equal(t, []Visit{local("A"), local("C")}, visits(t, dir, "label:ipad"))
+}
+
+// A session ID is unique only on its own server, so the same ID on two
+// hosts is two sessions.
+func TestRecordSwitchTellsHostsApart(t *testing.T) {
+	dir := t.TempDir()
+	devbox := Visit{Host: "devbox", SessionID: "session:1"}
+	require.NoError(t, recordNow(dir, "label:mac", local("session:1"), devbox))
+	assert.Equal(t, []Visit{devbox, local("session:1")}, visits(t, dir, "label:mac"))
+}
+
+func TestRecordSwitchKeepsTheNewestVisits(t *testing.T) {
+	dir := t.TempDir()
+	for i := range maxVisits + 5 {
+		require.NoError(t, recordNow(dir, "label:mac", Visit{}, local(fmt.Sprint(i))))
+	}
+	got := visits(t, dir, "label:mac")
+	require.Len(t, got, maxVisits)
+	assert.Equal(t, local(fmt.Sprint(maxVisits+4)), got[0])
+	assert.Equal(t, local("5"), got[maxVisits-1])
+}
+
+func TestRecordSwitchNeedsADirAndAnApp(t *testing.T) {
+	require.NoError(t, recordNow("", "label:mac", local("A"), local("B")))
+	dir := t.TempDir()
+	require.NoError(t, recordNow(dir, "", local("A"), local("B")))
+	require.NoError(t, recordNow(dir, "label:mac", local("A"), Visit{}))
+	assert.NoFileExists(t, HistoryPath(dir))
+}
+
+func TestRecordSwitchReplacesHistoryThatDoesNotDecode(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(HistoryPath(dir), []byte("{"), 0o600))
+	_, err := LoadHistory(dir)
+	require.Error(t, err)
+	require.NoError(t, recordNow(dir, "label:mac", local("A"), local("B")))
+	assert.Equal(t, []Visit{local("B"), local("A")}, visits(t, dir, "label:mac"))
+}
+
+// Pickers in several apps may switch at once; the lock keeps every write.
+func TestRecordSwitchKeepsConcurrentWrites(t *testing.T) {
+	dir := t.TempDir()
+	const apps = 8
+	errs := make(chan error, apps)
+	var wg sync.WaitGroup
+	for i := range apps {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- recordNow(dir, fmt.Sprintf("label:app%d", i), local("A"), local("B"))
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	h, err := LoadHistory(dir)
+	require.NoError(t, err)
+	assert.Len(t, h.Apps, apps)
+}
+
+// A second rex-sesh switching the same app waits for the first; another app
+// does not.
+func TestLockSwitchesWaitsOnlyForTheSameApp(t *testing.T) {
+	dir := t.TempDir()
+	unlock, err := LockSwitches(dir, "label:mac", time.Second)
+	require.NoError(t, err)
+	_, err = LockSwitches(dir, "label:mac", 50*time.Millisecond)
+	require.ErrorIs(t, err, ErrHistoryLockTimeout)
+	other, err := LockSwitches(dir, "label:ipad", 50*time.Millisecond)
+	require.NoError(t, err)
+	require.NoError(t, other())
+	require.NoError(t, unlock())
+	again, err := LockSwitches(dir, "label:mac", 50*time.Millisecond)
+	require.NoError(t, err)
+	require.NoError(t, again())
+
+	none, err := LockSwitches(dir, "", time.Second)
+	require.NoError(t, err)
+	require.NoError(t, none())
+}
+
+func TestRecordSwitchTimesOutWaitingForTheLock(t *testing.T) {
+	dir := t.TempDir()
+	//nolint:gosec // the lock path is under t.TempDir().
+	lock, err := os.OpenFile(filepath.Join(dir, "history.lock"), os.O_CREATE|os.O_RDWR, 0o600)
 	require.NoError(t, err)
 	defer func() { _ = lock.Close() }()
 	require.NoError(t, syscall.Flock(int(lock.Fd()), syscall.LOCK_EX))
-	locked := true
-	defer func() {
-		if locked {
-			_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-		}
-	}()
+	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
 
 	done := make(chan error, 1)
-	go func() {
-		_, migrateErr := SessionHistoryDir(stateDir, socketPath)
-		done <- migrateErr
-	}()
-	select {
-	case err := <-done:
-		require.FailNow(t, fmt.Sprintf("migration bypassed destination lock: %v", err))
-	case <-time.After(100 * time.Millisecond):
-	}
-
-	concurrent := History{Workspaces: []string{"concurrent"}}
-	require.NoError(t, writeJSONFile(Path(sessionDir), concurrent))
-	require.NoError(t, syscall.Flock(int(lock.Fd()), syscall.LOCK_UN))
-	locked = false
-	require.NoError(t, <-done)
-
-	got, err := LoadHistory(sessionDir)
-	require.NoError(t, err)
-	assert.Equal(t, concurrent, got)
-}
-
-func TestHistoryRecordsMostRecentWithoutDuplicates(t *testing.T) {
-	d := t.TempDir()
-	require.NoError(t, Record(d, "a"))
-	require.NoError(t, Record(d, "b"))
-	require.NoError(t, Record(d, "b"))
-	h, err := LoadHistory(d)
-	require.NoError(t, err)
-	last, ok := h.PreviousWorkspace("")
-	require.True(t, ok)
-	assert.Equal(t, "a", last)
-}
-
-func TestRecordKeepsCurrentHistoryFile(t *testing.T) {
-	d := t.TempDir()
-	require.NoError(t, SaveHistory(d, History{Workspaces: []string{"current", "older"}}))
-	before, err := os.Stat(Path(d))
-	require.NoError(t, err)
-
-	require.NoError(t, Record(d, "current"))
-
-	after, err := os.Stat(Path(d))
-	require.NoError(t, err)
-	assert.True(t, os.SameFile(before, after), "Record rewrote history.json for the current workspace")
-}
-
-func TestHistoryMutationsWaitForProcessLock(t *testing.T) {
-	if os.Getenv("REX_SESH_HISTORY_LOCK_HELPER") == "1" {
-		runHistoryLockHelper(t)
-		return
-	}
-
-	for _, tc := range []struct {
-		name   string
-		action string
-		setup  func(string) error
-	}{
-		{
-			name:   "record",
-			action: "record",
-		},
-		{
-			name:   "record switch",
-			action: "record-switch",
-		},
-		{
-			name:   "remove workspace",
-			action: "remove-workspace",
-			setup: func(dir string) error {
-				return SaveHistory(dir, History{Workspaces: []string{"remove"}})
-			},
-		},
-		{
-			name:   "save history",
-			action: "save-history",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			d := t.TempDir()
-			if tc.setup != nil {
-				require.NoError(t, tc.setup(d))
-			}
-			assertHistoryMutationWaitsForLock(t, d, tc.action)
-		})
-	}
-}
-
-func TestHistoryMutationTimesOutWaitingForProcessLock(t *testing.T) {
-	d := t.TempDir()
-	//nolint:gosec // Test lock path is derived from t.TempDir().
-	lock, err := os.OpenFile(filepath.Join(d, "history.lock"), os.O_CREATE|os.O_RDWR, 0600)
-	require.NoError(t, err)
-	defer func() { _ = lock.Close() }()
-	require.NoError(t, syscall.Flock(int(lock.Fd()), syscall.LOCK_EX))
-	locked := true
-	defer func() {
-		if locked {
-			_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-		}
-	}()
-
-	done := make(chan error, 1)
-	go func() { done <- Record(d, "blocked") }()
+	go func() { done <- recordNow(dir, "label:mac", local("A"), local("B")) }()
 	select {
 	case err := <-done:
 		require.ErrorIs(t, err, ErrHistoryLockTimeout)
 	case <-time.After(2 * time.Second):
-		require.NoError(t, syscall.Flock(int(lock.Fd()), syscall.LOCK_UN))
-		locked = false
-		err := <-done
-		require.FailNow(t, "history mutation remained blocked for two seconds", "result after unlock: %v", err)
+		require.FailNow(t, "RecordSwitch stayed blocked for two seconds")
 	}
-}
-
-func assertHistoryMutationWaitsForLock(t *testing.T, dir, action string) {
-	t.Helper()
-	//nolint:gosec // Test lock path is derived from t.TempDir().
-	lock, err := os.OpenFile(filepath.Join(dir, "history.lock"), os.O_CREATE|os.O_RDWR, 0600)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		assert.NoError(t, lock.Close())
-	})
-	require.NoError(t, syscall.Flock(int(lock.Fd()), syscall.LOCK_EX))
-	locked := true
-	defer func() {
-		if locked {
-			_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-		}
-	}()
-
-	//nolint:gosec // Test re-executes its own test binary.
-	cmd := exec.Command(os.Args[0], "-test.run=^TestHistoryMutationsWaitForProcessLock$")
-	cmd.Env = append(os.Environ(), "REX_SESH_HISTORY_LOCK_HELPER=1", "REX_SESH_HISTORY_LOCK_DIR="+dir, "REX_SESH_HISTORY_LOCK_ACTION="+action)
-	stdout, err := cmd.StdoutPipe()
-	require.NoError(t, err)
-	require.NoError(t, cmd.Start())
-	waitDone := make(chan struct{})
-	var waitErr error
-	go func() {
-		waitErr = cmd.Wait()
-		close(waitDone)
-	}()
-	t.Cleanup(func() {
-		select {
-		case <-waitDone:
-			return
-		default:
-		}
-		_ = cmd.Process.Kill()
-		select {
-		case <-waitDone:
-		case <-time.After(time.Second):
-			assert.Fail(t, "history mutation helper did not exit after being killed")
-		}
-	})
-
-	lines := make(chan string, 8)
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			lines <- scanner.Text()
-		}
-	}()
-	select {
-	case line := <-lines:
-		require.Equal(t, "ready", line)
-	case <-time.After(time.Second):
-		require.FailNow(t, "history mutation helper did not start")
-	}
-
-	select {
-	case line := <-lines:
-		require.FailNow(t, fmt.Sprintf("history mutation bypassed held process lock: %q", line))
-	case <-time.After(100 * time.Millisecond):
-	}
-	require.NoError(t, syscall.Flock(int(lock.Fd()), syscall.LOCK_UN))
-	locked = false
-	select {
-	case <-waitDone:
-		require.NoError(t, waitErr)
-	case <-time.After(2 * time.Second):
-		_ = cmd.Process.Kill()
-		select {
-		case <-waitDone:
-			require.FailNow(t, fmt.Sprintf("history mutation helper did not exit after lock release: %v", waitErr))
-		case <-time.After(time.Second):
-			require.FailNow(t, "history mutation helper did not exit after being killed")
-		}
-	}
-}
-
-func runHistoryLockHelper(t *testing.T) {
-	t.Helper()
-	dir := os.Getenv("REX_SESH_HISTORY_LOCK_DIR")
-	action := os.Getenv("REX_SESH_HISTORY_LOCK_ACTION")
-	fmt.Println("ready")
-	var mutateErr error
-	switch action {
-	case "record":
-		mutateErr = Record(dir, "record")
-	case "record-switch":
-		mutateErr = RecordSwitch(dir, "from", "to", 0)
-	case "remove-workspace":
-		mutateErr = RemoveWorkspace(dir, "remove")
-	case "save-history":
-		mutateErr = SaveHistory(dir, History{Workspaces: []string{"saved"}})
-	default:
-		require.FailNow(t, fmt.Sprintf("unknown helper action %q", action))
-	}
-	require.NoError(t, mutateErr)
-	fmt.Println("done")
-}
-
-func TestHistoryNoopsWithoutStateDir(t *testing.T) {
-	require.NoError(t, Record("", "ws1"))
-	require.NoError(t, RecordSwitch("", "ws1", "ws2", 0))
-	h, err := LoadHistory("")
-	require.NoError(t, err)
-	last, ok := h.PreviousWorkspace("")
-	require.False(t, ok)
-	require.Empty(t, last)
-	previous, ok := h.PreviousWorkspace("ws1")
-	require.False(t, ok)
-	assert.Empty(t, previous)
-}
-
-func TestRecordRecoversCorruptHistory(t *testing.T) {
-	d := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(d, "history.json"), []byte("{"), 0600))
-	require.NoError(t, Record(d, "ws1"))
-	h, err := LoadHistory(d)
-	require.NoError(t, err)
-	require.Len(t, h.Workspaces, 1)
-	assert.Equal(t, "ws1", h.Workspaces[0])
-}
-
-func TestPreviousSkipsCurrentWorkspace(t *testing.T) {
-	d := t.TempDir()
-	require.NoError(t, SaveHistory(d, History{Workspaces: []string{"current", "previous", "older"}}))
-	h, err := LoadHistory(d)
-	require.NoError(t, err)
-	previous, ok := h.PreviousWorkspace("current")
-	require.True(t, ok)
-	assert.Equal(t, "previous", previous)
-}
-
-func TestHistoryPreviousWorkspace(t *testing.T) {
-	for _, tt := range []struct {
-		name       string
-		workspaces []string
-		current    string
-		want       string
-		ok         bool
-	}{
-		{name: "empty"},
-		{name: "one entry without current", workspaces: []string{"one"}},
-		{name: "second without current", workspaces: []string{"one", "two", "three"}, want: "two", ok: true},
-		{name: "skip empty and current", workspaces: []string{"", "one", "one", "two"}, current: "one", want: "two", ok: true},
-		{name: "current absent", workspaces: []string{"one", "two"}, current: "other", want: "one", ok: true},
-		{name: "only current", workspaces: []string{"", "one", "one"}, current: "one"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			id, ok := (History{Workspaces: tt.workspaces}).PreviousWorkspace(tt.current)
-			assert.Equal(t, tt.want, id)
-			assert.Equal(t, tt.ok, ok)
-		})
-	}
-}
-
-func TestRecordSwitchRotatesPreviousWorkspace(t *testing.T) {
-	d := t.TempDir()
-	require.NoError(t, SaveHistory(d, History{Workspaces: []string{"current", "previous", "older"}}))
-	require.NoError(t, RecordSwitch(d, "current", "previous", 0))
-	h, err := LoadHistory(d)
-	require.NoError(t, err)
-	want := []string{"previous", "current", "older"}
-	assert.Equal(t, want, h.Workspaces)
-}
-
-// A switch's RecordSwitch lands after its focus request. Once the watcher has
-// recorded newer focus, including a return to the switch's origin, the late
-// write must not rewind history.
-func TestRecordSwitchIgnoresLateSwitchAfterWatcherWrites(t *testing.T) {
-	for name, focused := range map[string][]string{
-		"moved on":         {"B", "C", "D"},
-		"returned to from": {"B", "C", "A"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			d := t.TempDir()
-			require.NoError(t, SaveHistory(d, History{Workspaces: []string{"A"}}))
-			revision, err := HistoryRevision(d)
-			require.NoError(t, err)
-			for _, id := range focused {
-				require.NoError(t, Record(d, id))
-			}
-			want, err := LoadHistory(d)
-			require.NoError(t, err)
-
-			require.NoError(t, RecordSwitch(d, "A", "B", revision))
-
-			h, err := LoadHistory(d)
-			require.NoError(t, err)
-			assert.Equal(t, want, h)
-		})
-	}
-}
-
-// Without intervening writes the switch applies even when the head is stale
-// (missed sidebar focus) or the origin is unknown.
-func TestRecordSwitchAppliesWhenHistoryUnchanged(t *testing.T) {
-	for name, tt := range map[string]struct {
-		from string
-		want []string
-	}{
-		"stale head":     {from: "C", want: []string{"B", "C", "A"}},
-		"unknown origin": {from: "", want: []string{"B", "A"}},
-	} {
-		t.Run(name, func(t *testing.T) {
-			d := t.TempDir()
-			require.NoError(t, SaveHistory(d, History{Workspaces: []string{"A", "B"}, Revision: 7}))
-			require.NoError(t, RecordSwitch(d, tt.from, "B", 7))
-			h, err := LoadHistory(d)
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, h.Workspaces)
-			assert.Equal(t, uint64(8), h.Revision)
-		})
-	}
-}
-
-// Record does not write for an already-current head, so an unchanged revision
-// cannot prove the watcher missed the switch; keep the watcher's order.
-func TestRecordSwitchKeepsWatcherOrderWhenTargetAlreadyCurrent(t *testing.T) {
-	d := t.TempDir()
-	require.NoError(t, SaveHistory(d, History{Workspaces: []string{"to", "real-previous", "from"}}))
-	require.NoError(t, RecordSwitch(d, "from", "to", 0))
-	h, err := LoadHistory(d)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"to", "real-previous", "from"}, h.Workspaces)
-}
-
-func TestRecordSwitchRepairsMalformedHistoryWithRevision(t *testing.T) {
-	d := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(d, "history.json"), []byte(`{"revision":7,"workspaces":42}`), 0600))
-	revision, err := HistoryRevision(d)
-	require.NoError(t, err)
-	require.NoError(t, RecordSwitch(d, "A", "B", revision))
-	h, err := LoadHistory(d)
-	require.NoError(t, err)
-	assert.Equal(t, History{Workspaces: []string{"B", "A"}, Revision: 1}, h)
-}
-
-func TestRemoveWorkspacePrunesHistory(t *testing.T) {
-	d := t.TempDir()
-	require.NoError(t, SaveHistory(d, History{Workspaces: []string{"current", "closed", "older"}}))
-	require.NoError(t, RemoveWorkspace(d, "closed"))
-	h, err := LoadHistory(d)
-	require.NoError(t, err)
-	want := []string{"current", "older"}
-	assert.Equal(t, want, h.Workspaces)
-}
-
-func TestRecordSwitchDeduplicatesAndCapsHistory(t *testing.T) {
-	d := t.TempDir()
-	workspaces := []string{"from", "target"}
-	for i := 0; i < maxWorkspaces+20; i++ {
-		workspaces = append(workspaces, fmt.Sprintf("ws-%02d", i))
-	}
-	require.NoError(t, SaveHistory(d, History{Workspaces: workspaces}))
-	require.NoError(t, RecordSwitch(d, "from", "target", 0))
-	h, err := LoadHistory(d)
-	require.NoError(t, err)
-	require.Len(t, h.Workspaces, maxWorkspaces)
-	require.Equal(t, "target", h.Workspaces[0])
-	require.Equal(t, "from", h.Workspaces[1])
-	seen := map[string]bool{}
-	for _, id := range h.Workspaces {
-		require.False(t, seen[id])
-		seen[id] = true
-	}
-}
-
-// Without a watcher, a switch made in the app UI is never recorded; the next
-// rex-sesh switch must still record its real origin.
-func TestRecordUnwatchedSwitchRecordsOriginWhenTargetHeadsHistory(t *testing.T) {
-	d := t.TempDir()
-	require.NoError(t, SaveHistory(d, History{Workspaces: []string{"B", "A"}}))
-	require.NoError(t, RecordUnwatchedSwitch(d, "C", "B"))
-	h, err := LoadHistory(d)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"B", "C", "A"}, h.Workspaces)
-}
-
-func TestRetainWorkspacesDropsClosedWorkspaces(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, SaveHistory(dir, History{Workspaces: []string{"C", "B", "A"}}))
-
-	h, err := RetainWorkspaces(dir, []string{"A", "C"})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"C", "A"}, h.Workspaces)
-
-	saved, err := LoadHistory(dir)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"C", "A"}, saved.Workspaces)
+	assert.NoFileExists(t, HistoryPath(dir))
 }

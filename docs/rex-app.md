@@ -63,7 +63,7 @@ rex.action{
     -- ...
     local argv = { "/bin/sh", "-c", start, bin, "picker" }
     if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
-      argv[#argv + 1] = "--client"
+      argv[#argv + 1] = "--opener"
       argv[#argv + 1] = ctx.client_id
     end
     return assert(rex.session.new_layer{
@@ -88,10 +88,11 @@ rex.bind("ctrl+a>s", "sesh_picker")
 - The picker finds the session it was opened from through the terminal's
   `REX_BLOCK` variable, and marks that session with `◆`.
 - When you open the picker from a key or the command palette, the action
-  passes `--client` with the ID of the Rex app you used. That app is the one
-  that switches. When something else runs the action, such as `rex do`, it
-  passes no `--client`, and the picker finds the app itself. See
-  [Commands](commands.md) for how `picker` chooses an app.
+  passes `--opener` with the ID of the Rex app you used. That app is the one
+  that switches, and it shows the session the picker is in. When something
+  else runs the action, such as `rex do`, it passes no `--opener`, and the
+  picker finds the app itself. See [Commands](commands.md) for how `picker`
+  chooses an app.
 - The `focus` argument decides whether the layer takes focus. It does unless
   you pass `focus=false`.
 - Without `--key`, the module ends with a commented example in place of
@@ -185,7 +186,7 @@ exit 127
 1. If `bin` exists on the machine, the script runs it with the action's
    arguments.
 2. Otherwise it runs `~/.local/bin/rex-sesh`, or `rex-sesh` on `PATH`. It
-   leaves out `--client`, because the app's client ID belongs to this
+   leaves out `--opener`, because the app's client ID belongs to this
    machine's server.
 3. If neither exists, the layer shows:
 
@@ -232,6 +233,80 @@ in batch mode, so it needs a login that doesn't prompt for a password.
 A host's copy doesn't change when you rebuild here. Run `just install-host`
 again after you update rex-sesh.
 
+## Session history
+
+Rex doesn't report which session an app shows, or the order in which the app
+showed sessions. So rex-sesh keeps its own history of the switches the picker
+makes. The picker's `recent` order comes from it.
+
+The picker records a switch when the Rex app accepts it, in the native picker
+and with `--fzf`. It records the session it switched to. For a directory row,
+it records the session that the switch created. When you open the picker with
+a key or the command palette, the app you used shows the session the picker
+is in, so the picker records that session too, as the one before. Opened
+another way, such as `rex-sesh picker --client`, the picker can't tell which
+session the app shows, so it records only where the app went.
+
+The picker records nothing when:
+
+- You open the picker, or close it without a switch.
+- You open it with a key or the palette, and choose the session it is in.
+- The app refuses the switch.
+
+When two pickers switch one app at the same time, the second waits for the
+first. So the history keeps the order in which the app took the switches.
+
+Each Rex app has its own history. The picker names an app by its device label,
+such as `Studio Mac`, which the app keeps on every host. An app without a
+label is named by its client ID. Two apps with the same label share one
+history. If the picker can't tell which app it switches, it shows no history.
+This happens when several apps are connected and the picker has neither
+`--client` nor `--opener`.
+
+A switch to a host's session goes to the app on that host. If that app has
+the same label, the switch goes in this app's history. If the host's only app
+is another app, the switch goes in that app's history, without the session
+that the picker opened in. If that app has no label, the switch isn't
+recorded.
+
+The history names each session by its host and its session ID. So sessions
+with the same name, or the same ID, on two hosts stay apart. The picker skips
+a session that is closed, which means that its server listed its sessions
+without it. If a host doesn't answer, its sessions stay in the history. If
+the newest of the other sessions in the history is on that host, the picker
+can't name the previous session.
+
+The history is `session-history.json` in the state directory: `REX_SESH_STATE_DIR`,
+or `$XDG_STATE_HOME/rex-sesh` (by default `~/.local/state/rex-sesh`). Each
+machine that runs the picker keeps its own. A picker opened in a host's
+session runs on that host, so it reads and writes that host's history. It
+runs without `--opener`, so it records only where the app went. See
+[Open the picker on a host](#open-the-picker-on-a-host).
+
+### What the history can't see
+
+The picker records only its own switches. Rex doesn't report the other ways to
+change the session, so the history leaves these out:
+
+| Change | Recorded |
+| --- | --- |
+| Choose a session in the picker | Yes |
+| Rex's session commands, such as **Change Session…**, **Next Session**, **Previous Session** and **Go to Session** | No |
+| **Navigate Back** and **Navigate Forward** | No |
+| Change tabs or panes in a session | No. This doesn't change the session. |
+| Choose a session in a picker on a host | Only in that host's history |
+
+After a change that the history can't see, the picker names the last session
+that it recorded. For example, you switch from A to C with the picker. Then you
+choose B with **Change Session…**, and then D. The picker that you open in D
+names C, not B.
+
+Rex's own commands for going back work differently. Rex describes
+**Navigate Back** as a return to the pane you were in before, in any tab or
+session, so it steps back through panes, not sessions. **Previous Session**
+and **Next Session** cycle through the session list. Neither command makes
+its history readable, from Lua or from the server API.
+
 ## Update after a rebuild
 
 The module runs the binary at the path in `bin`. `just build` writes a new
@@ -241,11 +316,14 @@ don't need to write the module again or reload Rex.
 Write the module again, and run `rex config reload`, when:
 
 - you move or rename the checkout, because `bin` holds the old path;
-- you pull a new version, so the module matches the binary.
+- you pull a new version, so the module matches the binary;
+- your module passes `--client` instead of `--opener`. A module written before
+  `--opener` existed still switches, but the history doesn't record the
+  session that you switched from. See [Session history](#session-history).
 
 `just clean` deletes `bin/rex-sesh`. Until you run `just build` again, the
 start script falls back to `~/.local/bin/rex-sesh` or `rex-sesh` on `PATH`,
-without `--client`. If neither exists, the layer shows "Sesh cannot start",
+without `--opener`. If neither exists, the layer shows "Sesh cannot start",
 even on this machine. Run `just build` to fix it.
 
 ## When the picker cannot start

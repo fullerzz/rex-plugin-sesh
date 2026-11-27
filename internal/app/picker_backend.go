@@ -58,11 +58,28 @@ func (b *pickerBackend) ReloadPicker(ctx context.Context) (pickerpkg.ReloadResul
 	if err != nil {
 		return pickerpkg.ReloadResult{}, err
 	}
-	return pickerpkg.ReloadResult{Sessions: col.Sessions}, nil
+	return b.reloadResult(col), nil
 }
 
-// RefreshAgentStatuses maps each Rex session ID, on this machine and every
-// host, to the most urgent state its programs report. The picker calls it
+// reloadResult is col's rows with the history the picker shows for them.
+func (b *pickerBackend) reloadResult(col collection) pickerpkg.ReloadResult {
+	result := pickerHistory(historyKey(b.target.app), b.target.shownSessionID(), col)
+	result.Sessions = col.Sessions
+	return result
+}
+
+// withHistory adds the history the picker shows for col's rows to opts.
+func (b *pickerBackend) withHistory(opts pickerpkg.DisplayOptions, col collection) pickerpkg.DisplayOptions {
+	history := pickerHistory(historyKey(b.target.app), b.target.shownSessionID(), col)
+	opts.RecentSessionIDs = history.RecentSessionIDs
+	opts.LastSessionID = history.LastSessionID
+	opts.LastSessionUnknown = history.LastSessionUnknown
+	opts.RexSessions = history.RexSessions
+	return opts
+}
+
+// RefreshAgentStatuses maps each Rex session, on this machine and every host,
+// by its Session.Ref, to the most urgent state its programs report. The picker calls it
 // every second, and clears the status of a session missing from the map. So
 // while any host fails to answer, sessions missing from this refresh keep
 // their last status.
@@ -74,14 +91,14 @@ func (b *pickerBackend) RefreshAgentStatuses() (map[string]string, error) {
 	}
 	statuses := make(map[string]string, len(sessions.Directory))
 	for _, s := range sessions.Ordered() {
-		statuses[s.SessionID] = s.AgentStatus
+		statuses[s.Ref()] = s.AgentStatus
 	}
 	b.statusMu.Lock()
 	defer b.statusMu.Unlock()
 	if len(src.hostWarnings) > 0 {
-		for id, status := range b.lastStatuses {
-			if _, ok := statuses[id]; !ok {
-				statuses[id] = status
+		for ref, status := range b.lastStatuses {
+			if _, ok := statuses[ref]; !ok {
+				statuses[ref] = status
 			}
 		}
 	}
@@ -105,7 +122,7 @@ func (b *pickerBackend) ReloadSettings(ctx context.Context, saved settings.Resul
 		return pickerpkg.DisplayOptions{}, pickerpkg.ReloadResult{}, err
 	}
 	b.cfg = cfg
-	return b.displayOptions(cfg), pickerpkg.ReloadResult{Sessions: col.Sessions}, nil
+	return b.displayOptions(cfg), b.reloadResult(col), nil
 }
 
 // displayOptions binds the picker's long-lived context, not a reload's.

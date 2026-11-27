@@ -56,7 +56,7 @@ The footer names the current order.
 | Order | Effect |
 | --- | --- |
 | `rex order` | This machine's sessions, then each host's sessions, as Rex lists them. |
-| `recent` | Same as `rex order`. rex-sesh records no session history. |
+| `recent` | The sessions the picker last switched this app to, newest first, after the session the picker is in when you opened it with a key or the palette. The rest follow in `rex order`. See [Session history](rex-app.md#session-history). |
 | `agent` | Sessions by status: blocked, done, working, idle, then sessions with no status. Hosts' sessions mix with this machine's. |
 
 The order goes back to the configured one each time the picker opens. See

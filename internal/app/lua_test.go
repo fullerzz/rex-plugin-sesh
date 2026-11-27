@@ -27,6 +27,11 @@ func TestLuaPrintsTheActionForThisBinary(t *testing.T) {
 	// The layer runs on the session's machine, which may lack rex-sesh.
 	assert.Contains(t, out.String(), `local argv = { "/bin/sh", "-c", start, bin, "picker" }`)
 	assert.Contains(t, out.String(), "local start = "+luaString(pickerStart)+"\n")
+	// Only a key or the palette names the app that opened the picker.
+	assert.Contains(t, out.String(), `if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
+      argv[#argv + 1] = "--opener"
+      argv[#argv + 1] = ctx.client_id`)
+	assert.NotContains(t, out.String(), `"--client"`)
 	assert.NotContains(t, out.String(), "\nrex.bind(", "no key without --key")
 
 	out.Reset()

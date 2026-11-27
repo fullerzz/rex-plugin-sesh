@@ -134,6 +134,7 @@ var renderPanePreview = previewpkg.RenderPane
 type Backend interface {
 	CloseWorkspace(context.Context, string) error
 	ReloadPicker(context.Context) (ReloadResult, error)
+	// RefreshAgentStatuses maps Rex sessions, by Session.Ref, to their status.
 	RefreshAgentStatuses() (map[string]string, error)
 	OpenSettings() (settings.Model, error)
 	ReloadSettings(context.Context, settings.Result) (DisplayOptions, ReloadResult, error)
@@ -174,14 +175,18 @@ type DisplayOptions struct {
 	PreviewMode               string
 	DefaultPreviewCommand     string
 	FZFCommand                string
-	RecentSessionIDs          []string
-	WorkspaceSort             string
-	LastSessionID             string
-	LastSessionUnknown        bool
-	RexSessions               []sessionmodel.Session
+	// RecentSessionIDs orders Rex sessions for the recent sort, most recent
+	// first, and LastSessionID names the previous session. Both hold
+	// Session.Ref values, which tell apart one session ID on two hosts.
+	RecentSessionIDs   []string
+	WorkspaceSort      string
+	LastSessionID      string
+	LastSessionUnknown bool
+	RexSessions        []sessionmodel.Session
 }
 
 // Nil metadata slices preserve existing picker metadata; empty slices clear it.
+// Session IDs are Session.Ref values, as in DisplayOptions.
 type ReloadResult struct {
 	RecentSessionIDs   []string
 	Sessions           []sessionmodel.Session
@@ -347,7 +352,7 @@ func newTeaModel(items []sessionmodel.Session, opts Options) teaModel {
 	if closeContext == nil {
 		closeContext = context.Background()
 	}
-	order := rexSessionIDs(items)
+	order := rexSessionRefs(items)
 	items = append([]sessionmodel.Session(nil), items...)
 	workspaceSort := normalizeWorkspaceSort(opts.WorkspaceSort)
 	initialOrder := order
@@ -715,7 +720,7 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			selectedKey = sessionmodel.Key(current)
 		}
 		if closed.reloadErr == nil && closed.result.Sessions != nil {
-			m.sessionOrder = rexSessionIDs(closed.result.Sessions)
+			m.sessionOrder = rexSessionRefs(closed.result.Sessions)
 			m.list.All = append(m.list.All[:0], closed.result.Sessions...)
 		} else {
 			remaining := m.list.All[:0]
@@ -1050,11 +1055,12 @@ func (m teaModel) footerText() string {
 	return helpStyle.Render(help)
 }
 
-func rexSessionIDs(items []sessionmodel.Session) []string {
+// rexSessionRefs lists the Ref of each Rex session in items, in order.
+func rexSessionRefs(items []sessionmodel.Session) []string {
 	ids := make([]string, 0, len(items))
 	for _, item := range items {
 		if item.Source == "rex" {
-			ids = append(ids, item.SessionID)
+			ids = append(ids, item.Ref())
 		}
 	}
 	return ids
@@ -1097,7 +1103,7 @@ func agentSessionOrder(items []sessionmodel.Session, sessionOrder []string) []st
 	statuses := make(map[string]string, len(items))
 	for _, item := range items {
 		if item.Source == "rex" && item.SessionID != "" {
-			statuses[item.SessionID] = item.AgentStatus
+			statuses[item.Ref()] = item.AgentStatus
 		}
 	}
 	order := append([]string(nil), sessionOrder...)
@@ -1129,13 +1135,13 @@ func sortRexSessions(items []sessionmodel.Session, order []string) {
 		}
 		// Unranked workspaces get unique ranks past the order list, preserving
 		// their input order and sorting them after every ranked workspace.
-		rank, ranked := ranks[item.SessionID]
+		rank, ranked := ranks[item.Ref()]
 		if !ranked {
 			rank = len(order) + len(workspaces)
 		}
 		workspaces = append(workspaces, rankedWorkspace{session: item, rank: rank})
 		if item.SessionID != "" {
-			byID[item.SessionID] = struct{}{}
+			byID[item.Ref()] = struct{}{}
 		}
 	}
 
@@ -1145,12 +1151,13 @@ func sortRexSessions(items []sessionmodel.Session, order []string) {
 	familyRanks := make([]int, 0, len(workspaces))
 	for i := range workspaces {
 		entry := &workspaces[i]
-		familyID := entry.session.SessionID
-		parentID := entry.session.Worktree.ParentSessionID
+		familyID := entry.session.Ref()
+		// A linked worktree's parent is on the same machine.
+		parentID := sessionmodel.Session{Machine: entry.session.Machine, SessionID: entry.session.Worktree.ParentSessionID}.Ref()
 		if _, parentPresent := byID[parentID]; parentID != "" && parentPresent {
 			familyID = parentID
 		}
-		entry.parent = entry.session.SessionID == familyID
+		entry.parent = entry.session.Ref() == familyID
 		ordinal, exists := familyOrdinals[familyID]
 		if familyID == "" || !exists {
 			ordinal = len(familyRanks)
@@ -1184,11 +1191,12 @@ func sortRexSessions(items []sessionmodel.Session, order []string) {
 	}
 }
 
+// rexSessionsByID maps each Rex session in items by its Ref.
 func rexSessionsByID(items []sessionmodel.Session) map[string]sessionmodel.Session {
 	workspaces := make(map[string]sessionmodel.Session, len(items))
 	for _, item := range items {
 		if item.Source == "rex" && item.SessionID != "" {
-			workspaces[item.SessionID] = item
+			workspaces[item.Ref()] = item
 		}
 	}
 	return workspaces
