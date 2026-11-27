@@ -35,13 +35,44 @@ serve-docs:
 # Clean build artifacts
 clean:
     @echo "{{ BOLD + RED + BG_BLACK }}󰿞 Cleaning build artifacts...{{ NORMAL }}"
-    rm ./bin/rex-sesh || true
+    rm -f ./bin/rex-sesh ./bin/rex-sesh-*
 
 # Build the binary with Go's greenteagc garbage collector enabled
 build:
     @echo "{{ BOLD + BLUE + BG_BLACK }} Building the project...{{ NORMAL }}"
     mkdir -p bin
     go build -ldflags "-X github.com/fullerzz/rex-plugin-sesh/internal/app.Version=$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || printf 'dev')" -o bin/rex-sesh ./cmd/rex-sesh
+
+# Install rex-sesh at ~/.local/bin/rex-sesh on each SSH host, built for its OS and CPU
+[positional-arguments]
+install-host +hosts:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version=$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || printf 'dev')
+    ssh_opts=(-o BatchMode=yes -o ConnectTimeout=8)
+    mkdir -p bin
+    for host in "$@"; do
+        read -r os arch < <(ssh "${ssh_opts[@]}" "$host" 'uname -sm')
+        case "$os" in
+            Linux) goos=linux ;;
+            Darwin) goos=darwin ;;
+            *) echo "$host: unsupported OS $os" >&2; exit 1 ;;
+        esac
+        case "$arch" in
+            x86_64 | amd64) goarch=amd64 ;;
+            aarch64 | arm64) goarch=arm64 ;;
+            *) echo "$host: unsupported CPU $arch" >&2; exit 1 ;;
+        esac
+        out="bin/rex-sesh-$goos-$goarch"
+        echo "{{ BOLD + BLUE + BG_BLACK }} Building rex-sesh $version for $host ($goos/$goarch)...{{ NORMAL }}"
+        CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -ldflags "-X github.com/fullerzz/rex-plugin-sesh/internal/app.Version=$version" -o "$out" ./cmd/rex-sesh
+        # Upload beside the target, then rename it into place, so a picker
+        # that is running keeps its binary.
+        ssh "${ssh_opts[@]}" "$host" 'mkdir -p "$HOME/.local/bin"'
+        scp -q "${ssh_opts[@]}" "$out" "$host:.local/bin/.rex-sesh.new"
+        ssh "${ssh_opts[@]}" "$host" 'chmod 755 "$HOME/.local/bin/.rex-sesh.new" && mv -f "$HOME/.local/bin/.rex-sesh.new" "$HOME/.local/bin/rex-sesh" && "$HOME/.local/bin/rex-sesh" --version'
+        echo "Installed rex-sesh $version on $host at ~/.local/bin/rex-sesh"
+    done
 
 # Run linters on the codebase
 lint:

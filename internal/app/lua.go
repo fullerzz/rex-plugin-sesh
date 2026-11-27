@@ -17,6 +17,20 @@ var seshLuaTemplate string
 
 var seshLua = template.Must(template.New("sesh.lua").Funcs(template.FuncMap{"lua": luaString}).Parse(seshLuaTemplate))
 
+// pickerStart is the shell script the picker's layer runs, as
+// sh -c pickerStart BIN picker [--client ID]. The layer runs on the machine
+// that holds the session, which for a session on another host is not this
+// one. There BIN is missing, so the script runs that host's own copy, which
+// "just install-host" puts in ~/.local/bin, and leaves out --client, because
+// the app has another client ID on that host's server.
+const pickerStart = `if [ -x "$0" ]; then exec "$0" "$@"; fi
+for c in "$HOME/.local/bin/rex-sesh" "$(command -v rex-sesh)"; do
+  if [ -n "$c" ] && [ -x "$c" ]; then exec "$c" picker; fi
+done
+printf '%s\n' "Sesh cannot start: rex-sesh is not installed on this machine." \
+  "Install it at ~/.local/bin/rex-sesh with: just install-host HOST" >&2
+exit 127`
+
 // lua prints the Rex config module that adds the picker action, pointing at
 // this rex-sesh binary. --key also binds a key to it.
 func (a *App) lua(_ context.Context, args []string) error {
@@ -36,7 +50,7 @@ func (a *App) lua(_ context.Context, args []string) error {
 	if resolved, err := filepath.EvalSymlinks(bin); err == nil {
 		bin = resolved
 	}
-	return seshLua.Execute(a.Out, struct{ Bin, Key string }{Bin: bin, Key: *key})
+	return seshLua.Execute(a.Out, struct{ Bin, Key, Start string }{Bin: bin, Key: *key, Start: pickerStart})
 }
 
 // luaString quotes s as a Lua 5.1 string literal. Lua has no \x or \u
