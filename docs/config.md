@@ -195,12 +195,12 @@ The picker lists only the `rex` and `zoxide` groups. `rex-sesh list` also
 lists `config` entries. A source you leave out of `source_order` is added after
 the ones you list. Unknown and repeated names are rejected.
 
-!!! warning "Keep `rex` before `zoxide`"
+!!! note "Sessions and directories with the same name"
 
-    rex-sesh shows one row per name. With `rex` first, a directory named like
-    an open session on this machine is left out, and you see the session.
-    With `zoxide` first, the directory row hides the session, and choosing it
-    creates a second Rex session.
+    rex-sesh shows one row per name. A directory named like an open session on
+    this machine is replaced by the session, whichever comes first in
+    `source_order`. The row stays in the directory's place when `zoxide`
+    comes first.
 
 A legacy `sort_order` is the same setting. A legacy file that leaves out `rex`
 (or `herdr`) lists Rex sessions after the sources it names.

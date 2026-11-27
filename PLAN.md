@@ -427,3 +427,7 @@ Done on branch `docs-rex`, then committed to `main` under the standing approval.
 ### Not checked yet
 
 - `release.yml`, `changelog.yml` and the new `test.yml` step have never run on GitHub. The first tag push runs them.
+
+### Fix after the docs review (2026-11-27)
+
+- With `zoxide` before `rex` in `source_order`, a directory row hid the open session with the same name, and Enter on it created a second session. `Merge` now lets an open session replace a directory row of its name, in the row's place, whichever source comes first.

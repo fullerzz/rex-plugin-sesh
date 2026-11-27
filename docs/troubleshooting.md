@@ -183,8 +183,7 @@ zoxide remove PATH
 - Check `list.blacklist` with `rex-sesh list --blacklisted`, which shows only
   the hidden rows.
 - A directory named like an open session on this machine is left out; you see
-  the session. If `list.source_order` puts `zoxide` before `rex`, a directory
-  hides the session instead. See [Sources](config.md#sources).
+  the session. See [Sources](config.md#sources).
 - Directories need `zoxide` on `PATH` and entries in its database. Check with
   `zoxide query -l`.
 - The picker doesn't list `[[workspace]]` entries. Only `rex-sesh list` shows

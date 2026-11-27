@@ -113,3 +113,21 @@ func TestRexSessionsKeepsLocalSessionsWhenHostsFail(t *testing.T) {
 	}.List(context.Background())
 	require.EqualError(t, err, "no server", "this machine's failure still fails")
 }
+
+// With zoxide before rex in the source order, the open session still replaces
+// the directory named like it, in the directory's place.
+func TestMergeOpenSessionReplacesADirectoryListedFirst(t *testing.T) {
+	got, err := Merge(context.Background(), []Source{
+		RexSessions{Client: fakeRex{sessions: []rex.Session{{ID: "session:1", Label: "api", Path: "/src/api"}}}},
+		staticSource{name: "zoxide", sessions: []model.Session{
+			{Source: "zoxide", Name: "web", Path: "/src/web"},
+			{Source: "zoxide", Name: "api", Path: "/src/api"},
+		}},
+	}, []string{"zoxide", "rex"}, nil, false, true)
+	require.NoError(t, err)
+	items := got.Ordered()
+	require.Len(t, items, 2)
+	assert.Equal(t, "web", items[0].Name)
+	assert.Equal(t, "rex", items[1].Source)
+	assert.Equal(t, "session:1", items[1].SessionID)
+}

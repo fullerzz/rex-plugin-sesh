@@ -80,6 +80,12 @@ func Merge(ctx context.Context, srcs []Source, order []string, blacklist []strin
 						sess.ConfiguredPath = out.Directory[kept].Path
 						sess.PreviewCommand = out.Directory[kept].PreviewCommand
 						seenName[identity] = replace(&out, kept, sess)
+					} else if sess.SessionID != "" && out.Directory[kept].SessionID == "" {
+						// An open session also stands in for a directory row of
+						// its name, such as a zoxide entry listed first, so
+						// choosing it selects the session instead of making
+						// another.
+						seenName[identity] = replace(&out, kept, sess)
 					}
 					continue
 				}
