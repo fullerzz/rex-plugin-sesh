@@ -3,6 +3,7 @@ bin/
 .DS_Store
 coverage.out
 plans/
+/PLAN.md
 .pi/
 scratch/
 mise.local.toml
