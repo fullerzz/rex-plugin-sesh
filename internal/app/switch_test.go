@@ -38,6 +38,17 @@ func (f *fakeApps) AppClients(_ context.Context, sessionID string) ([]rex.AppCli
 	return apps, f.err
 }
 
+func (f *fakeApps) InspectApp(ctx context.Context, selector string) (rex.AppClient, error) {
+	apps, err := f.AppClients(ctx, "")
+	if err != nil {
+		return rex.AppClient{}, err
+	}
+	if match, ok := uniqueLabel(apps, selector); ok {
+		return match, nil
+	}
+	return rex.AppClient{}, errors.New("no unique Rex app matches " + selector)
+}
+
 func TestResolveClientPrefersFlagThenEnv(t *testing.T) {
 	apps := &fakeApps{all: []string{"client:a", "client:b"}}
 	t.Setenv("REX_CLIENT", "client:env")

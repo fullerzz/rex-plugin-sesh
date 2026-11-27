@@ -256,6 +256,30 @@ func (c *Client) AppClients(ctx context.Context, sessionID string) ([]AppClient,
 	return apps, nil
 }
 
+// InspectApp asks Rex to resolve a selector with its own ambiguity rules.
+func (c *Client) InspectApp(ctx context.Context, selector string) (AppClient, error) {
+	out, err := c.run(ctx, requestTimeout, nil, "client inspect", "client", "inspect", "--json", "--", selector)
+	if err != nil {
+		return AppClient{}, err
+	}
+	var result struct {
+		Client struct {
+			ID   string `json:"client_id"`
+			Info struct {
+				Kind  string `json:"kind"`
+				Label string `json:"label"`
+			} `json:"info"`
+		} `json:"client"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return AppClient{}, fmt.Errorf("decode rex client: %w", err)
+	}
+	if result.Client.ID == "" || result.Client.Info.Kind != "app" {
+		return AppClient{}, fmt.Errorf("no Rex app matches %q", selector)
+	}
+	return AppClient{ID: result.Client.ID, Label: result.Client.Info.Label}, nil
+}
+
 // NewSession creates a session whose first terminal starts in cwd, and returns
 // its ID. Rex allows several sessions with one label. A label that starts with
 // "-" would read as a flag, so Rex names that session itself.

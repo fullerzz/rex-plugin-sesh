@@ -562,3 +562,19 @@ esac`)
 	assert.Equal(t, []state.Visit{localVisit("session:b"), localVisit("session:a")}, historyOf(t, "id:client:a"))
 	assert.Empty(t, historyOf(t, "id:client:b"))
 }
+
+func TestSwitchByLabelPinsTheInspectedConnection(t *testing.T) {
+	useHistoryDir(t)
+	log := filepath.Join(t.TempDir(), "rex.log")
+	t.Setenv("FAKE_REX_LOG", log)
+	useFakeRex(t, `printf '%s\n' "$*" >> "$FAKE_REX_LOG"
+case "$*" in
+  *"client inspect --json -- Mac"*) printf '%s' '{"client":{"client_id":"client:old","info":{"kind":"app","label":"Mac"}}}' ;;
+  *"-C client:old "*) echo "client disconnected" >&2; exit 3 ;;
+  *"-C Mac "*) exit 0 ;; # the label now belongs to client:new
+esac`)
+	err := (&App{}).switchTo(t.Context(), switchTarget{client: "Mac"}, model.Session{Source: "rex", SessionID: "session:b"})
+	require.ErrorContains(t, err, "client disconnected")
+	assert.Equal(t, []string{"--autostart=false -C client:old do session.select session_id=session:b"}, selectCalls(t, log))
+	assert.NoFileExists(t, state.HistoryPath(stateDir()))
+}

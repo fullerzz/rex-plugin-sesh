@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -39,10 +38,7 @@ func namedApp(ctx context.Context, apps appLister, name string) (rex.AppClient, 
 			return listed, nil
 		}
 	}
-	if match, ok := uniqueLabel(all, name); ok {
-		return match, nil
-	}
-	return rex.AppClient{}, fmt.Errorf("no unique Rex app matches %s", name)
+	return apps.InspectApp(ctx, name)
 }
 
 // Each server assigns its own client IDs. Only a unique label can associate

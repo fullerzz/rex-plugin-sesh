@@ -450,9 +450,12 @@ func (a *App) switchTo(ctx context.Context, target switchTarget, s model.Session
 			// The picker already verified this exact ID when it opened.
 			localApp = target.app
 		case err == nil:
-			// Use a fresh lookup for history. Pass the original selector to
-			// Rex so it applies its own matching and ambiguity checks.
-			localApp, _ = namedApp(ctx, client, app.ID)
+			// Rex resolves labels, positions and ID suffixes. Pin the
+			// accepted target and its history lock to the same connection.
+			localApp, _ = client.InspectApp(ctx, app.ID)
+			if localApp.ID != "" {
+				app = localApp
+			}
 		}
 	}
 	if err != nil {
@@ -511,6 +514,7 @@ func (a *App) openDirectory(ctx context.Context, client *rex.Client, s model.Ses
 
 // appLister lists connected Rex apps; *rex.Client implements it.
 type appLister interface {
+	InspectApp(ctx context.Context, selector string) (rex.AppClient, error)
 	AppClients(ctx context.Context, sessionID string) ([]rex.AppClient, error)
 }
 
