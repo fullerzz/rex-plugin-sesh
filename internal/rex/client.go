@@ -22,6 +22,10 @@ var sessionsScript []byte
 // requestTimeout bounds one rex invocation.
 const requestTimeout = 5 * time.Second
 
+// actionTimeout bounds a client action. rex waits up to 10 seconds for the app
+// to answer, so killing rex sooner could report a switch that still happens.
+const actionTimeout = 15 * time.Second
+
 // Session is one Rex session as the picker lists it.
 type Session struct {
 	ID    string
@@ -91,7 +95,7 @@ func (c *Client) Sessions(ctx context.Context, selfBlockID string) ([]Session, e
 	if err != nil {
 		return nil, err
 	}
-	out, err := c.run(ctx, sessionsScript, "do", "-", "--args", string(args), "--json")
+	out, err := c.run(ctx, requestTimeout, sessionsScript, "do", "do", "-", "--args", string(args), "--json")
 	if err != nil {
 		return nil, err
 	}
@@ -129,19 +133,59 @@ func (c *Client) Sessions(ctx context.Context, selfBlockID string) ([]Session, e
 	return sessions, nil
 }
 
-func (c *Client) run(ctx context.Context, stdin []byte, args ...string) ([]byte, error) {
+// AppClients lists the IDs of the connected Rex apps, leaving out command-line
+// and other clients. With sessionID set, it lists only apps attached to that
+// session.
+func (c *Client) AppClients(ctx context.Context, sessionID string) ([]string, error) {
+	args := []string{"client", "ls", "--json"}
+	if sessionID != "" {
+		args = append(args, "-s", sessionID)
+	}
+	out, err := c.run(ctx, requestTimeout, nil, "client ls", args...)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Clients []struct {
+			ID   string `json:"client_id"`
+			Info struct {
+				Kind string `json:"kind"`
+			} `json:"info"`
+		} `json:"clients"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return nil, fmt.Errorf("decode rex clients: %w", err)
+	}
+	var ids []string
+	for _, client := range result.Clients {
+		if client.Info.Kind == "app" {
+			ids = append(ids, client.ID)
+		}
+	}
+	return ids, nil
+}
+
+// SelectSession asks the Rex app clientID to show sessionID. The app accepts
+// it only while Remote Control is on in its settings.
+func (c *Client) SelectSession(ctx context.Context, clientID, sessionID string) error {
+	_, err := c.run(ctx, actionTimeout, nil, "session.select", "-C", clientID, "do", "session.select", "session_id="+sessionID)
+	return err
+}
+
+// run runs rex with args, naming the call label in its errors.
+func (c *Client) run(ctx context.Context, timeout time.Duration, stdin []byte, label string, args ...string) ([]byte, error) {
 	if c == nil || c.Runner == nil {
 		return nil, errors.New("rex client is not configured")
 	}
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	argv := append([]string{"--autostart=false"}, args...)
 	out, errb, err := c.Runner.Run(ctx, c.Bin, argv, stdin)
 	if err != nil {
 		if msg := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(errb)), "Error:")); msg != "" {
-			return nil, fmt.Errorf("rex %s: %s", args[0], msg)
+			return nil, fmt.Errorf("rex %s: %s", label, msg)
 		}
-		return nil, fmt.Errorf("rex %s: %w", args[0], err)
+		return nil, fmt.Errorf("rex %s: %w", label, err)
 	}
 	return out, nil
 }

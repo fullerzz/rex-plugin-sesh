@@ -97,3 +97,31 @@ func TestBinPrefersOverrideThenServerBinary(t *testing.T) {
 	t.Setenv("REX_BIN_DIR", "")
 	assert.Equal(t, "rex", Bin())
 }
+
+func TestAppClientsKeepsOnlyApps(t *testing.T) {
+	runner := &fakeRunner{stdout: `{"clients":[
+		{"client_id":"client:app","info":{"kind":"app","name":"Rex"}},
+		{"client_id":"client:cli","info":{"kind":"cli"}},
+		{"client_id":"client:bare"}
+	]}`}
+	got, err := (&Client{Bin: "rex", Runner: runner}).AppClients(t.Context(), "session:1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"client:app"}, got)
+	assert.Equal(t, []string{"--autostart=false", "client", "ls", "--json", "-s", "session:1"}, runner.args)
+
+	_, err = (&Client{Bin: "rex", Runner: runner}).AppClients(t.Context(), "")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"--autostart=false", "client", "ls", "--json"}, runner.args)
+}
+
+func TestSelectSessionAsksTheApp(t *testing.T) {
+	runner := &fakeRunner{}
+	require.NoError(t, (&Client{Bin: "rex", Runner: runner}).SelectSession(t.Context(), "client:app", "session:2"))
+	assert.Equal(t, []string{"--autostart=false", "-C", "client:app", "do", "session.select", "session_id=session:2"}, runner.args)
+}
+
+func TestSelectSessionReportsRefusal(t *testing.T) {
+	runner := &fakeRunner{stderr: "Error: Remote Control is off\n", err: errors.New("exit status 1")}
+	err := (&Client{Bin: "rex", Runner: runner}).SelectSession(t.Context(), "client:app", "session:2")
+	require.EqualError(t, err, "rex session.select: Remote Control is off")
+}

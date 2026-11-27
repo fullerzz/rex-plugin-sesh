@@ -145,7 +145,8 @@ func (m teaModel) updateSettings(msg tea.Msg) (teaModel, tea.Cmd, bool) {
 	if !ok || key.String() != m.settingsKey() || m.backend == nil {
 		return m, nil, false
 	}
-	if m.closingWorkspaceID != "" {
+	// A close or switch result must not reach the settings editor.
+	if m.busy() {
 		return m, nil, true
 	}
 	m = m.cancelActivePreview()

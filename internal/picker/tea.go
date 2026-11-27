@@ -139,6 +139,13 @@ type Backend interface {
 	ReloadSettings(context.Context, settings.Result) (DisplayOptions, ReloadResult, error)
 }
 
+// Switcher switches the host to a chosen session. When the backend implements
+// it, choosing a session waits for the switch, and a failed switch keeps the
+// picker open and shows why.
+type Switcher interface {
+	Switch(context.Context, sessionmodel.Session) error
+}
+
 type Options struct {
 	DisplayOptions
 
@@ -264,6 +271,9 @@ type teaModel struct {
 	cancelWorkspaceClose    context.CancelFunc
 	quitAfterWorkspaceClose bool
 	closeError              string
+	// switchingKey is the session a Switcher is switching to, or "".
+	switchingKey  string
+	pendingChoice sessionmodel.Session
 	// toastText outlives closeError so the toast keeps its text while hiding.
 	toast     anim.Presence
 	toastText string
@@ -308,6 +318,12 @@ type agentStatusesMsg struct {
 }
 
 type workspaceClickedMsg struct{ key string }
+
+// sessionSwitchedMsg reports a Switcher's result for the session with key.
+type sessionSwitchedMsg struct {
+	key string
+	err error
+}
 
 type workspaceCloseMsg struct {
 	workspaceID string
@@ -655,6 +671,20 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if tick, ok := msg.(panePreviewTickMsg); ok {
 		return m.refreshPanePreview(tick)
 	}
+	if switched, ok := msg.(sessionSwitchedMsg); ok {
+		if switched.key != m.switchingKey {
+			return m, nil
+		}
+		m.switchingKey = ""
+		if switched.err != nil {
+			m.closeError = fmt.Sprintf("Could not switch: %v", switched.err)
+			return m, nil
+		}
+		m.choice = m.pendingChoice
+		m.chosen = true
+		m = m.cancelActivePreview()
+		return m, tea.Quit
+	}
 	if closed, ok := msg.(workspaceCloseMsg); ok {
 		if closed.workspaceID != m.closingWorkspaceID {
 			return m, nil
@@ -835,11 +865,29 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
+// busy reports a close or switch in flight, whose result the picker awaits.
+func (m teaModel) busy() bool {
+	return m.closingWorkspaceID != "" || m.switchingKey != ""
+}
+
 func (m teaModel) chooseCurrent() (teaModel, tea.Cmd) {
-	if m.closingWorkspaceID != "" {
+	if m.busy() {
 		return m.refuse()
 	}
-	if choice, ok := m.list.Current(); ok {
+	choice, ok := m.list.Current()
+	if switcher, canSwitch := m.backend.(Switcher); ok && canSwitch {
+		// Quit only once the host has switched; a failure keeps the picker.
+		m.switchingKey = sessionmodel.Key(choice)
+		m.pendingChoice = choice
+		m.closeError = ""
+		ctx, cancel := context.WithCancel(m.workspaceCloseContext)
+		key := m.switchingKey
+		return m, func() tea.Msg {
+			defer cancel()
+			return sessionSwitchedMsg{key: key, err: switcher.Switch(ctx, choice)}
+		}
+	}
+	if ok {
 		m.choice = choice
 		m.chosen = true
 	}
@@ -984,6 +1032,9 @@ func (m teaModel) footerText() string {
 	}
 	if m.settingsBusy {
 		return helpStyle.Render("Loading settings…")
+	}
+	if m.switchingKey != "" {
+		return helpStyle.Render("Switching to " + m.pendingChoice.DisplayName() + "…")
 	}
 	help := fmt.Sprintf("enter select · ctrl+j/k · ctrl+r %s · ctrl+x close · esc exit", sortLabel(m.workspaceSort))
 	if m.disableClose {

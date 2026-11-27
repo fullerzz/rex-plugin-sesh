@@ -252,14 +252,15 @@ func (a *App) printSessions(sessions []model.Session, jsonOut bool) error {
 	return nil
 }
 
-// picker lists the open Rex sessions and prints the chosen one's name.
-// Switching to it comes later.
+// picker lists the open Rex sessions, switches the Rex app to the chosen one,
+// and prints its name. --client names the app; see resolveClient.
 func (a *App) picker(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("picker", flag.ContinueOnError)
 	fs.SetOutput(a.Err)
 	jsonOut := fs.Bool("json", false, "")
 	cfgPath := fs.String("config", "", "")
 	fzfPicker := fs.Bool("fzf", false, "")
+	clientID := fs.String("client", "", "the Rex app to switch, as a client ID or label")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -279,12 +280,17 @@ func (a *App) picker(ctx context.Context, args []string) error {
 		return a.printSessions(col.Sessions, true)
 	}
 	opts := pickerOptionsFromConfig(ctx, a.Out, cfg)
-	backend := &pickerBackend{app: a, ctx: ctx, cfg: cfg, activeConfigPath: activeConfigPath}
+	target := switchTarget{client: *clientID, currentSessionID: currentSessionID(col.Sessions)}
+	backend := &pickerBackend{app: a, ctx: ctx, cfg: cfg, activeConfigPath: activeConfigPath, target: target}
 	var selected model.Session
 	var ok bool
 	if *fzfPicker || strings.EqualFold(os.Getenv("REX_SESH_PICKER"), "fzf") {
 		selected, ok, err = pickerpkg.RunFZF(ctx, col.Sessions, pickerpkg.Options{DisplayOptions: opts})
+		if err == nil && ok {
+			err = a.switchTo(ctx, target, selected)
+		}
 	} else {
+		// The native picker switches through the backend before it exits.
 		selected, ok, err = pickerpkg.Run(col.Sessions, pickerpkg.Options{DisplayOptions: opts, Backend: backend})
 	}
 	if err != nil || !ok {
@@ -292,6 +298,74 @@ func (a *App) picker(ctx context.Context, args []string) error {
 	}
 	_, err = fmt.Fprintln(a.Out, selected.Name)
 	return err
+}
+
+// switchTarget says which Rex app a picker switches.
+type switchTarget struct {
+	// client is the --client flag, or "".
+	client string
+	// currentSessionID is the session that holds the picker, or "".
+	currentSessionID string
+}
+
+func currentSessionID(sessions []model.Session) string {
+	for _, s := range sessions {
+		if s.Attached {
+			return s.WorkspaceID
+		}
+	}
+	return ""
+}
+
+// switchTo asks the Rex app to show s.
+func (a *App) switchTo(ctx context.Context, target switchTarget, s model.Session) error {
+	if s.Source != "rex" || s.WorkspaceID == "" {
+		return fmt.Errorf("%q is not an open Rex session", s.DisplayName())
+	}
+	client := rex.NewClient()
+	clientID, err := resolveClient(ctx, client, target)
+	if err != nil {
+		return err
+	}
+	return client.SelectSession(ctx, clientID, s.WorkspaceID)
+}
+
+// appLister lists connected Rex apps; *rex.Client implements it.
+type appLister interface {
+	AppClients(ctx context.Context, sessionID string) ([]string, error)
+}
+
+// resolveClient picks the Rex app to switch: --client, then REX_CLIENT, then
+// the only connected app. With several apps, the only one attached to the
+// picker's session wins. Rex apps attach to many sessions, so that rarely
+// narrows the choice; otherwise the user names one with --client.
+func resolveClient(ctx context.Context, apps appLister, target switchTarget) (string, error) {
+	if target.client != "" {
+		return target.client, nil
+	}
+	if id := os.Getenv("REX_CLIENT"); id != "" {
+		return id, nil
+	}
+	ids, err := apps.AppClients(ctx, "")
+	if err != nil {
+		return "", err
+	}
+	if len(ids) == 1 {
+		return ids[0], nil
+	}
+	if len(ids) == 0 {
+		return "", errors.New("no Rex app is connected to switch")
+	}
+	if target.currentSessionID != "" {
+		attached, err := apps.AppClients(ctx, target.currentSessionID)
+		if err != nil {
+			return "", err
+		}
+		if len(attached) == 1 {
+			return attached[0], nil
+		}
+	}
+	return "", fmt.Errorf("%d Rex apps are connected; choose one with --client", len(ids))
 }
 
 func (a *App) preview(ctx context.Context, args []string) error {

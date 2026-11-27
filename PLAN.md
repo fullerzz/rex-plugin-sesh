@@ -212,3 +212,21 @@ Done on branch `picker-rex`, then committed to `main` under the standing approva
 - Inert settings: `picker.workspace_sort` (`recent` and `agent` have no data), `picker.show_last_workspace` (the footer is hidden), and `ctrl+o` pane mode (shows "pane preview is not available yet" until milestone 6).
 - `WorkspaceID` still holds the Rex session ID. The rename to `SessionID` is a separate refactor.
 - `picker.herdr_theme_inherit` still reads Herdr's theme file.
+
+## Milestone 4 status (2026-11-27)
+
+Done on branch `select-session`, then committed to `main` under the standing approval.
+
+- Enter switches the Rex app to the chosen session with the client action `session.select`. The native picker waits for the switch and quits only when it succeeds. If the app refuses, the picker stays open and shows `Could not switch: …` in its toast, and Enter can try again.
+- While a switch is running, a second Enter and the settings key are refused, and a result for another session is ignored. The footer reads `Switching to <name>…`.
+- The `●` row switches too: the session that holds the picker isn't necessarily the one the app shows.
+- Which app: `--client`, then `REX_CLIENT`, then the only connected app. With several apps, the only one attached to the picker's session wins. Otherwise the error asks for `--client`.
+- The fzf picker switches after fzf exits and returns any error.
+- A switch may take 15 seconds, more than the 10 seconds `rex` waits for the app, so the picker never kills `rex` while the app may still switch.
+- `just check` passes with 794 tests.
+- Checked live: with no `--client`, the picker in an unfocused floating layer found the one app, switched it to `floral-quarry` (exit 0), and printed the name. I then switched the app back to `rex-sesh-plugin-design`. No Rex API reports which session an app is showing, so "back" assumes the app was showing that session.
+
+### Not done yet
+
+- A refusal with Remote Control off is untested, so the refusal text is unknown.
+- Several connected apps are covered by tests only.

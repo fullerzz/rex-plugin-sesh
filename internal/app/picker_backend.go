@@ -6,9 +6,13 @@ import (
 	"fmt"
 
 	"github.com/fullerzz/rex-plugin-sesh/internal/config"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 	pickerpkg "github.com/fullerzz/rex-plugin-sesh/internal/picker"
 	"github.com/fullerzz/rex-plugin-sesh/internal/settings"
 )
+
+// The native picker switches through the backend, so a refusal keeps it open.
+var _ pickerpkg.Switcher = (*pickerBackend)(nil)
 
 // errCloseUnsupported reports that the picker cannot close sessions yet.
 var errCloseUnsupported = errors.New("closing sessions is not supported yet")
@@ -21,6 +25,13 @@ type pickerBackend struct {
 	ctx              context.Context
 	cfg              config.Config
 	activeConfigPath string
+	target           switchTarget
+}
+
+// Switch asks the Rex app to show s. The picker calls it on Enter and stays
+// open with the error when it fails.
+func (b *pickerBackend) Switch(ctx context.Context, s model.Session) error {
+	return b.app.switchTo(ctx, b.target, s)
 }
 
 // collect lists the picker's rows. It reports an unavailable Rex as an error,
