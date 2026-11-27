@@ -58,7 +58,9 @@ jobs:
 
   deploy:
     name: Deploy docs
-    if: github.event_name != 'pull_request'
+    # Publishing waits until the docs describe Rex; the build job still checks
+    # every push. Restore `github.event_name != 'pull_request'` to publish.
+    if: false
     needs: build
     runs-on: ubuntu-latest
     permissions:
