@@ -35,6 +35,7 @@ default = "latest"
 
 [project.theme]
 variant = "modern"
+logo = "assets/favicon.svg"
 favicon = "assets/favicon.svg"
 language = "en"
 features = [
@@ -50,9 +51,6 @@ features = [
   "search.highlight",
   "toc.follow",
 ]
-
-[project.theme.icon]
-logo = "material/sheep"
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme)"
