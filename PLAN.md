@@ -394,3 +394,36 @@ Skipped for now. It has no SSH alias on this Mac and no sessions.
 ### Notes
 
 - After `just install-host`, copies on hosts fall behind until it runs again.
+
+## Milestone 11 status (2026-11-27): docs and release tooling for Rex
+
+Done on branch `docs-rex`, then committed to `main` under the standing approval.
+
+### Decisions (2026-11-27)
+
+- Docs: keep building the site on every push without publishing it. Revisit when the repo is public.
+- First release: v0.1.0, once the release tooling is ready. Ask the user before creating the tag.
+- `CHANGELOG.md` starts fresh at the Rex fork.
+- The version source is the git tag.
+
+### Docs
+
+- Every page was rewritten from the code and checked against it: `index`, `rex-app` (new, replaces `herdr-app`), `commands`, `keybindings`, `config`, `config/picker`, `config/layouts`, `troubleshooting`, `development/index`, `development/benchmarks`. `development/workspace-history` and the Herdr demo GIFs were removed. The nav entry is "Rex setup".
+- Settings that still load but do nothing are marked so: the last-session footer, `replace_worktree_icon`, `history.last_workspace_label`, `naming.path_components`, `workspace_sort = "recent"`, and every startup, tab and pane setting (`rex new` gets only a name and a directory). `[[workspace]]` entries appear only in `list` and `preview`.
+- `picker.herdr_theme_inherit` still reads Herdr's theme file, and the docs say so.
+- README, CONTRIBUTING, AGENTS.md, `.agents/setup` and `.agents/resume`, the issue templates, `.gitignore`, `.gitattributes`, `pyproject.toml` and `uv.lock` no longer describe Herdr.
+- Code wording: the settings header reads `REX SESH /`, the `workspace.machine` error no longer names `hc machine ls`, and "Sesh cannot start" says to run `just build` on this machine or `just install-host HOST` for another host.
+- `just build-docs` passes with no issues.
+
+### Release tooling
+
+- `just release vX.Y.Z[-pre]` checks the tag, `main`, a clean tree, and that the tag is new locally and on origin. It runs `just check`, builds, smoke-tests, writes `CHANGELOG.md` with git-cliff, commits, tags and pushes.
+- `.github/scripts/changelog-range.sh` holds the fork base (`8a937e2`, the parent of `e5d8aeb`) and gives every git-cliff call its range. Without it, git-cliff's `--current` put 219 entries of Herdr history in the first release's notes.
+- `release.yml` builds `rex-sesh_VERSION_{linux,darwin}_{amd64,arm64}.tar.gz` with `bin/rex-sesh`, `README.md` and `LICENSE`, plus `checksums.txt`, smoke-tests linux/amd64, and publishes. A tag with `-` is a prerelease. Artifact attestation runs only on a public repo: GitHub Free, Pro and Team support it only for public repositories.
+- `test-release-ref.sh` is ported and back in `just check` and in `test.yml`.
+- `CHANGELOG.md` holds only the fork's commits, as Unreleased.
+- `just check` passes with 828 tests plus the release-tooling test. A local dry run of `release.yml`'s build-and-smoke steps built all 4 targets; darwin/arm64 ran natively and linux/amd64 ran in Docker.
+
+### Not checked yet
+
+- `release.yml`, `changelog.yml` and the new `test.yml` step have never run on GitHub. The first tag push runs them.
