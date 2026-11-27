@@ -2,14 +2,21 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
-// Tests fake the Herdr TUI CLI. Running them from a herdr-app terminal must not
-// select herdr-app and drive the live window.
+// TestMain points the session cache at a temporary directory, so no test reads
+// or writes the user's rex-sesh state.
 func TestMain(m *testing.M) {
-	for _, name := range []string{"HC_TERMINAL_SOCKET", "HC_TERMINAL_ID", "HERDR_SESH_BACKEND"} {
-		_ = os.Unsetenv(name)
+	dir, err := os.MkdirTemp("", "rex-sesh-app-test-")
+	if err != nil {
+		panic(err)
 	}
-	os.Exit(m.Run())
+	if err := os.Setenv("REX_SESH_STATE_DIR", filepath.Join(dir, "state")); err != nil {
+		panic(err)
+	}
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
 }

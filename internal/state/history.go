@@ -88,7 +88,7 @@ func HistoryWatcherLockPath(dir, socketPath string) string {
 // TryHistoryWatcherLock permits one event subscriber per Herdr socket.
 func TryHistoryWatcherLock(dir, socketPath string) (release func() error, acquired bool, err error) {
 	if dir == "" {
-		return nil, false, errors.New("HERDR_PLUGIN_STATE_DIR is required")
+		return nil, false, errors.New("REX_SESH_STATE_DIR is required")
 	}
 	//nolint:gosec // dir is the trusted plugin-owned state directory supplied to this API.
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -185,7 +185,7 @@ func RecordSwitch(dir, fromWorkspaceID, toWorkspaceID string, observedRevision u
 }
 
 // RecordUnwatchedSwitch records a switch for a Herdr with no history watcher,
-// such as herdr-app. Nothing else records switches made outside herdr-sesh, so
+// such as herdr-app. Nothing else records switches made outside rex-sesh, so
 // the origin is recorded even when toWorkspaceID already heads the history.
 func RecordUnwatchedSwitch(dir, fromWorkspaceID, toWorkspaceID string) error {
 	if dir == "" || toWorkspaceID == "" {

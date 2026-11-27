@@ -2,7 +2,7 @@ _default:
     @just --list
 
 run:
-    go run ./cmd/herdr-sesh
+    go run ./cmd/rex-sesh
 
 # Explore the settings TUI using a disposable copy, or pass a native config path
 settings-demo $config='':
@@ -10,11 +10,11 @@ settings-demo $config='':
     set -euo pipefail
     target="$config"
     if [[ -z "$target" ]]; then
-        target=$(mktemp "${TMPDIR:-/tmp}/herdr-sesh-settings.XXXXXX")
+        target=$(mktemp "${TMPDIR:-/tmp}/rex-sesh-settings.XXXXXX")
         trap 'rm -f "$target" "$target.settings.lock"' EXIT
-        cp testdata/herdr-sesh.toml "$target"
+        cp testdata/rex-sesh.toml "$target"
     fi
-    go run ./cmd/herdr-sesh config edit --config "$target"
+    go run ./cmd/rex-sesh config edit --config "$target"
 
 # Build the documentation site
 build-docs:
@@ -35,30 +35,13 @@ serve-docs:
 # Clean build artifacts
 clean:
     @echo "{{ BOLD + RED + BG_BLACK }}󰿞 Cleaning build artifacts...{{ NORMAL }}"
-    rm ./bin/herdr-sesh || true
+    rm ./bin/rex-sesh || true
 
 # Build the binary with Go's greenteagc garbage collector enabled
 build:
     @echo "{{ BOLD + BLUE + BG_BLACK }} Building the project...{{ NORMAL }}"
     mkdir -p bin
-    go build -ldflags "-X github.com/fullerzz/herdr-plugin-sesh/internal/app.Version=$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || printf 'dev')" -o bin/herdr-sesh ./cmd/herdr-sesh
-
-# Rebuild and relink this checkout as a local Herdr plugin
-install-plugin: build
-    @echo "{{ BOLD + BLUE + BG_BLACK }} Relinking Herdr plugin...{{ NORMAL }}"
-    herdr plugin link "$PWD"
-
-# Build the binary and link the sesh mods into the Herdr app's home
-install-app-mod: build
-    @echo "{{ BOLD + BLUE + BG_BLACK }} Linking Herdr app mods...{{ NORMAL }}"
-    mkdir -p "${HERDR_APP_HOME:-$HOME/.config/herdr-app}/mods"
-    for mod in sesh sesh-last; do \
-        dest="${HERDR_APP_HOME:-$HOME/.config/herdr-app}/mods/$mod"; \
-        if [ -e "$dest" ] && [ ! -L "$dest" ]; then \
-            echo "$dest exists and is not a link; move it aside and run again" >&2; exit 1; \
-        fi; \
-        ln -sfn "$PWD/herdr-app/mods/$mod" "$dest" && herdr-app check "$dest" || exit 1; \
-    done
+    go build -ldflags "-X github.com/fullerzz/rex-plugin-sesh/internal/app.Version=$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || printf 'dev')" -o bin/rex-sesh ./cmd/rex-sesh
 
 # Run linters on the codebase
 lint:
@@ -79,10 +62,6 @@ fmt-check:
 test:
     @echo "{{ BOLD + BLUE + BG_BLACK }} Running tests...{{ NORMAL }}"
     gotestsum --format-icons=octicons --format=pkgname -- -race ./...
-
-# Exercise the installed last-space mod in the live app (changes navigation history)
-test-app-last:
-    uv run --frozen python .github/scripts/test-app-last.py
 
 # Run the application benchmark suite
 bench count='1':
@@ -146,8 +125,8 @@ release $tag:
 
     just check
     just build
-    ./bin/herdr-sesh --version
-    ./bin/herdr-sesh list --json --config testdata/herdr-sesh.toml >/dev/null
+    ./bin/rex-sesh --version
+    ./bin/rex-sesh list --json --config testdata/rex-sesh.toml >/dev/null
     mise exec -- git-cliff --tag "$tag" --output CHANGELOG.md
     if ! grep -Fq "## ${tag} " CHANGELOG.md; then
         echo "Generated changelog is missing $tag" >&2
@@ -166,10 +145,7 @@ release $tag:
     fi
     git push --atomic origin HEAD "refs/tags/$tag"
 
-# Run all checks for code changes
-check: lint fmt-check test test-release-ref
+# Run all checks for code changes. test-release-ref returns once release
+# tooling reads a version source other than the removed herdr-plugin.toml.
+check: lint fmt-check test
     @echo "{{ BOLD + GREEN + BG_BLACK }} All checks passed!{{ NORMAL }}"
-
-# Record both picker integrations on one fresh Lume clone (or choose tui or app)
-record-picker-demo $surface='both' $revision='HEAD':
-    demo/picker/record.sh "$surface" "$revision"

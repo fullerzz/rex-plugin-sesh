@@ -3,157 +3,15 @@ package app
 import (
 	"bytes"
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/connect"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/herdr"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/picker"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type remotePickerRunner struct {
-	selected []string
-}
-
-func (r *remotePickerRunner) Run(_ context.Context, bin string, args ...string) ([]byte, []byte, error) {
-	if bin == "herdr-app" && len(args) == 1 && args[0] == "ls" {
-		return []byte(`{"spaces":[
-			{"id":"sp1","name":"api","folder":"/src/api","machine":null},
-			{"id":"buntu26/sp1","name":"api","folder":"/src/api","machine":"buntu26"}
-		]}`), nil, nil
-	}
-	if bin == "hc" && len(args) == 2 && args[0] == "ls" && args[1] == "--json" {
-		return []byte(`{"terminals":[]}`), nil, nil
-	}
-	if bin == "herdr-app" && len(args) == 3 && args[0] == "do" && args[1] == "space.select" {
-		r.selected = append(r.selected, args[2])
-		return []byte(`{"ok":true}`), nil, nil
-	}
-	return nil, nil, errors.New("unexpected command")
-}
-
-func TestListTextLabelsRemoteSessionsOnly(t *testing.T) {
-	var out bytes.Buffer
-	a := &App{Out: &out}
-	require.NoError(t, a.printSessions([]model.Session{
-		{Source: "herdr", Name: "api", Path: "/src/api", WorkspaceID: "sp1"},
-		{Source: "herdr", Machine: "buntu26", Name: "api", Path: "/src/api", WorkspaceID: "buntu26/sp1"},
-		{Source: "herdr", Machine: "buntu26", Name: "~", WorkspaceID: "buntu26/sp2"},
-		{Source: "config", Name: "notes"},
-	}, false))
-	assert.Equal(t, "herdr\tapi\t/src/api\nherdr\t[buntu26] api\t/src/api\nherdr\t[buntu26] ~\nconfig\tnotes\n", out.String())
-}
-
-func TestAppHistoryKeepsQualifiedRemoteIDsThroughSwitchAndPrune(t *testing.T) {
-	t.Setenv("HERDR_SESH_BACKEND", "app")
-	dir := t.TempDir()
-	require.NoError(t, recordSwitch(dir, "sp1", "buntu26/sp1", 0))
-	require.NoError(t, recordSwitch(dir, "buntu26/sp1", "ser8/sp1", 0))
-
-	// buntu26/sp1 survives pruning by its qualified ID; a bare "sp1" live
-	// space must not keep the closed remote "ser8/sp1".
-	h, err := loadLastHistory(t.Context(), liveSpaces{ids: []string{"sp1", "buntu26/sp1"}}, dir)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"buntu26/sp1", "sp1"}, h.Workspaces)
-	id, ok := h.PreviousWorkspace("sp1")
-	require.True(t, ok)
-	assert.Equal(t, "buntu26/sp1", id)
-}
-
-func TestAppPickerCollectsAndSelectsRemoteNamesakeByQualifiedID(t *testing.T) {
-	t.Setenv("PATH", t.TempDir()) // Exclude the user's zoxide database.
-	runner := &remotePickerRunner{}
-	client := &herdr.AppClient{AppBin: "herdr-app", CoreBin: "hc", Runner: runner}
-	cfg := config.Default()
-	cfg.SessionConfigs = []config.SessionConfig{{Name: "api", Path: "/src/api"}}
-	col, err := (&App{}).collectPickerWithClient(context.Background(), cfg, nil, client)
-	require.NoError(t, err)
-	require.NoError(t, col.HerdrErr)
-	require.Len(t, col.Sessions, 2)
-	require.Len(t, col.HerdrWorkspaces, 2)
-	list := picker.New(col.Sessions)
-	list.Filter("buntu26")
-	selected, ok := list.Current()
-	require.True(t, ok)
-	assert.Equal(t, "buntu26/sp1", selected.WorkspaceID)
-	result, err := connect.Open(context.Background(), client, selected, connect.Options{})
-	require.NoError(t, err)
-	assert.False(t, result.Created)
-	assert.Equal(t, "buntu26/sp1", result.Session.WorkspaceID)
-	assert.Equal(t, []string{`{"id":"buntu26/sp1"}`}, runner.selected)
-}
-
-// A connect or preview target may name a workspace on another machine, or be
-// its path there, so collecting sessions for it must not run git on it here.
-func TestCollectForRemoteTargetRunsNoLocalGit(t *testing.T) {
-	bin := t.TempDir()
-	log := filepath.Join(t.TempDir(), "git.log")
-	//nolint:gosec // the test's fake git must be executable.
-	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\necho \"$@\" >> '"+log+"'\nexit 1\n"), 0o755))
-	t.Setenv("PATH", bin) // Also excludes the user's zoxide database.
-	t.Chdir(t.TempDir())
-	cfg := config.Default()
-	cfg.SessionConfigs = []config.SessionConfig{{Name: "api", Machine: "buntu26", Path: "/remote-only/api"}}
-	for _, target := range []string{"api", "/remote-only/api"} {
-		sessions, err := (&App{}).collectAllowUnavailableHerdr(context.Background(), cfg, target)
-		require.NoError(t, err)
-		require.Len(t, sessions, 1)
-		assert.Equal(t, "buntu26", sessions[0].Machine)
-	}
-	assert.NoFileExists(t, log, "git ran locally for a remote target")
-
-	// The sentinel works: a local directory target is still named with git.
-	local := t.TempDir()
-	_, err := (&App{}).collectAllowUnavailableHerdr(context.Background(), cfg, local)
-	require.NoError(t, err)
-	assert.FileExists(t, log)
-}
-
-func TestPreviewConfiguredRemoteNamePrefersLocalDirectory(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	bin := t.TempDir()
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	t.Setenv("HERDR_SESH_BACKEND", "app")
-	log := filepath.Join(dir, "hc.log")
-	t.Setenv("PREVIEW_HC_LOG", log)
-	// The fake answers only hc exec, with the preview script's header line.
-	//nolint:gosec // executable fixture at the hc process boundary.
-	require.NoError(t, os.WriteFile(filepath.Join(bin, "hc"), []byte("#!/bin/sh\n[ \"$1\" = exec ] || exit 1\nprintf '%s\\n' \"$*\" >> \"$PREVIEW_HC_LOG\"\nprintf '0 14\\nremote-preview'\n"), 0o700))
-	//nolint:gosec // executable fixture at the herdr-app process boundary.
-	require.NoError(t, os.WriteFile(filepath.Join(bin, "herdr-app"), []byte("#!/bin/sh\nexit 1\n"), 0o700))
-	cfg := filepath.Join(dir, "config.toml")
-	require.NoError(t, os.WriteFile(cfg, []byte(`version = 1
-[workspace_defaults]
-preview = "printf local-preview"
-[[workspace]]
-name = "api"
-machine = "buntu26"
-path = "/remote-only/api"
-`), 0o600))
-	var out, errOut bytes.Buffer
-	a := &App{Out: &out, Err: &errOut}
-	require.NoError(t, a.preview(t.Context(), []string{"--config", cfg, "api"}))
-	assert.Contains(t, out.String(), "/remote-only/api (buntu26)")
-	assert.Contains(t, out.String(), "remote-preview")
-	//nolint:gosec // read only the log created in this test's temporary directory.
-	calls, err := os.ReadFile(log)
-	require.NoError(t, err)
-	assert.Contains(t, string(calls), "--on buntu26 --cwd /remote-only/api")
-	require.NoError(t, os.Remove(log))
-	require.NoError(t, os.Mkdir("api", 0o700))
-	out.Reset()
-	require.NoError(t, a.preview(t.Context(), []string{"--config", cfg, "api"}))
-	assert.Equal(t, "local-preview", out.String())
-	assert.NoFileExists(t, log)
-}
 
 const localAndRemoteConfig = `version = 1
 [[workspace]]
@@ -173,142 +31,99 @@ func sessionNames(sessions []model.Session) []string {
 	return names
 }
 
-// useAppBackend selects herdr-app with fakes that fail every call, so the
-// live app is never asked.
-func useAppBackend(t *testing.T) {
-	t.Helper()
-	bin := t.TempDir()
-	for _, name := range []string{"herdr-app", "hc"} {
-		//nolint:gosec // executable fixtures at the process boundary.
-		require.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 1\n"), 0o700))
-	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("HERDR_SESH_BACKEND", "app")
+func TestListTextLabelsRemoteSessionsOnly(t *testing.T) {
+	var out bytes.Buffer
+	a := &App{Out: &out}
+	require.NoError(t, a.printSessions([]model.Session{
+		{Source: "config", Name: "api", Path: "/src/api"},
+		{Source: "config", Machine: "buntu26", Name: "api", Path: "/src/api"},
+		{Source: "config", Machine: "buntu26", Name: "~"},
+		{Source: "config", Name: "notes"},
+	}, false))
+	assert.Equal(t, "config\tapi\t/src/api\nconfig\t[buntu26] api\t/src/api\nconfig\t[buntu26] ~\nconfig\tnotes\n", out.String())
 }
 
-// A backend without machines cannot open a remote [[workspace]] entry, so
-// list and the picker leave it out; herdr-app lists it.
-func TestListAndPickerOmitRemoteWorkspacesWithoutMachines(t *testing.T) {
+func TestCollectForRemoteTargetRunsNoLocalGit(t *testing.T) {
+	bin := t.TempDir()
+	log := filepath.Join(t.TempDir(), "git.log")
+	//nolint:gosec // the test's fake git must be executable.
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\necho \"$@\" >> '"+log+"'\nexit 1\n"), 0o755))
+	t.Setenv("PATH", bin) // Also excludes the user's zoxide database.
+	t.Chdir(t.TempDir())
+	cfg := config.Default()
+	cfg.SessionConfigs = []config.SessionConfig{{Name: "api", Machine: "buntu26", Path: "/remote-only/api"}}
+	for _, target := range []string{"api", "/remote-only/api"} {
+		sessions, err := (&App{}).collect(context.Background(), cfg, target, false)
+		require.NoError(t, err)
+		require.Len(t, sessions, 1)
+		assert.Equal(t, "buntu26", sessions[0].Machine)
+	}
+	assert.NoFileExists(t, log, "git ran locally for a remote target")
+
+	// The sentinel works: a local directory target is still named with git.
+	local := t.TempDir()
+	_, err := (&App{}).collect(context.Background(), cfg, local, false)
+	require.NoError(t, err)
+	assert.FileExists(t, log)
+}
+
+// rex-sesh cannot open a [[workspace]] entry on another machine yet, so list
+// and the picker leave it out.
+func TestListAndPickerOmitRemoteWorkspaces(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.toml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(localAndRemoteConfig), 0o600))
-	cfg, err := (&App{}).loadConfig(cfgPath)
-	require.NoError(t, err)
-
-	t.Run("herdr TUI", func(t *testing.T) {
-		assert.Equal(t, []string{"web"}, sessionNames(runListJSON(t, cfgPath, "")))
-		assert.Equal(t, []string{"web"}, sessionNames(runPickerJSON(t, cfgPath, "")))
-		col, err := (&App{}).collectPickerWithClient(t.Context(), cfg, nil, &herdr.CLIClient{Bin: "/usr/bin/false", Runner: herdr.ExecRunner{}})
-		require.NoError(t, err)
-		assert.Equal(t, []string{"web"}, sessionNames(col.Sessions))
-	})
-	t.Run("herdr-app", func(t *testing.T) {
-		useAppBackend(t)
-		want := []string{"web", "[buntu26] api"}
-		assert.ElementsMatch(t, want, sessionNames(runListJSON(t, cfgPath, "")))
-		assert.ElementsMatch(t, want, sessionNames(runPickerJSON(t, cfgPath, "")))
-		col, err := (&App{}).collectPickerWithClient(t.Context(), cfg, nil, &herdr.AppClient{AppBin: "/usr/bin/false", CoreBin: "/usr/bin/false", Runner: herdr.ExecRunner{}})
-		require.NoError(t, err)
-		assert.ElementsMatch(t, want, sessionNames(col.Sessions))
-	})
+	assert.Equal(t, []string{"web"}, sessionNames(runListJSON(t, cfgPath, "")))
+	assert.Equal(t, []string{"web"}, sessionNames(runPickerJSON(t, cfgPath, "")))
 }
 
-// fakeAppHost puts herdr-app and hc fakes first on PATH. herdr-app logs each
-// call and prints ls, or fails ls when ls is empty; every other request it
-// needs to open a space succeeds.
-func fakeAppHost(t *testing.T, ls string) (log string) {
-	t.Helper()
-	bin := t.TempDir()
-	log = filepath.Join(t.TempDir(), "herdr-app.log")
-	t.Setenv("FAKE_APP_LOG", log)
-	t.Setenv("FAKE_APP_LS", ls)
-	for name, script := range map[string]string{
-		"herdr-app": `#!/bin/sh
-printf '%s\n' "$*" >> "$FAKE_APP_LOG"
-case "$1 $2" in
-"ls ") [ -n "$FAKE_APP_LS" ] || { echo 'host unreachable' >&2; exit 1; }; printf '%s' "$FAKE_APP_LS" ;;
-"status ") printf '{"space":"sp0","tab":"t0"}' ;;
-"do space.new") printf '{"space":"buildbox/sp9","tab":"buildbox/t9","pane":"buildbox/p9","terminal":"buildbox/term9"}' ;;
-"do tab.select") printf '{"ok":true}' ;;
-*) exit 1 ;;
-esac
-`,
-		"hc": "#!/bin/sh\n[ \"$*\" = 'ls --json' ] || exit 1\nprintf '{\"terminals\":[]}'\n",
-	} {
-		//nolint:gosec // executable fixtures at the process boundary.
-		require.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte(script), 0o700))
-	}
-	t.Setenv("PATH", bin+":/usr/bin:/bin") // Also excludes the user's zoxide database.
-	t.Setenv("HERDR_SESH_BACKEND", "app")
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Chdir(t.TempDir())
-	return log
-}
-
-func spaceNewCalls(t *testing.T, log string) []string {
-	t.Helper()
-	//nolint:gosec // read only the log created in this test's temporary directory.
-	data, err := os.ReadFile(log)
-	require.NoError(t, err)
-	var calls []string
-	for line := range strings.Lines(string(data)) {
-		if strings.HasPrefix(line, "do space.new ") {
-			calls = append(calls, strings.TrimSpace(strings.TrimPrefix(line, "do space.new ")))
-		}
-	}
-	return calls
-}
-
-// connect may create a configured remote workspace only after herdr-app has
-// listed its spaces: an unknown list could already hold it.
-func TestConnectRemoteWorkspaceRequiresSuccessfulLookup(t *testing.T) {
-	cfgPath := filepath.Join(t.TempDir(), "config.toml")
-	require.NoError(t, os.WriteFile(cfgPath, []byte(`version = 1
-[[workspace]]
-name = "remote-api"
-machine = "buildbox"
-path = "/srv/api"
-`), 0o600))
-	run := func(t *testing.T, ls string) (string, []string, error) {
-		t.Helper()
-		log := fakeAppHost(t, ls)
-		var out bytes.Buffer
-		err := (&App{Out: &out, Err: &bytes.Buffer{}}).connect(t.Context(), []string{"--config", cfgPath, "--no-focus", "remote-api"})
-		return out.String(), spaceNewCalls(t, log), err
-	}
-
-	t.Run("failed lookup", func(t *testing.T) {
-		_, created, err := run(t, "")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `list Herdr workspaces before creating "remote-api" on machine "buildbox"`)
-		assert.Contains(t, err.Error(), "herdr-app ls")
-		assert.Contains(t, err.Error(), "host unreachable")
-		assert.Empty(t, created)
-	})
-	t.Run("open on the configured machine", func(t *testing.T) {
-		out, created, err := run(t, `{"spaces":[{"id":"buildbox/sp1","name":"remote-api","folder":"/srv/api","machine":"buildbox"}]}`)
-		require.NoError(t, err)
-		assert.Equal(t, "remote-api\n", out)
-		assert.Empty(t, created)
-	})
-	t.Run("open only on another machine", func(t *testing.T) {
-		out, created, err := run(t, `{"spaces":[{"id":"ser8/sp1","name":"remote-api","folder":"/srv/api","machine":"ser8"}]}`)
-		require.NoError(t, err)
-		assert.Equal(t, "remote-api\n", out)
-		assert.Equal(t, []string{`{"folder":"/srv/api","machine":"buildbox","name":"remote-api"}`}, created)
-	})
-}
-
-// connect and preview keep remote entries under a backend without machines,
-// so the name is explained instead of matching nothing.
-func TestConnectAndPreviewKeepRemoteWorkspacesWithoutMachines(t *testing.T) {
+// Preview keeps a remote entry, which shows its metadata without running
+// anything.
+func TestPreviewKeepsRemoteWorkspaces(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.toml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(localAndRemoteConfig), 0o600))
 	configureFakeSources(t, "")
 	t.Chdir(t.TempDir())
 	var out bytes.Buffer
 	a := &App{Out: &out, Err: &bytes.Buffer{}}
-	err := a.connect(t.Context(), []string{"--config", cfgPath, "api"})
-	require.ErrorIs(t, err, herdr.ErrNoMachines)
 	require.NoError(t, a.preview(t.Context(), []string{"--config", cfgPath, "api"}))
-	assert.Equal(t, "workspace: api\nmachine: buntu26\nid: \npath: /srv/api\nremote previews need the Herdr app (herdr-app)\n", out.String())
+	assert.Equal(t, "workspace: api\nmachine: buntu26\nid: \npath: /srv/api\n", out.String())
+}
+
+func TestPreviewConfiguredRemoteNamePrefersLocalDirectory(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	configureFakeSources(t, "")
+	cfg := filepath.Join(dir, "config.toml")
+	require.NoError(t, os.WriteFile(cfg, []byte(`version = 1
+[workspace_defaults]
+preview = "printf local-preview"
+[[workspace]]
+name = "api"
+machine = "buntu26"
+path = "/remote-only/api"
+`), 0o600))
+	var out bytes.Buffer
+	a := &App{Out: &out, Err: &bytes.Buffer{}}
+	require.NoError(t, a.preview(t.Context(), []string{"--config", cfg, "api"}))
+	assert.Contains(t, out.String(), "machine: buntu26")
+	require.NoError(t, os.Mkdir("api", 0o700))
+	out.Reset()
+	require.NoError(t, a.preview(t.Context(), []string{"--config", cfg, "api"}))
+	assert.Equal(t, "local-preview", out.String())
+}
+
+func TestStateDirPrefersOverrideThenXDGStateHome(t *testing.T) {
+	override := t.TempDir()
+	t.Setenv("REX_SESH_STATE_DIR", override)
+	assert.Equal(t, override, stateDir())
+
+	xdg := t.TempDir()
+	t.Setenv("REX_SESH_STATE_DIR", "")
+	t.Setenv("XDG_STATE_HOME", xdg)
+	assert.Equal(t, filepath.Join(xdg, "rex-sesh"), stateDir())
+
+	home := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("HOME", home)
+	assert.Equal(t, filepath.Join(home, ".local", "state", "rex-sesh"), stateDir())
 }

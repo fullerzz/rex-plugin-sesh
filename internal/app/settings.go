@@ -7,35 +7,17 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/herdr"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/settings"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/state"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
+	"github.com/fullerzz/rex-plugin-sesh/internal/settings"
+	"github.com/fullerzz/rex-plugin-sesh/internal/state"
 )
 
-func (a *App) refreshOverlayGeometry(ctx context.Context, entry string) {
-	if os.Getenv("HERDR_PLUGIN_ENTRYPOINT_ID") == entry {
-		if paneID := os.Getenv("HERDR_PANE_ID"); paneID != "" {
-			// HERDR_PANE_ID exists only in Herdr TUI plugin panes.
-			client := herdr.NewCLIClient()
-			layout, refreshErr := client.PaneLayout(ctx, paneID)
-			if refreshErr == nil && layout.Zoomed {
-				// Herdr 0.9.0 starts overlays at the outer pane size. Keeping the
-				// already-zoomed pane zoomed synchronizes its bordered PTY geometry.
-				refreshErr = client.PaneZoom(ctx, paneID)
-			}
-			if refreshErr != nil {
-				a.warnf("could not refresh %s pane geometry: %v", entry, refreshErr)
-			}
-		}
-	}
-}
 func (a *App) settingsSaved(_ string) error {
-	dir := sessionStateDir()
+	dir := stateDir()
 	if dir == "" {
 		return nil
 	}
-	//nolint:gosec // herdr-sesh-owned cache directory: Herdr's plugin state or herdr-app's state.
+	//nolint:gosec // rex-sesh-owned cache directory under the XDG state home.
 	if err := os.Remove(state.SessionCachePath(dir)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove stale session cache: %w", err)
 	}
@@ -55,7 +37,6 @@ func (a *App) editSettings(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	a.refreshOverlayGeometry(ctx, "settings")
 	_, err = settings.RunModel(ctx, a.Out, editor)
 	return err
 }

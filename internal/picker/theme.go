@@ -4,7 +4,7 @@ import (
 	"image/color"
 
 	"charm.land/lipgloss/v2"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/uitheme"
+	"github.com/fullerzz/rex-plugin-sesh/internal/uitheme"
 )
 
 var herdrTokenRoles = map[string]*color.Color{

@@ -4,25 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"reflect"
-	"runtime"
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/herdr"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/state"
-	"github.com/pelletier/go-toml/v2"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,13 +22,13 @@ func TestVersionCommand(t *testing.T) {
 	var out bytes.Buffer
 	a := &App{Out: &out, Err: &bytes.Buffer{}}
 	require.NoError(t, a.Run(context.Background(), []string{"--version"}))
-	assert.Equal(t, "herdr-sesh dev", strings.TrimSpace(out.String()))
+	assert.Equal(t, "rex-sesh dev", strings.TrimSpace(out.String()))
 }
 
 func TestConfigPathCommand(t *testing.T) {
 	d := t.TempDir()
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", d)
-	t.Setenv("HERDR_SESH_CONFIG", "")
+	t.Setenv("REX_SESH_CONFIG_DIR", d)
+	t.Setenv("REX_SESH_CONFIG", "")
 	t.Setenv("HOME", d)
 
 	var out bytes.Buffer
@@ -55,8 +46,8 @@ func TestConfigPathCommand(t *testing.T) {
 
 func TestConfigValidatePrintsResolvedNativePath(t *testing.T) {
 	d := t.TempDir()
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", d)
-	t.Setenv("HERDR_SESH_CONFIG", "")
+	t.Setenv("REX_SESH_CONFIG_DIR", d)
+	t.Setenv("REX_SESH_CONFIG", "")
 	t.Setenv("HOME", d)
 	native := filepath.Join(d, config.NativeFileName)
 	require.NoError(t, os.WriteFile(native, []byte("version = 1\n"), 0600))
@@ -109,8 +100,8 @@ func TestConfigValidateRejectsInvalidNativeConfig(t *testing.T) {
 
 func TestConfigValidateRequiresExistingConfig(t *testing.T) {
 	d := t.TempDir()
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", d)
-	t.Setenv("HERDR_SESH_CONFIG", "")
+	t.Setenv("REX_SESH_CONFIG_DIR", d)
+	t.Setenv("REX_SESH_CONFIG", "")
 	t.Setenv("HOME", d)
 
 	a := &App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}
@@ -126,8 +117,8 @@ func TestConfigValidateAcceptsAtMostOnePath(t *testing.T) {
 
 func TestConfigValidateRejectsEmptyPath(t *testing.T) {
 	d := t.TempDir()
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", d)
-	t.Setenv("HERDR_SESH_CONFIG", "")
+	t.Setenv("REX_SESH_CONFIG_DIR", d)
+	t.Setenv("REX_SESH_CONFIG", "")
 	t.Setenv("HOME", d)
 
 	a := &App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}
@@ -137,8 +128,8 @@ func TestConfigValidateRejectsEmptyPath(t *testing.T) {
 
 func TestConfigInitDoesNotShadowActiveLegacyConfig(t *testing.T) {
 	d := t.TempDir()
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", d)
-	t.Setenv("HERDR_SESH_CONFIG", "")
+	t.Setenv("REX_SESH_CONFIG_DIR", d)
+	t.Setenv("REX_SESH_CONFIG", "")
 	t.Setenv("HOME", d)
 	legacy := filepath.Join(d, "sesh.toml")
 	require.NoError(t, os.WriteFile(legacy, []byte("cache = true\n"), 0600))
@@ -153,10 +144,10 @@ func TestConfigInitDoesNotShadowActiveLegacyConfig(t *testing.T) {
 
 func TestConfigInitHonorsEnvTarget(t *testing.T) {
 	d := t.TempDir()
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", d)
+	t.Setenv("REX_SESH_CONFIG_DIR", d)
 	t.Setenv("HOME", d)
 	target := filepath.Join(d, "custom", "mine.toml")
-	t.Setenv("HERDR_SESH_CONFIG", target)
+	t.Setenv("REX_SESH_CONFIG", target)
 
 	var out bytes.Buffer
 	a := &App{Out: &out, Err: &bytes.Buffer{}}
@@ -169,8 +160,8 @@ func TestConfigInitHonorsEnvTarget(t *testing.T) {
 
 func TestConfigInitRejectsDirectoryCandidate(t *testing.T) {
 	d := t.TempDir()
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", d)
-	t.Setenv("HERDR_SESH_CONFIG", "")
+	t.Setenv("REX_SESH_CONFIG_DIR", d)
+	t.Setenv("REX_SESH_CONFIG", "")
 	t.Setenv("HOME", d)
 	require.NoError(t, os.Mkdir(filepath.Join(d, config.NativeFileName), 0700))
 
@@ -181,8 +172,8 @@ func TestConfigInitRejectsDirectoryCandidate(t *testing.T) {
 
 func TestConfigInitPropagatesResolveError(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", "")
-	t.Setenv("HERDR_SESH_CONFIG", "")
+	t.Setenv("REX_SESH_CONFIG_DIR", "")
+	t.Setenv("REX_SESH_CONFIG", "")
 	t.Setenv("HOME", home)
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".config"), 0700))
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".config", "sesh"), []byte("blocked\n"), 0600))
@@ -190,14 +181,14 @@ func TestConfigInitPropagatesResolveError(t *testing.T) {
 	a := &App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}
 	err := a.Run(context.Background(), []string{"config", "init"})
 	require.ErrorIs(t, err, syscall.ENOTDIR)
-	_, statErr := os.Stat(filepath.Join(home, ".config", "herdr-sesh", config.NativeFileName))
+	_, statErr := os.Stat(filepath.Join(home, ".config", "rex-sesh", config.NativeFileName))
 	require.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
 func TestConfigMigrateCommand(t *testing.T) {
 	d := t.TempDir()
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", d)
-	t.Setenv("HERDR_SESH_CONFIG", "")
+	t.Setenv("REX_SESH_CONFIG_DIR", d)
+	t.Setenv("REX_SESH_CONFIG", "")
 	t.Setenv("HOME", d)
 	legacy := filepath.Join(d, "sesh.toml")
 	require.NoError(t, os.WriteFile(legacy, []byte("cache = true\n[[session]]\nname = \"api\"\npath = \"/tmp/api\"\n"), 0600))
@@ -221,8 +212,8 @@ func TestConfigMigrateCommand(t *testing.T) {
 
 func TestConfigMigrateForceOverwritesExistingNativeConfig(t *testing.T) {
 	d := t.TempDir()
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", d)
-	t.Setenv("HERDR_SESH_CONFIG", "")
+	t.Setenv("REX_SESH_CONFIG_DIR", d)
+	t.Setenv("REX_SESH_CONFIG", "")
 	t.Setenv("HOME", d)
 	legacy := filepath.Join(d, "sesh.toml")
 	require.NoError(t, os.WriteFile(legacy, []byte("cache = true\n"), 0600))
@@ -242,8 +233,8 @@ func TestConfigMigrateWarnsToRepointEnvBeforeDeletingLegacy(t *testing.T) {
 	d := t.TempDir()
 	legacy := filepath.Join(d, config.LegacyFileName)
 	native := filepath.Join(d, config.NativeFileName)
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", d)
-	t.Setenv("HERDR_SESH_CONFIG", legacy)
+	t.Setenv("REX_SESH_CONFIG_DIR", d)
+	t.Setenv("REX_SESH_CONFIG", legacy)
 	t.Setenv("HOME", d)
 	require.NoError(t, os.WriteFile(legacy, []byte("cache = true\n"), 0600))
 
@@ -251,15 +242,15 @@ func TestConfigMigrateWarnsToRepointEnvBeforeDeletingLegacy(t *testing.T) {
 	a := &App{Out: &bytes.Buffer{}, Err: &errb}
 	require.NoError(t, a.Run(context.Background(), []string{"config", "migrate"}))
 	warning := errb.String()
-	assert.Contains(t, warning, "set HERDR_SESH_CONFIG="+native+" before deleting "+legacy)
+	assert.Contains(t, warning, "set REX_SESH_CONFIG="+native+" before deleting "+legacy)
 }
 
 func TestConfigMigrateKeepsUnrelatedEnvSelection(t *testing.T) {
 	d := t.TempDir()
 	active := filepath.Join(d, "active", config.LegacyFileName)
 	legacy := filepath.Join(d, "other", config.LegacyFileName)
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", d)
-	t.Setenv("HERDR_SESH_CONFIG", active)
+	t.Setenv("REX_SESH_CONFIG_DIR", d)
+	t.Setenv("REX_SESH_CONFIG", active)
 	t.Setenv("HOME", d)
 	for _, p := range []string{active, legacy} {
 		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0700))
@@ -270,8 +261,8 @@ func TestConfigMigrateKeepsUnrelatedEnvSelection(t *testing.T) {
 	a := &App{Out: &bytes.Buffer{}, Err: &errb}
 	require.NoError(t, a.Run(context.Background(), []string{"config", "migrate", "--config", legacy}))
 	warning := errb.String()
-	require.NotContains(t, warning, "set HERDR_SESH_CONFIG=")
-	assert.Contains(t, warning, "HERDR_SESH_CONFIG continues to select "+active)
+	require.NotContains(t, warning, "set REX_SESH_CONFIG=")
+	assert.Contains(t, warning, "REX_SESH_CONFIG continues to select "+active)
 }
 
 func TestConfigMigrateExplicitPathWarnsWhenNativeIsNotDiscovered(t *testing.T) {
@@ -279,8 +270,8 @@ func TestConfigMigrateExplicitPathWarnsWhenNativeIsNotDiscovered(t *testing.T) {
 	legacyDir := t.TempDir()
 	legacy := filepath.Join(legacyDir, config.LegacyFileName)
 	native := filepath.Join(legacyDir, config.NativeFileName)
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", filepath.Join(home, "plugin-config"))
-	t.Setenv("HERDR_SESH_CONFIG", "")
+	t.Setenv("REX_SESH_CONFIG_DIR", filepath.Join(home, "plugin-config"))
+	t.Setenv("REX_SESH_CONFIG", "")
 	t.Setenv("HOME", home)
 	require.NoError(t, os.WriteFile(legacy, []byte("cache = true\n"), 0600))
 
@@ -289,7 +280,7 @@ func TestConfigMigrateExplicitPathWarnsWhenNativeIsNotDiscovered(t *testing.T) {
 	require.NoError(t, a.Run(context.Background(), []string{"config", "migrate", legacy}))
 	warning := errb.String()
 	require.NotContains(t, warning, "now takes precedence")
-	assert.Contains(t, warning, "set HERDR_SESH_CONFIG="+native+" before deleting "+legacy)
+	assert.Contains(t, warning, "set REX_SESH_CONFIG="+native+" before deleting "+legacy)
 }
 
 func TestConfigMigrateLegacySymlinkDoesNotClaimNativePrecedence(t *testing.T) {
@@ -299,8 +290,8 @@ func TestConfigMigrateLegacySymlinkDoesNotClaimNativePrecedence(t *testing.T) {
 	legacy := filepath.Join(legacyDir, config.LegacyFileName)
 	native := filepath.Join(legacyDir, config.NativeFileName)
 	legacyLink := filepath.Join(pluginDir, config.LegacyFileName)
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", pluginDir)
-	t.Setenv("HERDR_SESH_CONFIG", "")
+	t.Setenv("REX_SESH_CONFIG_DIR", pluginDir)
+	t.Setenv("REX_SESH_CONFIG", "")
 	t.Setenv("HOME", home)
 	require.NoError(t, os.MkdirAll(pluginDir, 0700))
 	require.NoError(t, os.WriteFile(legacy, []byte("cache = true\n"), 0600))
@@ -315,7 +306,7 @@ func TestConfigMigrateLegacySymlinkDoesNotClaimNativePrecedence(t *testing.T) {
 	require.False(t, cfg.Cache)
 	warning := errb.String()
 	require.NotContains(t, warning, "now takes precedence")
-	assert.Contains(t, warning, "set HERDR_SESH_CONFIG="+native)
+	assert.Contains(t, warning, "set REX_SESH_CONFIG="+native)
 }
 
 func TestListIgnoresCorruptSessionCache(t *testing.T) {
@@ -325,7 +316,7 @@ func TestListIgnoresCorruptSessionCache(t *testing.T) {
 	stateDir := filepath.Join(d, "state")
 	require.NoError(t, os.MkdirAll(stateDir, 0700))
 	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "sessions.json"), []byte("{"), 0600))
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
+	t.Setenv("REX_SESH_STATE_DIR", stateDir)
 
 	var out, errb bytes.Buffer
 	a := &App{Out: &out, Err: &errb}
@@ -340,7 +331,7 @@ func TestListWarnsWhenSessionCacheCannotBeSaved(t *testing.T) {
 	require.NoError(t, os.WriteFile(cfgPath, []byte("cache = true\n[[session]]\nname = \"api\"\npath = \"/tmp/api\"\n"), 0600))
 	statePath := filepath.Join(d, "state-file")
 	require.NoError(t, os.WriteFile(statePath, []byte("not a directory"), 0600))
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", statePath)
+	t.Setenv("REX_SESH_STATE_DIR", statePath)
 
 	var out, errb bytes.Buffer
 	a := &App{Out: &out, Err: &errb}
@@ -364,7 +355,7 @@ path = "/tmp/api"
 name = "scratch"
 path = "/tmp/scratch"
 `), 0600))
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", filepath.Join(d, "state"))
+	t.Setenv("REX_SESH_STATE_DIR", filepath.Join(d, "state"))
 
 	got := runListJSON(t, cfgPath, "")
 	require.Len(t, got, 1)
@@ -384,7 +375,7 @@ sort_order = ["config", "zoxide"]
 name = "api"
 path = "/configured/api"
 `), 0600))
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", filepath.Join(d, "state"))
+	t.Setenv("REX_SESH_STATE_DIR", filepath.Join(d, "state"))
 	zoxideOutput := "42 /discovered/api\n"
 
 	require.Len(t, runListJSON(t, cfgPath, zoxideOutput), 1)
@@ -397,7 +388,7 @@ func TestListCacheDoesNotCrossConfigFiles(t *testing.T) {
 	secondConfig := filepath.Join(d, "second.toml")
 	require.NoError(t, os.WriteFile(firstConfig, []byte("cache = true\n[[session]]\nname = \"api\"\npath = \"/tmp/api\"\n"), 0600))
 	require.NoError(t, os.WriteFile(secondConfig, []byte("cache = true\n[[session]]\nname = \"web\"\npath = \"/tmp/web\"\n"), 0600))
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", filepath.Join(d, "state"))
+	t.Setenv("REX_SESH_STATE_DIR", filepath.Join(d, "state"))
 
 	got := runListJSON(t, firstConfig, "")
 	require.Len(t, got, 1)
@@ -416,7 +407,7 @@ func TestListCacheDistinguishesRelativeConfigsAcrossWorkingDirectories(t *testin
 		body := fmt.Sprintf("cache = true\n[[session]]\nname = %q\npath = %q\n", name, filepath.Join("/tmp", name))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "sesh.toml"), []byte(body), 0600))
 	}
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", filepath.Join(d, "state"))
+	t.Setenv("REX_SESH_STATE_DIR", filepath.Join(d, "state"))
 
 	t.Chdir(firstDir)
 	got := runListJSON(t, "sesh.toml", "")
@@ -468,111 +459,6 @@ func TestPickerJSONCommand(t *testing.T) {
 	a := &App{Out: &out, Err: &bytes.Buffer{}}
 	require.NoError(t, a.Run(context.Background(), []string{"picker", "--json", "--config", filepath.Join("..", "..", "testdata", "sesh.toml")}))
 	assert.Contains(t, out.String(), `"name": "sesh"`)
-}
-
-func TestPickerRefreshesPluginPaneGeometry(t *testing.T) {
-	for _, tc := range []struct {
-		name        string
-		entrypoint  string
-		paneID      string
-		zoomed      string
-		layoutError string
-		zoomError   string
-		wantLog     string
-		wantWarning string
-	}{
-		{
-			name:       "overlay",
-			entrypoint: "picker",
-			paneID:     "w5:pE0",
-			zoomed:     "true",
-			wantLog: "pane layout --pane w5:pE0\n" +
-				"pane zoom w5:pE0 --on\n" +
-				"workspace list",
-		},
-		{
-			name:       "split",
-			entrypoint: "picker",
-			paneID:     "w5:pE0",
-			zoomed:     "false",
-			wantLog: "pane layout --pane w5:pE0\n" +
-				"workspace list",
-		},
-		{name: "different entrypoint", entrypoint: "other", paneID: "w5:pE0", wantLog: "workspace list"},
-		{name: "missing pane ID", entrypoint: "picker", wantLog: "workspace list"},
-		{
-			name:        "layout refresh fails",
-			entrypoint:  "picker",
-			paneID:      "w5:pE0",
-			layoutError: "true",
-			wantLog: "pane layout --pane w5:pE0\n" +
-				"workspace list",
-			wantWarning: "could not refresh picker pane geometry: herdr pane layout --pane w5:pE0",
-		},
-		{
-			name:       "zoom refresh fails",
-			entrypoint: "picker",
-			paneID:     "w5:pE0",
-			zoomed:     "true",
-			zoomError:  "true",
-			wantLog: "pane layout --pane w5:pE0\n" +
-				"pane zoom w5:pE0 --on\n" +
-				"workspace list",
-			wantWarning: "could not refresh picker pane geometry: herdr pane zoom w5:pE0 --on",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			logPath := filepath.Join(t.TempDir(), "herdr.log")
-			configureHerdrScript(t, `#!/bin/sh
-printf '%s\n' "$*" >> "$HERDR_FAKE_LOG"
-if [ "$1 $2" = "pane layout" ]; then
-	if [ "$HERDR_FAKE_LAYOUT_ERROR" = "true" ]; then
-		printf '%s\n' 'layout failed' >&2
-		exit 1
-	fi
-  printf '%s\n' "{\"result\":{\"layout\":{\"zoomed\":$HERDR_FAKE_ZOOMED}}}"
-elif [ "$1 $2" = "pane zoom" ] && [ "$HERDR_FAKE_ZOOM_ERROR" = "true" ]; then
-	printf '%s\n' 'zoom failed' >&2
-	exit 1
-elif [ "$1 $2" = "workspace list" ]; then
-  printf '%s\n' '{"result":{"workspaces":[]}}'
-fi
-`)
-			t.Setenv("HERDR_FAKE_LOG", logPath)
-			t.Setenv("HERDR_FAKE_ZOOMED", tc.zoomed)
-			t.Setenv("HERDR_FAKE_LAYOUT_ERROR", tc.layoutError)
-			t.Setenv("HERDR_FAKE_ZOOM_ERROR", tc.zoomError)
-			t.Setenv("HERDR_PLUGIN_ENTRYPOINT_ID", tc.entrypoint)
-			t.Setenv("HERDR_PANE_ID", tc.paneID)
-
-			var errOut bytes.Buffer
-			a := &App{Out: &bytes.Buffer{}, Err: &errOut}
-			require.NoError(t, a.Run(context.Background(), []string{"picker", "--json", "--config", filepath.Join("..", "..", "testdata", "herdr-sesh.toml")}))
-			//nolint:gosec // logPath is a test-owned temp file.
-			log, err := os.ReadFile(logPath)
-			require.NoError(t, err)
-			assert.Equal(t, tc.wantLog, strings.TrimSpace(string(log)))
-			if tc.wantWarning == "" {
-				assert.Empty(t, errOut.String())
-			} else {
-				assert.Contains(t, errOut.String(), tc.wantWarning)
-			}
-		})
-	}
-}
-
-func TestNativePickerFailsWhenWorkspaceHistoryCannotResolve(t *testing.T) {
-	configureFakeSources(t, "")
-	statePath := filepath.Join(t.TempDir(), "state")
-	require.NoError(t, os.WriteFile(statePath, []byte("not a directory"), 0600))
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", statePath)
-	t.Setenv("HERDR_SOCKET_PATH", filepath.Join(t.TempDir(), "herdr", "herdr.sock"))
-
-	err := (&App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}).Run(
-		context.Background(),
-		[]string{"picker", "--config", filepath.Join("..", "..", "testdata", "sesh.toml")},
-	)
-	require.ErrorContains(t, err, "resolve workspace history")
 }
 
 func TestPickerJSONAppliesDefaultStartupCommand(t *testing.T) {
@@ -650,133 +536,10 @@ func TestCollectDirectPathUsesConfiguredDirLength(t *testing.T) {
 	cfg := config.Default()
 	cfg.DirLength = 2
 
-	sessions, err := (&App{}).collectAllowUnavailableHerdr(context.Background(), cfg, target)
+	sessions, err := (&App{}).collect(context.Background(), cfg, target, false)
 	require.NoError(t, err)
 	require.Len(t, sessions, 1)
 	assert.Equal(t, filepath.Join("parent", "child"), sessions[0].Name)
-}
-
-func TestCollectPropagatesHerdrErrors(t *testing.T) {
-	configureFakeSources(t, "")
-
-	_, err := (&App{}).collect(context.Background(), config.Default(), "")
-	require.Error(t, err)
-}
-
-func TestCollectPickerPreservesHerdrError(t *testing.T) {
-	configureFakeSources(t, "")
-
-	col, err := (&App{}).collectPicker(context.Background(), config.Default(), nil)
-	require.NoError(t, err)
-	require.Error(t, col.HerdrErr)
-	require.Empty(t, col.Sessions)
-	require.Nil(t, col.HerdrWorkspaces)
-}
-
-func TestCollectPickerReturnsRawHerdrWorkspaces(t *testing.T) {
-	configureHerdrScript(t, `#!/bin/sh
-case "$1 $2" in
-"workspace list") printf '[{"id":"w1","label":"api","cwd":"/live/api"}]\n' ;;
-"pane list") printf '[]\n' ;;
-*) exit 1 ;;
-esac
-`)
-
-	col, err := (&App{}).collectPicker(context.Background(), config.Default(), nil)
-	require.NoError(t, err)
-	require.NoError(t, col.HerdrErr)
-	want := []model.Session{{Source: "herdr", Name: "api", Path: "/live/api", WorkspaceID: "w1"}}
-	assert.Equal(t, want, col.HerdrWorkspaces)
-}
-
-func TestReloadPickerStateResolvesFocusedWorkspace(t *testing.T) {
-	tests := []struct {
-		name        string
-		paneCurrent string
-		wantID      string
-		wantLast    string
-		wantUnknown bool
-		wantWarning string
-	}{
-		{
-			name:        "records focused workspace",
-			paneCurrent: `printf '{"id":"p1","workspace_id":"focused"}\n'`,
-			wantID:      "focused",
-			wantLast:    "previous",
-		},
-		{
-			name:        "clears workspace when focus fails",
-			paneCurrent: "exit 1",
-			wantUnknown: true,
-			wantWarning: "find focused workspace after close",
-		},
-		{
-			name:        "clears workspace when focused pane has no workspace",
-			paneCurrent: `printf '{"id":"p1"}\n'`,
-			wantUnknown: true,
-			wantWarning: "focused pane has no workspace ID",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			configureHerdrScript(t, fmt.Sprintf(`#!/bin/sh
-case "$1 $2" in
-"workspace list") printf '[]\n' ;;
-"pane list") printf '[]\n' ;;
-"pane current") %s ;;
-*) exit 1 ;;
-esac
-`, tt.paneCurrent))
-			stateDir := filepath.Join(t.TempDir(), "state")
-			require.NoError(t, state.SaveHistory(stateDir, state.History{Workspaces: []string{"focused", "previous"}}))
-			t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-			t.Setenv("HERDR_SOCKET_PATH", "")
-			backend := &pickerBackend{app: &App{}, cfg: config.Default(), client: herdr.NewCLIClient(), historyDir: stateDir, pickerWorkspaceID: "closed-workspace"}
-			result, err := backend.ReloadPicker(context.Background())
-			require.NoError(t, err)
-			require.Equal(t, tt.wantID, backend.pickerWorkspaceID)
-			require.Equal(t, tt.wantUnknown, result.LastWorkspaceUnknown)
-			if !tt.wantUnknown {
-				assert.Equal(t, tt.wantLast, result.LastWorkspaceID)
-			}
-			if tt.wantWarning == "" {
-				assert.Empty(t, backend.warnings)
-			} else {
-				require.Len(t, backend.warnings, 1)
-				assert.Contains(t, backend.warnings[0], tt.wantWarning)
-			}
-		})
-	}
-}
-
-func TestCollectPickerLoadsHerdrAndZoxideConcurrently(t *testing.T) {
-	d := t.TempDir()
-	marker := filepath.Join(d, "zoxide-started")
-	herdrScript := `#!/bin/sh
-if [ "$1 $2" = "workspace list" ]; then
-  i=0
-  while [ ! -f "$CONCURRENT_SOURCE_MARKER" ] && [ "$i" -lt 100 ]; do
-    sleep 0.01
-    i=$((i + 1))
-  done
-  [ -f "$CONCURRENT_SOURCE_MARKER" ] || exit 1
-fi
-printf '[]\n'
-`
-	zoxideScript := `#!/bin/sh
-: > "$CONCURRENT_SOURCE_MARKER"
-`
-	for name, script := range map[string]string{"herdr": herdrScript, "zoxide": zoxideScript} {
-		//nolint:gosec // test creates local executable fixtures.
-		require.NoError(t, os.WriteFile(filepath.Join(d, name), []byte(script), 0700))
-	}
-	t.Setenv("HERDR_BIN_PATH", filepath.Join(d, "herdr"))
-	t.Setenv("CONCURRENT_SOURCE_MARKER", marker)
-	t.Setenv("PATH", d+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	col, err := (&App{}).collectPicker(context.Background(), config.Default(), nil)
-	require.NoError(t, err)
-	require.NoError(t, col.HerdrErr)
 }
 
 func TestPreviewCommandUsesExplicitConfig(t *testing.T) {
@@ -787,13 +550,10 @@ func TestPreviewCommandUsesExplicitConfig(t *testing.T) {
 	require.NoError(t, os.WriteFile(cfgPath, []byte("[default_session]\npreview_command = \"printf configured:%s {}\"\n"), 0600))
 	fakeBin := filepath.Join(d, "bin")
 	require.NoError(t, os.MkdirAll(fakeBin, 0700))
-	for _, name := range []string{"herdr", "zoxide"} {
-		//nolint:gosec // test creates local executable fixtures.
-		require.NoError(t, os.WriteFile(filepath.Join(fakeBin, name), []byte("#!/bin/sh\nexit 1\n"), 0700))
-	}
+	//nolint:gosec // test creates a local executable fixture.
+	require.NoError(t, os.WriteFile(filepath.Join(fakeBin, "zoxide"), []byte("#!/bin/sh\nexit 1\n"), 0700))
 	//nolint:gosec // test creates a local executable fixture.
 	require.NoError(t, os.WriteFile(filepath.Join(fakeBin, "eza"), []byte("#!/bin/sh\nprintf 'default:%s\\n' \"$*\"\n"), 0700))
-	t.Setenv("HERDR_BIN_PATH", filepath.Join(fakeBin, "herdr"))
 	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	var out bytes.Buffer
@@ -801,1106 +561,6 @@ func TestPreviewCommandUsesExplicitConfig(t *testing.T) {
 	require.NoError(t, a.Run(context.Background(), []string{"preview", "--config", cfgPath, targetDir}))
 	require.Contains(t, out.String(), "configured:")
 	assert.Contains(t, out.String(), targetDir)
-}
-
-func TestPreviewConfiguredRootAfterTerminalChangesDirectory(t *testing.T) {
-	dir := t.TempDir()
-	root := filepath.Join(dir, "project")
-	subdir := filepath.Join(root, "subdir")
-	require.NoError(t, os.MkdirAll(subdir, 0o700))
-	cfg := filepath.Join(dir, "config.toml")
-	require.NoError(t, os.WriteFile(cfg, fmt.Appendf(nil, `version = 1
-[list]
-source_order = ["config", "herdr", "zoxide", "dir"]
-[workspace_defaults]
-preview = "printf DEFAULT"
-[[workspace]]
-name = "project"
-path = %q
-preview = "printf CONFIGURED"
-`, root), 0o600))
-
-	bin := t.TempDir()
-	for name, reply := range map[string]string{
-		"herdr-app": fmt.Sprintf(`{"spaces":[{"id":"sp1","name":"project","folder":%q,"tabs":[{"id":"tb1","active":true,"terminals":[{"terminal":"t1"}]}]}]}`, root),
-		"hc":        fmt.Sprintf(`{"terminals":[{"address":"t1","cwd":%q,"foreground":{"cwd":%q}}]}`, root, subdir),
-		"zoxide":    "",
-	} {
-		//nolint:gosec // executable fixtures for the app and core listings.
-		require.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\ncat <<'JSON'\n"+reply+"\nJSON\n"), 0o700))
-	}
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	t.Setenv("HERDR_SESH_BACKEND", "app")
-	var out bytes.Buffer
-	a := &App{Out: &out, Err: &bytes.Buffer{}}
-	require.NoError(t, a.Run(t.Context(), []string{"preview", "--config", cfg, root}))
-	assert.Equal(t, "CONFIGURED", out.String())
-	out.Reset()
-	require.NoError(t, a.Run(t.Context(), []string{"list", "--json", "--config", cfg}))
-	var sessions []model.Session
-	require.NoError(t, json.Unmarshal(out.Bytes(), &sessions))
-	require.Len(t, sessions, 1)
-	assert.Equal(t, "project", sessions[0].Name)
-	assert.Equal(t, "sp1", sessions[0].WorkspaceID)
-	assert.Equal(t, subdir, sessions[0].Path)
-}
-
-func TestConnectMissingFocusSocketWarnsAndRecordsHistory(t *testing.T) {
-	configureHerdrScript(t, `#!/bin/sh
-case "$1 $2" in
-"workspace list") printf '[]\n' ;;
-"workspace create") printf '{"id":"new-workspace"}\n' ;;
-"workspace focus"|"tab rename") ;;
-"pane list") printf '[{"id":"root","workspace_id":"new-workspace","tab_id":"initial"}]\n' ;;
-"pane split") printf '{"id":"server"}\n' ;;
-*) exit 1 ;;
-esac
-`)
-	stateDir := t.TempDir()
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", "")
-	t.Setenv("HERDR_WORKSPACE_ID", "previous")
-	cfgPath := filepath.Join(t.TempDir(), "herdr-sesh.toml")
-	require.NoError(t, os.WriteFile(cfgPath, []byte(`version = 1
-[[tab]]
-name = "dev"
-[[tab.pane]]
-name = "root"
-[[tab.pane]]
-name = "server"
-split_from = "root"
-split = "right"
-focus = true
-[[workspace]]
-name = "api"
-path = "/tmp/api"
-tabs = ["dev"]
-`), 0600))
-	var out, warnings bytes.Buffer
-	a := &App{Out: &out, Err: &warnings}
-	require.NoError(t, a.Run(context.Background(), []string{"connect", "--config", cfgPath, "api"}))
-	assert.Equal(t, "api\n", out.String())
-	assert.Contains(t, warnings.String(), "warning: workspace \"api\" tab \"dev\": could not focus pane:")
-	assert.Contains(t, warnings.String(), "HERDR_SOCKET_PATH is not set")
-	history, err := state.LoadHistory(stateDir)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"new-workspace", "previous"}, history.Workspaces)
-}
-
-func TestLastFocusesPreviousWorkspaceAndRotatesHistory(t *testing.T) {
-	d := t.TempDir()
-	stateDir := filepath.Join(d, "state")
-	require.NoError(t, state.SaveHistory(stateDir, state.History{Workspaces: []string{"current", "previous", "older"}}))
-	fakeHerdr := filepath.Join(d, "herdr")
-	logPath := filepath.Join(d, "herdr.log")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" > \"$HERDR_FAKE_LOG\"\n"
-	//nolint:gosec // test creates a local executable fixture.
-	require.NoError(t, os.WriteFile(fakeHerdr, []byte(script), 0700))
-	t.Setenv("HERDR_BIN_PATH", fakeHerdr)
-	t.Setenv("HERDR_FAKE_LOG", logPath)
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", "")
-	t.Setenv("HERDR_WORKSPACE_ID", "current")
-
-	a := &App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}
-	require.NoError(t, a.Run(context.Background(), []string{"last"}))
-	//nolint:gosec // logPath is a test-owned temp file.
-	log, err := os.ReadFile(logPath)
-	require.NoError(t, err)
-	require.Equal(t, "workspace focus previous", strings.TrimSpace(string(log)))
-	h, err := state.LoadHistory(stateDir)
-	require.NoError(t, err)
-	want := []string{"previous", "current", "older"}
-	assert.Equal(t, want, h.Workspaces)
-}
-
-func TestPluginManifestStartsHistoryWatcherForRuntimeLifecycleEvents(t *testing.T) {
-	//nolint:gosec // The manifest is a repository-owned test fixture.
-	b, err := os.ReadFile("../../herdr-plugin.toml")
-	require.NoError(t, err)
-	var manifest struct {
-		MinHerdrVersion string `toml:"min_herdr_version"`
-		Events          []struct {
-			On      string   `toml:"on"`
-			Command []string `toml:"command"`
-		} `toml:"events"`
-	}
-	require.NoError(t, toml.Unmarshal(b, &manifest))
-	require.Equal(t, "0.8.2", manifest.MinHerdrVersion)
-	wantCommand := []string{"./bin/herdr-sesh", "plugin", "watch-history"}
-	got := make(map[string][]string, len(manifest.Events))
-	for _, event := range manifest.Events {
-		got[event.On] = event.Command
-	}
-	for _, event := range []string{"workspace.focused", "workspace.closed"} {
-		assert.Equal(t, wantCommand, got[event])
-	}
-}
-
-func TestApplyHistoryHookLeavesFocusedEventsToSubscriber(t *testing.T) {
-	historyDir := t.TempDir()
-	want := state.History{Workspaces: []string{"current", "older"}}
-	require.NoError(t, state.SaveHistory(historyDir, want))
-	t.Setenv("HERDR_PLUGIN_EVENT", "workspace.focused")
-	t.Setenv("HERDR_WORKSPACE_ID", "late-hook")
-
-	err := applyHistoryHook(historyDir)
-	require.NoError(t, err)
-	history, err := state.LoadHistory(historyDir)
-	require.NoError(t, err)
-	assert.Equal(t, want, history)
-}
-
-func TestApplyHistoryHookUsesClosedEventPayloadWorkspace(t *testing.T) {
-	historyDir := t.TempDir()
-	require.NoError(t, state.SaveHistory(historyDir, state.History{Workspaces: []string{"context", "closed", "older"}}))
-	t.Setenv("HERDR_PLUGIN_EVENT", "workspace.closed")
-	t.Setenv("HERDR_WORKSPACE_ID", "context")
-	t.Setenv("HERDR_PLUGIN_EVENT_JSON", `{"data":{"workspace_id":"closed"}}`)
-
-	require.NoError(t, applyHistoryHook(historyDir))
-	history, err := state.LoadHistory(historyDir)
-	require.NoError(t, err)
-	want := []string{"context", "older"}
-	assert.Equal(t, want, history.Workspaces)
-}
-
-func TestPluginWatchHistoryBoundsClosedHookLockWait(t *testing.T) {
-	stateDir := filepath.Join(t.TempDir(), "state")
-	socketPath := filepath.Join(t.TempDir(), "herdr.sock")
-	historyDir, err := state.SessionHistoryDir(stateDir, socketPath)
-	require.NoError(t, err)
-	require.NoError(t, state.SaveHistory(historyDir, state.History{Workspaces: []string{"closed"}}))
-	//nolint:gosec // Test lock path is derived from t.TempDir().
-	lock, err := os.OpenFile(filepath.Join(historyDir, "history.lock"), os.O_CREATE|os.O_RDWR, 0600)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = lock.Close() })
-	require.NoError(t, syscall.Flock(int(lock.Fd()), syscall.LOCK_EX))
-	t.Cleanup(func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) })
-
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", socketPath)
-	t.Setenv("HERDR_PLUGIN_EVENT", "workspace.closed")
-	t.Setenv("HERDR_PLUGIN_EVENT_JSON", `{"data":{"workspace_id":"closed"}}`)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	err = (&App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}).Run(ctx, []string{"plugin", "watch-history"})
-	require.ErrorIs(t, err, state.ErrHistoryLockTimeout)
-}
-
-func TestPluginWatchHistoryAppliesClosedHookBeforeNoHistoryStream(t *testing.T) {
-	stubHerdrBin(t)
-	stateDir := filepath.Join(t.TempDir(), "state")
-	socketDir, err := os.MkdirTemp("/tmp", "herdr-sesh-hook-")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
-	socketPath := filepath.Join(socketDir, "herdr.sock")
-	historyDir, err := state.SessionHistoryDir(stateDir, socketPath)
-	require.NoError(t, err)
-	require.NoError(t, state.SaveHistory(historyDir, state.History{Workspaces: []string{"closed", "other"}}))
-	listener, err := net.Listen("unix", socketPath)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = listener.Close() })
-
-	streamReady := make(chan struct{})
-	releaseServer := make(chan struct{})
-	serverDone := make(chan error, 1)
-	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			serverDone <- err
-			return
-		}
-		defer func() { _ = conn.Close() }()
-		var request struct {
-			Method string `json:"method"`
-		}
-		if err := json.NewDecoder(conn).Decode(&request); err != nil {
-			serverDone <- err
-			return
-		}
-		if request.Method != "events.subscribe" {
-			serverDone <- fmt.Errorf("method=%q", request.Method)
-			return
-		}
-		enc := json.NewEncoder(conn)
-		if err := enc.Encode(map[string]any{"id": "herdr-sesh-history", "result": map[string]any{"type": "subscription_started"}}); err != nil {
-			serverDone <- err
-			return
-		}
-		if err := serveHistoryWatcherPing(listener); err != nil {
-			serverDone <- err
-			return
-		}
-		snapshotConn, err := listener.Accept()
-		if err != nil {
-			serverDone <- err
-			return
-		}
-		if err := json.NewDecoder(snapshotConn).Decode(&request); err != nil {
-			_ = snapshotConn.Close()
-			serverDone <- err
-			return
-		}
-		if err := json.NewEncoder(snapshotConn).Encode(map[string]any{
-			"id":     "herdr-sesh-history-snapshot",
-			"result": map[string]any{"type": "session_snapshot", "snapshot": map[string]any{"focused_workspace_id": ""}},
-		}); err != nil {
-			_ = snapshotConn.Close()
-			serverDone <- err
-			return
-		}
-		_ = snapshotConn.Close()
-		// A duplicate live close event remains harmless.
-		if err := enc.Encode(map[string]any{"event": "workspace_closed", "data": map[string]any{"workspace_id": "closed"}}); err != nil {
-			serverDone <- err
-			return
-		}
-		close(streamReady)
-		<-releaseServer
-		serverDone <- nil
-	}()
-
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", socketPath)
-	t.Setenv("HERDR_PLUGIN_EVENT", "workspace.closed")
-	t.Setenv("HERDR_WORKSPACE_ID", "")
-	t.Setenv("HERDR_PLUGIN_EVENT_JSON", `{"data":{"workspace_id":"closed"}}`)
-	ctx, cancel := context.WithCancel(context.Background())
-	watchDone := make(chan error, 1)
-	go func() {
-		a := &App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}
-		watchDone <- a.Run(ctx, []string{"plugin", "watch-history"})
-	}()
-	select {
-	case <-streamReady:
-	case <-time.After(time.Second):
-		require.FailNow(t, "watcher did not bootstrap")
-	}
-
-	deadline := time.Now().Add(time.Second)
-	for {
-		history, loadErr := state.LoadHistory(historyDir)
-		require.NoError(t, loadErr)
-		if reflect.DeepEqual(history.Workspaces, []string{"other"}) {
-			break
-		}
-		require.False(t, time.Now().After(deadline))
-		time.Sleep(10 * time.Millisecond)
-	}
-	cancel()
-	close(releaseServer)
-	require.NoError(t, <-serverDone)
-	require.ErrorIs(t, <-watchDone, context.Canceled)
-}
-
-func TestPluginWatchHistoryNonWinningFocusDoesNotMigrateLegacyHistory(t *testing.T) {
-	root := t.TempDir()
-	stateDir := filepath.Join(root, "state")
-	socketPath := filepath.Join(root, "herdr", "herdr.sock")
-	require.NoError(t, state.SaveHistory(stateDir, state.History{Workspaces: []string{"legacy"}}))
-	release, acquired, err := state.TryHistoryWatcherLock(stateDir, socketPath)
-	require.NoError(t, err)
-	require.True(t, acquired, "failed to hold watcher election lock")
-	t.Cleanup(func() {
-		assert.NoError(t, release())
-	})
-
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", socketPath)
-	t.Setenv("HERDR_PLUGIN_EVENT", "workspace.focused")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	require.NoError(t, (&App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}).Run(ctx, []string{"plugin", "watch-history"}))
-	_, err = os.Stat(filepath.Join(stateDir, "history"))
-	require.ErrorIs(t, err, os.ErrNotExist)
-}
-
-func TestPluginWatchHistoryReturnsWhenWatcherAlreadyRunning(t *testing.T) {
-	stubHerdrBin(t)
-	stateDir := filepath.Join(t.TempDir(), "state")
-	socketDir, err := os.MkdirTemp("/tmp", "herdr-sesh-watch-")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
-	socketPath := filepath.Join(socketDir, "herdr.sock")
-	listener, err := net.Listen("unix", socketPath)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = listener.Close() })
-
-	watcherReady := make(chan struct{})
-	releaseServer := make(chan struct{})
-	serverDone := make(chan error, 1)
-	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			serverDone <- err
-			return
-		}
-		defer func() { _ = conn.Close() }()
-		var request struct {
-			Method string `json:"method"`
-		}
-		if err := json.NewDecoder(conn).Decode(&request); err != nil {
-			serverDone <- err
-			return
-		}
-		if request.Method != "events.subscribe" {
-			serverDone <- fmt.Errorf("method=%q", request.Method)
-			return
-		}
-		if err := json.NewEncoder(conn).Encode(map[string]any{
-			"id": "herdr-sesh-history", "result": map[string]any{"type": "subscription_started"},
-		}); err != nil {
-			serverDone <- err
-			return
-		}
-		if err := serveHistoryWatcherPing(listener); err != nil {
-			serverDone <- err
-			return
-		}
-
-		snapshotConn, err := listener.Accept()
-		if err != nil {
-			serverDone <- err
-			return
-		}
-		defer func() { _ = snapshotConn.Close() }()
-		if err := json.NewDecoder(snapshotConn).Decode(&request); err != nil {
-			serverDone <- err
-			return
-		}
-		if request.Method != "session.snapshot" {
-			serverDone <- fmt.Errorf("snapshot method=%q", request.Method)
-			return
-		}
-		if err := json.NewEncoder(snapshotConn).Encode(map[string]any{
-			"id": "herdr-sesh-history-snapshot",
-			"result": map[string]any{
-				"type": "session_snapshot", "snapshot": map[string]any{"focused_workspace_id": ""},
-			},
-		}); err != nil {
-			serverDone <- err
-			return
-		}
-		close(watcherReady)
-		<-releaseServer
-		serverDone <- nil
-	}()
-
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", socketPath)
-	firstCtx, cancelFirst := context.WithCancel(context.Background())
-	defer cancelFirst()
-	firstDone := make(chan error, 1)
-	go func() {
-		a := &App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}
-		firstDone <- a.Run(firstCtx, []string{"plugin", "watch-history"})
-	}()
-	select {
-	case <-watcherReady:
-	case <-time.After(2 * time.Second):
-		require.FailNow(t, "first watcher did not subscribe")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	a := &App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}
-	secondErr := a.Run(ctx, []string{"plugin", "watch-history"})
-	cancelFirst()
-	close(releaseServer)
-	require.NoError(t, <-serverDone)
-	require.ErrorIs(t, <-firstDone, context.Canceled)
-	require.NoError(t, secondErr)
-}
-
-func TestPluginWatchHistoryReleasesElectionWhenServerRestarts(t *testing.T) {
-	stubHerdrBin(t)
-	stateDir := filepath.Join(t.TempDir(), "state")
-	socketDir, err := os.MkdirTemp("/tmp", "herdr-sesh-watch-")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
-	socketPath := filepath.Join(socketDir, "herdr.sock")
-	historyDir, err := state.SessionHistoryDir(stateDir, socketPath)
-	require.NoError(t, err)
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", socketPath)
-	t.Setenv("HERDR_PLUGIN_EVENT", "startup")
-
-	oldListener, err := net.Listen("unix", socketPath)
-	require.NoError(t, err)
-	oldStreams := make(chan net.Conn, 1)
-	go func() {
-		stream, err := serveHistoryBootstrap(oldListener, "old")
-		if err != nil {
-			close(oldStreams)
-			return
-		}
-		oldStreams <- stream
-	}()
-	// The timeout only guards against a hang; the stream closing ends the watcher.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	oldDone := make(chan error, 1)
-	go func() {
-		oldDone <- (&App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}).Run(ctx, []string{"plugin", "watch-history"})
-	}()
-	oldStream := receiveStream(t, oldStreams)
-	waitForHistory(t, historyDir, "old")
-
-	// Bring the replacement server up on the same path before the old one's
-	// connection closes, so a reconnecting watcher would find it.
-	require.NoError(t, oldListener.Close())
-	newStreams := startHistoryServer(t, socketPath, "new")
-	require.NoError(t, oldStream.Close())
-	require.NoError(t, <-oldDone)
-
-	release, acquired, err := state.TryHistoryWatcherLock(stateDir, socketPath)
-	require.NoError(t, err)
-	require.True(t, acquired, "exited watcher kept its election lock")
-	require.NoError(t, release())
-
-	newDone := make(chan error, 1)
-	go func() {
-		newDone <- (&App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}).Run(ctx, []string{"plugin", "watch-history"})
-	}()
-	receiveStream(t, newStreams)
-	waitForHistory(t, historyDir, "new", "old")
-	cancel()
-	require.ErrorIs(t, <-newDone, context.Canceled)
-}
-
-func TestPluginWatchHistoryStartupWaitsForPreviousWatcher(t *testing.T) {
-	stubHerdrBin(t)
-	stateDir := filepath.Join(t.TempDir(), "state")
-	socketDir, err := os.MkdirTemp("/tmp", "herdr-sesh-watch-")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
-	socketPath := filepath.Join(socketDir, "herdr.sock")
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", socketPath)
-	t.Setenv("HERDR_PLUGIN_EVENT", "startup")
-	streams := startHistoryServer(t, socketPath, "")
-
-	// Stand in for a previous server's watcher that is still draining.
-	release, acquired, err := state.TryHistoryWatcherLock(stateDir, socketPath)
-	require.NoError(t, err)
-	require.True(t, acquired)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	done := make(chan error, 1)
-	go func() {
-		done <- (&App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}).Run(ctx, []string{"plugin", "watch-history"})
-	}()
-	time.Sleep(3 * historyWatcherHandoffInterval)
-	require.NoError(t, release())
-
-	receiveStream(t, streams)
-	cancel()
-	require.ErrorIs(t, <-done, context.Canceled)
-}
-
-func TestPluginWatchHistoryStartupStopsWaitingAfterHandoff(t *testing.T) {
-	stateDir := filepath.Join(t.TempDir(), "state")
-	socketPath := filepath.Join(t.TempDir(), "herdr.sock")
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", socketPath)
-	t.Setenv("HERDR_PLUGIN_EVENT", "startup")
-	historyWatcherHandoff = 100 * time.Millisecond
-	t.Cleanup(func() { historyWatcherHandoff = 5 * time.Second })
-	release, acquired, err := state.TryHistoryWatcherLock(stateDir, socketPath)
-	require.NoError(t, err)
-	require.True(t, acquired)
-	t.Cleanup(func() { assert.NoError(t, release()) })
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	require.NoError(t, (&App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}).Run(ctx, []string{"plugin", "watch-history"}))
-	require.NoError(t, ctx.Err(), "startup hook outlived its handoff window")
-}
-
-func TestPluginWatchHistoryStartupReplacesStaleWatcher(t *testing.T) {
-	stubHerdrBin(t)
-	t.Setenv("PATH", t.TempDir()) // Replacement must not need an installed lsof.
-	stateDir := filepath.Join(t.TempDir(), "state")
-	socketDir, err := os.MkdirTemp("/tmp", "herdr-sesh-watch-")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
-	socketPath := filepath.Join(socketDir, "herdr.sock")
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", socketPath)
-	historyWatcherHandoff = 100 * time.Millisecond
-	t.Cleanup(func() { historyWatcherHandoff = 5 * time.Second })
-	streams := startHistoryServer(t, socketPath, "")
-
-	// Stand in for a watcher that never releases its election.
-	//nolint:gosec // re-runs this test binary as the lock holder.
-	holder := exec.Command(os.Args[0], "-test.run=^TestHelperHoldHistoryWatcherLock$")
-	holder.Env = append(os.Environ(), "HERDR_SESH_HOLD_WATCHER_LOCK=1")
-	stdout, err := holder.StdoutPipe()
-	require.NoError(t, err)
-	require.NoError(t, holder.Start())
-	t.Cleanup(func() { _ = holder.Process.Kill() })
-	ready := make([]byte, len("locked\n"))
-	_, err = io.ReadFull(stdout, ready)
-	require.NoError(t, err)
-	require.Equal(t, "locked\n", string(ready))
-
-	t.Setenv("HERDR_PLUGIN_EVENT", "startup")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	done := make(chan error, 1)
-	go func() {
-		done <- (&App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}).Run(ctx, []string{"plugin", "watch-history"})
-	}()
-	receiveStream(t, streams)
-	cancel()
-	require.ErrorIs(t, <-done, context.Canceled)
-	var exitErr *exec.ExitError
-	require.ErrorAs(t, holder.Wait(), &exitErr)
-	status, ok := exitErr.Sys().(syscall.WaitStatus)
-	require.True(t, ok)
-	assert.Equal(t, syscall.SIGTERM, status.Signal(), "stale watcher was not terminated")
-}
-
-func TestHelperHoldHistoryWatcherLock(t *testing.T) {
-	if os.Getenv("HERDR_SESH_HOLD_WATCHER_LOCK") != "1" {
-		t.Skip("helper process for TestPluginWatchHistoryStartupReplacesStaleWatcher")
-	}
-	release, acquired, err := state.TryHistoryWatcherLock(os.Getenv("HERDR_PLUGIN_STATE_DIR"), os.Getenv("HERDR_SOCKET_PATH"))
-	if err != nil || !acquired {
-		os.Exit(2)
-	}
-	defer func() { _ = release() }()
-	runtime.GC() // The lock must survive finalization before the parent replaces it.
-	fmt.Println("locked")
-	time.Sleep(time.Hour)
-}
-
-func TestPluginWatchHistoryStartupWaitReportsCancellation(t *testing.T) {
-	stateDir := filepath.Join(t.TempDir(), "state")
-	socketPath := filepath.Join(t.TempDir(), "herdr.sock")
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", socketPath)
-	t.Setenv("HERDR_PLUGIN_EVENT", "startup")
-	release, acquired, err := state.TryHistoryWatcherLock(stateDir, socketPath)
-	require.NoError(t, err)
-	require.True(t, acquired)
-	t.Cleanup(func() { assert.NoError(t, release()) })
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*historyWatcherHandoffInterval)
-	defer cancel()
-	err = (&App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}).Run(ctx, []string{"plugin", "watch-history"})
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-}
-
-func TestRetryHistoryMutationPreservesOrderAfterLockTimeout(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	blocked := make(chan struct{})
-	release := make(chan struct{})
-	done := make(chan error, 1)
-	firstAttempt := true
-	var got []string
-
-	go func() {
-		for _, workspaceID := range []string{"B", "C", "D"} {
-			err := retryHistoryMutation(ctx, func() error {
-				if workspaceID == "B" && firstAttempt {
-					firstAttempt = false
-					close(blocked)
-					select {
-					case <-release:
-						return fmt.Errorf("contended: %w", state.ErrHistoryLockTimeout)
-					case <-ctx.Done():
-						return ctx.Err()
-					}
-				}
-				got = append(got, workspaceID)
-				return nil
-			})
-			if err != nil {
-				done <- err
-				return
-			}
-		}
-		done <- nil
-	}()
-
-	select {
-	case <-blocked:
-	case <-ctx.Done():
-		require.FailNow(t, "history mutation did not reach lock contention")
-	}
-	require.Empty(t, got)
-	close(release)
-	require.NoError(t, <-done)
-	assert.Equal(t, []string{"B", "C", "D"}, got)
-}
-
-func TestPluginWatchHistoryPreservesFocusOrderThroughLockContention(t *testing.T) {
-	historyDir := filepath.Join(t.TempDir(), "history")
-	require.NoError(t, state.SaveHistory(historyDir, state.History{Workspaces: []string{"A", "closed"}}))
-	//nolint:gosec // Test lock path is derived from t.TempDir().
-	lock, err := os.OpenFile(filepath.Join(historyDir, "history.lock"), os.O_CREATE|os.O_RDWR, 0600)
-	require.NoError(t, err)
-	defer func() { _ = lock.Close() }()
-	require.NoError(t, syscall.Flock(int(lock.Fd()), syscall.LOCK_EX))
-	locked := true
-	defer func() {
-		if locked {
-			_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-		}
-	}()
-
-	socketDir, err := os.MkdirTemp("/tmp", "herdr-sesh-watch-")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
-	socketPath := filepath.Join(socketDir, "herdr.sock")
-	listener, err := net.Listen("unix", socketPath)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = listener.Close() })
-
-	releaseServer := make(chan struct{})
-	serverDone := make(chan error, 1)
-	go func() { serverDone <- serveContendedHistoryStream(listener, releaseServer) }()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	lockTimedOut := make(chan struct{}, 1)
-	retry := func(mutate func() error) error {
-		return retryHistoryMutation(ctx, func() error {
-			err := mutate()
-			if errors.Is(err, state.ErrHistoryLockTimeout) {
-				select {
-				case lockTimedOut <- struct{}{}:
-				default:
-				}
-			}
-			return err
-		})
-	}
-	watchDone := make(chan error, 1)
-	go func() {
-		watchDone <- herdr.WatchWorkspaceEvents(ctx, socketPath,
-			func(workspaceID string) error {
-				return retry(func() error { return state.Record(historyDir, workspaceID) })
-			},
-			func(workspaceID string) error {
-				return retry(func() error { return state.RemoveWorkspace(historyDir, workspaceID) })
-			},
-		)
-	}()
-
-	select {
-	case <-lockTimedOut:
-	case <-ctx.Done():
-		require.FailNow(t, "watcher did not retry the contended snapshot mutation")
-	}
-	require.NoError(t, syscall.Flock(int(lock.Fd()), syscall.LOCK_UN))
-	locked = false
-
-	want := []string{"D", "C", "B", "A"}
-	for {
-		history, err := state.LoadHistory(historyDir)
-		require.NoError(t, err)
-		if reflect.DeepEqual(history.Workspaces, want) {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			require.FailNow(t, fmt.Sprintf("history=%#v want %#v", history.Workspaces, want))
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-	cancel()
-	close(releaseServer)
-	require.NoError(t, <-serverDone)
-	require.ErrorIs(t, <-watchDone, context.Canceled)
-}
-
-// stubHerdrBin keeps watcher marker CLI calls off the test's fake socket.
-func stubHerdrBin(t *testing.T) {
-	t.Helper()
-	bin := filepath.Join(t.TempDir(), "herdr")
-	//nolint:gosec // test creates a local executable fixture.
-	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\necho '{\"result\":{\"workspaces\":[]}}'\n"), 0700))
-	t.Setenv("HERDR_BIN_PATH", bin)
-}
-
-// fakeMarkerHerdr installs a herdr CLI that logs its args, lists workspaces A,
-// B and C without tokens, and exits with reportStatus for report-metadata.
-func fakeMarkerHerdr(t *testing.T, reportStatus int) string {
-	t.Helper()
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "herdr.log")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$*" >> '%s'
-case "$2" in
-list) echo '{"result":{"workspaces":[{"id":"A"},{"id":"B"},{"id":"C"}]}}' ;;
-report-metadata) exit %d ;;
-esac
-`, logPath, reportStatus)
-	bin := filepath.Join(dir, "herdr")
-	//nolint:gosec // test creates a local executable fixture.
-	require.NoError(t, os.WriteFile(bin, []byte(script), 0700))
-	t.Setenv("HERDR_BIN_PATH", bin)
-	return logPath
-}
-
-// runMarkerWatcher runs watch-history against a fake Herdr socket that streams
-// the events sent on the returned channel. stop cancels the watcher after the
-// in-flight callback returns and yields the watcher's stderr.
-func runMarkerWatcher(t *testing.T, history ...string) (historyDir string, events chan<- map[string]any, stop func() string) {
-	t.Helper()
-	stateDir := filepath.Join(t.TempDir(), "state")
-	socketDir, err := os.MkdirTemp("/tmp", "herdr-sesh-marker-")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
-	socketPath := filepath.Join(socketDir, "herdr.sock")
-	historyDir, err = state.SessionHistoryDir(stateDir, socketPath)
-	require.NoError(t, err)
-	require.NoError(t, state.SaveHistory(historyDir, state.History{Workspaces: history}))
-	listener, err := net.Listen("unix", socketPath)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = listener.Close() })
-
-	feed := make(chan map[string]any)
-	serverDone := make(chan error, 1)
-	go func() { serverDone <- serveFedHistoryStream(listener, feed) }()
-
-	t.Setenv("HERDR_PLUGIN_STATE_DIR", stateDir)
-	t.Setenv("HERDR_SOCKET_PATH", socketPath)
-	t.Setenv("HERDR_PLUGIN_EVENT", "")
-	ctx, cancel := context.WithCancel(context.Background())
-	var stderr bytes.Buffer
-	watchDone := make(chan error, 1)
-	go func() {
-		watchDone <- (&App{Out: &bytes.Buffer{}, Err: &stderr}).Run(ctx, []string{"plugin", "watch-history"})
-	}()
-	return historyDir, feed, func() string {
-		cancel()
-		close(feed)
-		require.NoError(t, <-serverDone)
-		require.ErrorIs(t, <-watchDone, context.Canceled)
-		return stderr.String()
-	}
-}
-
-func serveFedHistoryStream(listener net.Listener, feed <-chan map[string]any) error {
-	stream, err := serveHistoryBootstrap(listener, "")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = stream.Close() }()
-	enc := json.NewEncoder(stream)
-	for event := range feed {
-		if err := enc.Encode(event); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// serveHistoryBootstrap answers a watcher's subscribe, ping, and snapshot
-// requests and returns the open event stream.
-func serveHistoryBootstrap(listener net.Listener, focusedID string) (net.Conn, error) {
-	stream, err := listener.Accept()
-	if err != nil {
-		return nil, err
-	}
-	var request struct {
-		Method string `json:"method"`
-	}
-	if err := json.NewDecoder(stream).Decode(&request); err != nil {
-		_ = stream.Close()
-		return nil, err
-	}
-	if err := json.NewEncoder(stream).Encode(map[string]any{
-		"id": "herdr-sesh-history", "result": map[string]any{"type": "subscription_started"},
-	}); err != nil {
-		_ = stream.Close()
-		return nil, err
-	}
-	if err := serveHistoryWatcherPing(listener); err != nil {
-		_ = stream.Close()
-		return nil, err
-	}
-	snapshot, err := listener.Accept()
-	if err != nil {
-		_ = stream.Close()
-		return nil, err
-	}
-	defer func() { _ = snapshot.Close() }()
-	if err := json.NewDecoder(snapshot).Decode(&request); err != nil {
-		_ = stream.Close()
-		return nil, err
-	}
-	if err := json.NewEncoder(snapshot).Encode(map[string]any{
-		"id":     "herdr-sesh-history-snapshot",
-		"result": map[string]any{"type": "session_snapshot", "snapshot": map[string]any{"focused_workspace_id": focusedID}},
-	}); err != nil {
-		_ = stream.Close()
-		return nil, err
-	}
-	return stream, nil
-}
-
-// startHistoryServer serves one watcher bootstrap and yields its event stream.
-func startHistoryServer(t *testing.T, socketPath, focusedID string) <-chan net.Conn {
-	t.Helper()
-	listener, err := net.Listen("unix", socketPath)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = listener.Close() })
-	streams := make(chan net.Conn, 1)
-	go func() {
-		stream, err := serveHistoryBootstrap(listener, focusedID)
-		if err != nil {
-			close(streams)
-			return
-		}
-		t.Cleanup(func() { _ = stream.Close() })
-		streams <- stream
-	}()
-	return streams
-}
-
-func waitForHistory(t *testing.T, historyDir string, want ...string) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		history, err := state.LoadHistory(historyDir)
-		require.NoError(t, err)
-		if reflect.DeepEqual(history.Workspaces, want) {
-			return
-		}
-		require.False(t, time.Now().After(deadline), "history=%#v want %#v", history.Workspaces, want)
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-func receiveStream(t *testing.T, streams <-chan net.Conn) net.Conn {
-	t.Helper()
-	select {
-	case stream, ok := <-streams:
-		require.True(t, ok, "watcher bootstrap failed")
-		return stream
-	case <-time.After(2 * time.Second):
-		require.FailNow(t, "watcher did not subscribe")
-		return nil
-	}
-}
-
-func workspaceEvent(name, workspaceID string) map[string]any {
-	return map[string]any{"event": name, "data": map[string]any{"workspace_id": workspaceID}}
-}
-
-// sendHistoryEvent streams one event and waits until the watcher has written
-// the expected history. Callbacks run in order, so this also means every
-// earlier event's marker sync has finished.
-func sendHistoryEvent(t *testing.T, events chan<- map[string]any, historyDir string, event map[string]any, want ...string) {
-	t.Helper()
-	events <- event
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		history, err := state.LoadHistory(historyDir)
-		require.NoError(t, err)
-		if reflect.DeepEqual(history.Workspaces, want) {
-			return
-		}
-		require.False(t, time.Now().After(deadline), "history=%#v want %#v", history.Workspaces, want)
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-func reportCalls(t *testing.T, logPath string) []string {
-	t.Helper()
-	//nolint:gosec // test log path is derived from t.TempDir().
-	data, err := os.ReadFile(logPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	require.NoError(t, err)
-	var calls []string
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
-		if strings.Contains(line, "report-metadata") {
-			calls = append(calls, line)
-		}
-	}
-	return calls
-}
-
-func writeConfigAtomically(t *testing.T, path, content string) {
-	t.Helper()
-	tmp := path + ".tmp"
-	require.NoError(t, os.WriteFile(tmp, []byte(content), 0600))
-	require.NoError(t, os.Rename(tmp, path))
-}
-
-func TestPluginWatchHistoryMarksPreviousOfFocusedWorkspace(t *testing.T) {
-	logPath := fakeMarkerHerdr(t, 0)
-	t.Setenv("HERDR_SESH_CONFIG", "")
-	t.Setenv("HERDR_PLUGIN_CONFIG_DIR", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
-	historyDir, events, stop := runMarkerWatcher(t, "C")
-
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_focused", "A"), "A", "C")
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_focused", "B"), "B", "A", "C")
-	// Closing the focused workspace clears focusedID, so `last` and the marker
-	// fall back to history[1] (C) rather than the first non-B entry (A).
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_closed", "B"), "A", "C")
-	// Wait for the final report to be attempted before shutdown.
-	deadline := time.Now().Add(2 * time.Second)
-	for len(reportCalls(t, logPath)) < 3 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	report := func(id string) string {
-		return "workspace report-metadata " + id + " --source fullerzz.sesh --token sesh_last=last"
-	}
-	// The stub logs before exiting, so shutdown may still cancel the final report.
-	if stderr := stop(); stderr != "" {
-		assert.Equal(t, "warning: could not update last-workspace marker: herdr "+report("C")+": context canceled\n", stderr)
-	}
-	assert.Equal(t, []string{report("C"), report("A"), report("C")}, reportCalls(t, logPath))
-}
-
-func TestPluginWatchHistoryWarnsLegacyConfigOnceAndSurvivesReportFailures(t *testing.T) {
-	logPath := fakeMarkerHerdr(t, 1)
-	legacy, err := filepath.Abs(filepath.Join("..", "..", "testdata", "sesh.toml"))
-	require.NoError(t, err)
-	t.Setenv("HERDR_SESH_CONFIG", legacy)
-	historyDir, events, stop := runMarkerWatcher(t)
-
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_focused", "A"), "A")
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_focused", "B"), "B", "A")
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_focused", "C"), "C", "B", "A")
-	stderr := stop()
-
-	assert.Equal(t, 1, strings.Count(stderr, "deprecated Sesh-compatible schema"), stderr)
-	assert.Contains(t, stderr, "could not update last-workspace marker")
-	assert.NotEmpty(t, reportCalls(t, logPath))
-}
-
-func TestPluginWatchHistoryRepeatsConfigErrorOnlyAfterRecovery(t *testing.T) {
-	stubHerdrBin(t)
-	configPath := filepath.Join(t.TempDir(), "config.toml")
-	bad := "version = 99\n"
-	writeConfigAtomically(t, configPath, bad)
-	t.Setenv("HERDR_SESH_CONFIG", configPath)
-	historyDir, events, stop := runMarkerWatcher(t)
-
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_focused", "A"), "A")
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_focused", "B"), "B", "A")
-	writeConfigAtomically(t, configPath, fmt.Sprintf("version = %d\n", config.NativeVersion))
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_focused", "C"), "C", "B", "A")
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_focused", "A"), "A", "C", "B")
-	writeConfigAtomically(t, configPath, bad)
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_closed", "C"), "A", "B")
-	sendHistoryEvent(t, events, historyDir, workspaceEvent("workspace_focused", "B"), "B", "A")
-	stderr := stop()
-
-	assert.Equal(t, 2, strings.Count(stderr, "could not load last-workspace marker settings"), stderr)
-}
-
-func serveContendedHistoryStream(listener net.Listener, release <-chan struct{}) error {
-	stream, err := listener.Accept()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = stream.Close() }()
-	var request struct {
-		Method string `json:"method"`
-	}
-	if err := json.NewDecoder(stream).Decode(&request); err != nil {
-		return err
-	}
-	if request.Method != "events.subscribe" {
-		return fmt.Errorf("method=%q want events.subscribe", request.Method)
-	}
-	enc := json.NewEncoder(stream)
-	if err := enc.Encode(map[string]any{
-		"id": "herdr-sesh-history", "result": map[string]any{"type": "subscription_started"},
-	}); err != nil {
-		return err
-	}
-	if err := serveHistoryWatcherPing(listener); err != nil {
-		return err
-	}
-	snapshot, err := listener.Accept()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = snapshot.Close() }()
-	if err := json.NewDecoder(snapshot).Decode(&request); err != nil {
-		return err
-	}
-	if request.Method != "session.snapshot" {
-		return fmt.Errorf("method=%q want session.snapshot", request.Method)
-	}
-	for _, workspaceID := range []string{"C", "D"} {
-		if err := enc.Encode(map[string]any{
-			"event": "workspace_focused", "data": map[string]any{"workspace_id": workspaceID},
-		}); err != nil {
-			return err
-		}
-	}
-	if err := json.NewEncoder(snapshot).Encode(map[string]any{
-		"id": "herdr-sesh-history-snapshot",
-		"result": map[string]any{
-			"type": "session_snapshot", "snapshot": map[string]any{"focused_workspace_id": "B"},
-		},
-	}); err != nil {
-		return err
-	}
-	if err := enc.Encode(map[string]any{
-		"event": "workspace_closed", "data": map[string]any{"workspace_id": "closed"},
-	}); err != nil {
-		return err
-	}
-	<-release
-	return nil
-}
-
-func serveHistoryWatcherPing(listener net.Listener) error {
-	conn, err := listener.Accept()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = conn.Close() }()
-	var request struct {
-		Method string `json:"method"`
-	}
-	if err := json.NewDecoder(conn).Decode(&request); err != nil {
-		return err
-	}
-	if request.Method != "ping" {
-		return fmt.Errorf("method=%q want ping", request.Method)
-	}
-	return json.NewEncoder(conn).Encode(map[string]any{
-		"id": "herdr-sesh-history-ping",
-		"result": map[string]any{
-			"type": "pong", "version": "0.8.2-preview", "protocol": 21,
-		},
-	})
-}
-
-func TestPluginOpenPickerStillOpensPickerPane(t *testing.T) {
-	d := t.TempDir()
-	logPath := filepath.Join(d, "herdr.log")
-	fakeHerdr := filepath.Join(d, "herdr")
-	//nolint:gosec // test creates a local executable fixture.
-	require.NoError(t, os.WriteFile(fakeHerdr, []byte(`#!/bin/sh
-printf '%s\n' "$*" >> "$HERDR_FAKE_LOG"
-`), 0700))
-	t.Setenv("HERDR_BIN_PATH", fakeHerdr)
-	t.Setenv("HERDR_FAKE_LOG", logPath)
-
-	a := &App{Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}
-	require.NoError(t, a.Run(context.Background(), []string{"plugin", "open-picker"}))
-	//nolint:gosec // logPath is a test-owned temp file.
-	log, err := os.ReadFile(logPath)
-	require.NoError(t, err)
-	assert.Equal(t, "plugin pane open --plugin fullerzz.sesh --entrypoint picker --placement overlay", strings.TrimSpace(string(log)))
 }
 
 func runPickerJSON(t *testing.T, cfgPath, zoxideOutput string) []model.Session {
@@ -1928,28 +588,11 @@ func runListJSON(t *testing.T, cfgPath, zoxideOutput string, extraArgs ...string
 	return sessions
 }
 
-func configureHerdrScript(t *testing.T, script string) {
-	t.Helper()
-	fakeBin := t.TempDir()
-	//nolint:gosec // test creates local executable fixtures.
-	require.NoError(t, os.WriteFile(filepath.Join(fakeBin, "herdr"), []byte(script), 0700))
-	//nolint:gosec // test creates local executable fixtures.
-	require.NoError(t, os.WriteFile(filepath.Join(fakeBin, "zoxide"), []byte("#!/bin/sh\n"), 0700))
-	t.Setenv("HERDR_BIN_PATH", filepath.Join(fakeBin, "herdr"))
-	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
 func configureFakeSources(t *testing.T, zoxideOutput string) {
 	t.Helper()
 	fakeBin := t.TempDir()
-	for name, script := range map[string]string{
-		"herdr":  "#!/bin/sh\nexit 1\n",
-		"zoxide": "#!/bin/sh\nprintf '%s' \"$FAKE_ZOXIDE_OUTPUT\"\n",
-	} {
-		//nolint:gosec // test creates local executable fixtures.
-		require.NoError(t, os.WriteFile(filepath.Join(fakeBin, name), []byte(script), 0700))
-	}
-	t.Setenv("HERDR_BIN_PATH", filepath.Join(fakeBin, "herdr"))
+	//nolint:gosec // test creates a local executable fixture.
+	require.NoError(t, os.WriteFile(filepath.Join(fakeBin, "zoxide"), []byte("#!/bin/sh\nprintf '%s' \"$FAKE_ZOXIDE_OUTPUT\"\n"), 0700))
 	t.Setenv("FAKE_ZOXIDE_OUTPUT", zoxideOutput)
 	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }

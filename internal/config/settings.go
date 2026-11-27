@@ -44,14 +44,14 @@ func SettingsDestination(opts LoadOptions) string {
 	if opts.Path != "" {
 		return ExpandHome(opts.Path, home)
 	}
-	if env["HERDR_SESH_CONFIG"] != "" {
-		return ExpandHome(env["HERDR_SESH_CONFIG"], home)
+	if env["REX_SESH_CONFIG"] != "" {
+		return ExpandHome(env["REX_SESH_CONFIG"], home)
 	}
 	return filepath.Join(PluginConfigDir(LoadOptions{Env: env, Home: home}), NativeFileName)
 }
 
 // PluginConfigDir is the plugin-owned native config directory. Unlike
-// SettingsDestination it ignores HERDR_SESH_CONFIG, so it is a safe legacy
+// SettingsDestination it ignores REX_SESH_CONFIG, so it is a safe legacy
 // migration target even when that variable points into ~/.config/sesh.
 func PluginConfigDir(opts LoadOptions) string {
 	env := opts.Env
@@ -62,9 +62,9 @@ func PluginConfigDir(opts LoadOptions) string {
 	if home == "" {
 		home, _ = os.UserHomeDir()
 	}
-	dir := env["HERDR_PLUGIN_CONFIG_DIR"]
+	dir := env["REX_SESH_CONFIG_DIR"]
 	if dir == "" {
-		dir = filepath.Join(home, ".config", "herdr-sesh")
+		dir = filepath.Join(home, ".config", "rex-sesh")
 	}
 	return ExpandHome(dir, home)
 }

@@ -2,15 +2,15 @@
 
 ## Project Structure & Module Organization
 
-This repository is a Go CLI plugin for Herdr named `herdr-sesh`.
+This repository is `rex-sesh`, a Go CLI that brings a Sesh-style session picker to the Rex terminal. It is forked from herdr-plugin-sesh. The Herdr client, plugin manifest, and history watcher have been removed. The README, the docs site, and the release tooling still describe Herdr until they are rewritten.
 
-- `cmd/herdr-sesh/` contains the executable entry point.
+- `cmd/rex-sesh/` contains the executable entry point.
 - `internal/app/` owns CLI routing and command behavior.
 - `internal/config/`, `internal/model/`, `internal/sources/`, `internal/state/`, and related packages hold domain logic.
 - `docs/` contains the Markdown and assets for the Zensical documentation site.
 - `zensical.toml` defines the documentation navigation and theme; `pyproject.toml` and `uv.lock` pin its Python toolchain.
 - `testdata/` stores fixture TOML used by tests and smoke checks.
-- `herdr-plugin.toml` is the plugin manifest and release version source.
+- No plugin manifest exists yet. Rex integration will ship as a Lua snippet for `init.lua`.
 - `bin/` and `site/` are generated build output; do not treat them as source.
 
 ## Build, Test, and Development Commands
@@ -21,10 +21,10 @@ This repository is a Go CLI plugin for Herdr named `herdr-sesh`.
 - `just fmt-check` checks formatting; `just fmt` applies it.
 - `just lint` runs `golangci-lint run ./...`.
 - `just test` runs the race-enabled test suite through `gotestsum`.
-- `just build` builds the local plugin binary at `bin/herdr-sesh`.
-- `just run` runs `./cmd/herdr-sesh` through `go run`.
-- `./bin/herdr-sesh --version` smoke-tests the built CLI.
-- `./bin/herdr-sesh list --json --config testdata/sesh.toml` checks fixture-backed session listing.
+- `just build` builds the local binary at `bin/rex-sesh`.
+- `just run` runs `./cmd/rex-sesh` through `go run`.
+- `./bin/rex-sesh --version` smoke-tests the built CLI.
+- `./bin/rex-sesh list --json --config testdata/sesh.toml` checks fixture-backed session listing.
 
 CI should run formatting, vet, tests, build, and CLI smoke checks; mirror those checks before opening a pull request. Documentation changes should also pass `just build-docs`. Prefer `just` recipes so local checks use pinned tools.
 
@@ -50,4 +50,4 @@ Pull requests should include a short description, linked issue when applicable, 
 
 ## Release & Configuration Notes
 
-Release tags must start with `v` and match `version` in `herdr-plugin.toml`. Configuration lookup order is documented in `README.md`; preserve compatibility with Sesh-style TOML and existing `testdata/sesh.toml` fixtures.
+Release tags must start with `v`. The release version source is undecided. `just release`, `release.yml`, `changelog.yml`, and `cliff.toml` still read the removed `herdr-plugin.toml`, so fix them before the first release. Configuration lookup order is documented in `README.md`; preserve compatibility with Sesh-style TOML and existing `testdata/sesh.toml` fixtures.

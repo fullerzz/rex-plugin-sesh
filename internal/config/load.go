@@ -31,7 +31,7 @@ const (
 type fileKind int
 
 const (
-	// kindExplicit paths come from --config or HERDR_SESH_CONFIG and may hold
+	// kindExplicit paths come from --config or REX_SESH_CONFIG and may hold
 	// either schema; a top-level version key selects native decoding.
 	kindExplicit fileKind = iota
 	kindNative
@@ -72,7 +72,7 @@ func Load(opts LoadOptions) (Config, string, error) {
 	if warn == nil {
 		warn = os.Stderr
 	}
-	_, _ = fmt.Fprintf(warn, "warning: %s uses the deprecated Sesh-compatible schema; run 'herdr-sesh config migrate' to convert it (see docs/config.md)\n", path)
+	_, _ = fmt.Fprintf(warn, "warning: %s uses the deprecated Sesh-compatible schema; run 'rex-sesh config migrate' to convert it (see docs/config.md)\n", path)
 	if err := decodeLegacy(&cfg, path, opts.StrictLegacy); err != nil {
 		return cfg, path, err
 	}
@@ -117,13 +117,13 @@ func resolve(opts LoadOptions) (string, fileKind, error) {
 		}
 		return p, kindExplicit, nil
 	}
-	if v := env["HERDR_SESH_CONFIG"]; v != "" {
+	if v := env["REX_SESH_CONFIG"]; v != "" {
 		p := ExpandHome(v, home)
 		if err := statConfigFile(p); err != nil {
 			if os.IsNotExist(err) {
-				return "", kindExplicit, fmt.Errorf("HERDR_SESH_CONFIG %s: %w", p, os.ErrNotExist)
+				return "", kindExplicit, fmt.Errorf("REX_SESH_CONFIG %s: %w", p, os.ErrNotExist)
 			}
-			return "", kindExplicit, fmt.Errorf("HERDR_SESH_CONFIG %s: %w", p, err)
+			return "", kindExplicit, fmt.Errorf("REX_SESH_CONFIG %s: %w", p, err)
 		}
 		return p, kindExplicit, nil
 	}
@@ -132,7 +132,7 @@ func resolve(opts LoadOptions) (string, fileKind, error) {
 		kind fileKind
 	}
 	candidates := []candidate{}
-	if dir := env["HERDR_PLUGIN_CONFIG_DIR"]; dir != "" {
+	if dir := env["REX_SESH_CONFIG_DIR"]; dir != "" {
 		candidates = append(candidates,
 			candidate{filepath.Join(dir, NativeFileName), kindNative},
 			candidate{filepath.Join(dir, LegacyFileName), kindLegacy},
@@ -140,8 +140,8 @@ func resolve(opts LoadOptions) (string, fileKind, error) {
 	}
 	if home != "" {
 		candidates = append(candidates,
-			candidate{filepath.Join(home, ".config", "herdr-sesh", NativeFileName), kindNative},
-			candidate{filepath.Join(home, ".config", "herdr-sesh", LegacyFileName), kindLegacy},
+			candidate{filepath.Join(home, ".config", "rex-sesh", NativeFileName), kindNative},
+			candidate{filepath.Join(home, ".config", "rex-sesh", LegacyFileName), kindLegacy},
 			candidate{filepath.Join(home, ".config", "sesh", LegacyFileName), kindLegacy},
 		)
 	}

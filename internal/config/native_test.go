@@ -14,7 +14,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -427,7 +427,7 @@ func TestDiscoveredNativeFileRequiresVersion(t *testing.T) {
 	mustWrite(t, filepath.Join(dir, NativeFileName), "[list]\ncache = true\n")
 	_, _, err := Load(LoadOptions{
 		Home: t.TempDir(),
-		Env:  map[string]string{"HERDR_PLUGIN_CONFIG_DIR": dir},
+		Env:  map[string]string{"REX_SESH_CONFIG_DIR": dir},
 		Warn: &bytes.Buffer{},
 	})
 	require.ErrorContains(t, err, "version")
@@ -458,7 +458,7 @@ func TestLegacyLoadWarnsOnStderrWriter(t *testing.T) {
 }
 
 func TestNativeFixtureLoads(t *testing.T) {
-	cfg, _, err := Load(LoadOptions{Path: filepath.Join("..", "..", "testdata", "herdr-sesh.toml"), Warn: &bytes.Buffer{}})
+	cfg, _, err := Load(LoadOptions{Path: filepath.Join("..", "..", "testdata", "rex-sesh.toml"), Warn: &bytes.Buffer{}})
 	require.NoError(t, err)
 	require.Len(t, cfg.SessionConfigs, 1)
 	assert.Equal(t, "sesh", cfg.SessionConfigs[0].Name)
@@ -469,7 +469,7 @@ func TestDiscoveryOrderAndPrecedence(t *testing.T) {
 	pluginDir := filepath.Join(home, "plugin-config")
 	mkdirs := []string{
 		pluginDir,
-		filepath.Join(home, ".config", "herdr-sesh"),
+		filepath.Join(home, ".config", "rex-sesh"),
 		filepath.Join(home, ".config", "sesh"),
 	}
 	for _, d := range mkdirs {
@@ -487,14 +487,14 @@ func TestDiscoveryOrderAndPrecedence(t *testing.T) {
 	order := []string{
 		filepath.Join("plugin-config", NativeFileName),
 		filepath.Join("plugin-config", LegacyFileName),
-		filepath.Join(".config", "herdr-sesh", NativeFileName),
-		filepath.Join(".config", "herdr-sesh", LegacyFileName),
+		filepath.Join(".config", "rex-sesh", NativeFileName),
+		filepath.Join(".config", "rex-sesh", LegacyFileName),
 		filepath.Join(".config", "sesh", LegacyFileName),
 	}
 	// Create from lowest precedence upward; each added higher candidate must win.
 	for i := len(order) - 1; i >= 0; i-- {
 		want := write(order[i])
-		got, err := ResolvePath(LoadOptions{Home: home, Env: map[string]string{"HERDR_PLUGIN_CONFIG_DIR": pluginDir}})
+		got, err := ResolvePath(LoadOptions{Home: home, Env: map[string]string{"REX_SESH_CONFIG_DIR": pluginDir}})
 		require.NoError(t, err)
 		require.Equal(t, want, got)
 	}
@@ -503,7 +503,7 @@ func TestDiscoveryOrderAndPrecedence(t *testing.T) {
 func TestMissingEnvConfigErrors(t *testing.T) {
 	_, err := ResolvePath(LoadOptions{
 		Home: t.TempDir(),
-		Env:  map[string]string{"HERDR_SESH_CONFIG": "/nope/missing.toml"},
+		Env:  map[string]string{"REX_SESH_CONFIG": "/nope/missing.toml"},
 	})
 	require.Error(t, err)
 }
@@ -521,19 +521,19 @@ func TestResolvePathPropagatesFilesystemErrors(t *testing.T) {
 	t.Run("environment path", func(t *testing.T) {
 		_, err := ResolvePath(LoadOptions{
 			Home: home,
-			Env:  map[string]string{"HERDR_SESH_CONFIG": filepath.Join(notDir, NativeFileName)},
+			Env:  map[string]string{"REX_SESH_CONFIG": filepath.Join(notDir, NativeFileName)},
 		})
 		require.ErrorIs(t, err, syscall.ENOTDIR)
 	})
 
 	t.Run("default discovery", func(t *testing.T) {
-		fallbackDir := filepath.Join(home, ".config", "herdr-sesh")
+		fallbackDir := filepath.Join(home, ".config", "rex-sesh")
 		require.NoError(t, os.MkdirAll(fallbackDir, 0700))
 		mustWrite(t, filepath.Join(fallbackDir, NativeFileName), "version = 1\n")
 
 		_, err := ResolvePath(LoadOptions{
 			Home: home,
-			Env:  map[string]string{"HERDR_PLUGIN_CONFIG_DIR": notDir},
+			Env:  map[string]string{"REX_SESH_CONFIG_DIR": notDir},
 		})
 		require.ErrorIs(t, err, syscall.ENOTDIR)
 	})

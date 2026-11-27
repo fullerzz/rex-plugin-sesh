@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 )
 
 // frameCells parses a drawn frame back into cells, as the terminal holds it.

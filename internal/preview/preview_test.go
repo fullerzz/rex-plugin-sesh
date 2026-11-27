@@ -9,37 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestRenderPaneWithoutRunningWorkspace(t *testing.T) {
-	t.Setenv("HERDR_BIN_PATH", "/does-not-exist")
-	for _, s := range []model.Session{{Source: "config", Path: "/tmp"}, {Source: "herdr"}} {
-		text, err := RenderPane(context.Background(), s)
-		require.NoError(t, err)
-		require.Contains(t, text, "only available for running Herdr workspaces")
-	}
-}
-
-func TestRenderPaneUsesHerdrWithoutSessionPath(t *testing.T) {
-	bin := filepath.Join(t.TempDir(), "herdr")
-	script := `#!/bin/sh
-case "$*" in
-  'api snapshot')
-    printf '%s' '{"result":{"snapshot":{"workspaces":[{"workspace_id":"w2","active_tab_id":"w2:t1"}],"layouts":[{"workspace_id":"w2","tab_id":"w2:t1","focused_pane_id":"w2:p2"}]}}}' ;;
-  'pane read w2:p2 --source visible --format ansi')
-    printf '\033[32mterminal output\033[0m\n' ;;
-  *) exit 1 ;;
-esac
-`
-	//nolint:gosec // the fake Herdr binary must be executable for this test.
-	require.NoError(t, os.WriteFile(bin, []byte(script), 0700))
-	t.Setenv("HERDR_BIN_PATH", bin)
-	text, err := RenderPane(context.Background(), model.Session{Source: "herdr", WorkspaceID: "w2", PreviewCommand: "exit 1"})
-	require.NoError(t, err)
-	assert.Equal(t, "\x1b[32mterminal output\x1b[0m\n", text)
+func TestRenderPaneReportsUnavailable(t *testing.T) {
+	_, err := RenderPane(context.Background(), model.Session{Source: "herdr", WorkspaceID: "w2"})
+	require.ErrorIs(t, err, ErrPaneUnavailable)
 }
 
 func TestRenderUsesPreviewCommand(t *testing.T) {
@@ -207,29 +184,4 @@ func TestRenderBatUsesBatForReadmePreview(t *testing.T) {
 	out, err := RenderBat(context.Background(), model.Session{Path: d})
 	require.NoError(t, err)
 	assert.Contains(t, out, "hello from readme")
-}
-
-func TestRenderPaneReadsHerdrAppSpaces(t *testing.T) {
-	bin := t.TempDir()
-	scripts := map[string]string{
-		"herdr-app": `#!/bin/sh
-case "$1" in
-  ls) printf '%s' '{"spaces":[{"id":"sp2","tabs":[{"id":"tb1","active":false,"terminals":[{"terminal":"t1","pane":"p1"}]},{"id":"tb2","active":true,"terminals":[{"terminal":"t2","pane":"p2"}]}]}]}' ;;
-  status) printf '%s' '{"space":"sp9","tab":"tb9","focused_pane":"p9"}' ;;
-  *) exit 1 ;;
-esac
-`,
-		"hc": `#!/bin/sh
-[ "$*" = "read t2" ] && printf 'space output\n' || exit 1
-`,
-	}
-	for name, script := range scripts {
-		//nolint:gosec // fake herdr-app and hc binaries must be executable.
-		require.NoError(t, os.WriteFile(filepath.Join(bin, name), []byte(script), 0700))
-	}
-	t.Setenv("PATH", bin)
-	t.Setenv("HERDR_SESH_BACKEND", "app")
-	text, err := RenderPane(context.Background(), model.Session{Source: "herdr", WorkspaceID: "sp2"})
-	require.NoError(t, err)
-	assert.Equal(t, "space output\n", text)
 }

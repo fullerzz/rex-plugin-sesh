@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/app"
+	"github.com/fullerzz/rex-plugin-sesh/internal/app"
 )
 
 func main() {

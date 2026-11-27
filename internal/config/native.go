@@ -14,7 +14,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 )
 
 const NativeVersion = 1

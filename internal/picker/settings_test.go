@@ -7,9 +7,9 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
-	sessionmodel "github.com/fullerzz/herdr-plugin-sesh/internal/model"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/settings"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
+	sessionmodel "github.com/fullerzz/rex-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

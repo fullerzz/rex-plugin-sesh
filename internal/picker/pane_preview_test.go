@@ -9,7 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 )
 
 func TestPanePreviewToggleRefreshAndSelection(t *testing.T) {

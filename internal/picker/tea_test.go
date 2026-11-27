@@ -22,15 +22,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 )
 
 func TestMain(m *testing.M) {
-	if err := os.Setenv("HERDR_SESH_SMEAR_PRESET", "crisp"); err != nil {
-		panic(err)
-	}
-	// Pane previews must never reach a live herdr-app from a herdr-app terminal.
-	if err := os.Setenv("HERDR_SESH_BACKEND", "herdr"); err != nil {
+	if err := os.Setenv("REX_SESH_SMEAR_PRESET", "crisp"); err != nil {
 		panic(err)
 	}
 	os.Exit(m.Run())
@@ -324,7 +320,7 @@ func TestTeaModelCtrlKDeletesAfterFilterCursor(t *testing.T) {
 }
 
 func TestTeaModelCtrlXClosesSelectedHerdrWorkspace(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	var closed string
 	m := newTeaModel([]model.Session{
 		{Source: "herdr", Name: "api-close", WorkspaceID: "w1"},
@@ -605,7 +601,7 @@ func TestTeaModelCtrlXRefreshesPreviewWhenCloseFails(t *testing.T) {
 }
 
 func TestTeaModelCtrlXIgnoresNonHerdrSession(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	called := false
 	m := newTeaModel([]model.Session{{Source: "config", Name: "api"}}, Options{Backend: &fakeBackend{closeWorkspace: func(context.Context, string) error {
 		called = true
@@ -620,7 +616,7 @@ func TestTeaModelCtrlXIgnoresNonHerdrSession(t *testing.T) {
 }
 
 func TestTeaModelDownTransfersCursorFromFilterToList(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	m := newTeaModel([]model.Session{{Name: "workspace-api"}, {Name: "workspace-web"}}, Options{})
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'w', Text: "work"})
 	m = updated.(teaModel)
@@ -652,7 +648,7 @@ func TestTeaModelDownTransfersCursorFromFilterToList(t *testing.T) {
 }
 
 func TestTeaModelUpTransfersCursorFromListToFilter(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	m := newTeaModel([]model.Session{{Name: "workspace-api"}, {Name: "workspace-web"}}, Options{})
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'w', Text: "work"})
 	m = updated.(teaModel)
@@ -685,7 +681,7 @@ func TestTeaModelUpTransfersCursorFromListToFilter(t *testing.T) {
 }
 
 func TestTeaModelRightTransfersCursorFromListToFilter(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	m := newTeaModel([]model.Session{{Name: "workspace-api"}, {Name: "workspace-web"}}, Options{})
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'w', Text: "work"})
 	m = updated.(teaModel)
@@ -709,7 +705,7 @@ func TestTeaModelRightTransfersCursorFromListToFilter(t *testing.T) {
 }
 
 func TestTeaModelTypingTransfersCursorFromListToFilter(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	m := newTeaModel([]model.Session{{Name: "workspace-api"}, {Name: "workspace-web"}}, Options{})
 	m.list.Selected = 1
 	m.listFocused = true
@@ -730,7 +726,7 @@ func TestTeaModelTypingTransfersCursorFromListToFilter(t *testing.T) {
 }
 
 func TestTeaModelPasteTransfersCursorFromListToFilter(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	m := newTeaModel([]model.Session{{Name: "workspace-api"}, {Name: "workspace-web"}}, Options{})
 	m.listFocused = true
 	m.input.Blur()
@@ -745,7 +741,7 @@ func TestTeaModelPasteTransfersCursorFromListToFilter(t *testing.T) {
 }
 
 func TestTeaModelAcceleratesLongFocusTransfers(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	items := make([]model.Session, 40)
 	for i := range items {
 		items[i] = model.Session{Name: "workspace"}
@@ -778,8 +774,8 @@ func TestTeaModelAcceleratesLongFocusTransfers(t *testing.T) {
 }
 
 func TestTeaModelGooeyReverseTransferEasesOut(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
-	t.Setenv("HERDR_SESH_SMEAR_PRESET", "gooey")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_SMEAR_PRESET", "gooey")
 	m := newTeaModel([]model.Session{{Name: "workspace-api"}, {Name: "workspace-web"}}, Options{})
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'w', Text: "work"})
 	m = updated.(teaModel)
@@ -810,7 +806,7 @@ func TestTeaModelGooeyReverseTransferEasesOut(t *testing.T) {
 }
 
 func TestTeaModelSmearPresets(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	tests := []struct {
 		name          string
 		head          string
@@ -824,7 +820,7 @@ func TestTeaModelSmearPresets(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("HERDR_SESH_SMEAR_PRESET", tt.name)
+			t.Setenv("REX_SESH_SMEAR_PRESET", tt.name)
 			items := make([]model.Session, 6)
 			for i := range items {
 				items[i] = model.Session{Name: "workspace"}
@@ -863,7 +859,7 @@ func TestTeaModelSmearPresets(t *testing.T) {
 }
 
 func TestTeaModelSmearsRapidSelectionMoves(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	m := newTeaModel([]model.Session{{Name: "api"}, {Name: "web"}, {Name: "docs"}}, Options{})
 	m.listFocused = true
 	m.input.Blur()
@@ -879,7 +875,7 @@ func TestTeaModelSmearsRapidSelectionMoves(t *testing.T) {
 }
 
 func TestTeaModelSmearRetracts(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	oldPreview := renderPreview
 	renderPreview = func(context.Context, model.Session, string) (string, error) { return "preview", nil }
 	t.Cleanup(func() { renderPreview = oldPreview })
@@ -909,7 +905,7 @@ func TestTeaModelSmearRetracts(t *testing.T) {
 }
 
 func TestTeaModelCapsSmearSettleTime(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	items := make([]model.Session, 100)
 	for i := range items {
 		items[i] = model.Session{Name: "workspace"}
@@ -930,7 +926,7 @@ func TestTeaModelCapsSmearSettleTime(t *testing.T) {
 }
 
 func TestTeaModelQueryChangeClearsSmear(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	m := newTeaModel([]model.Session{
 		{Name: "workspace-0"},
 		{Name: "workspace-1"},
@@ -951,7 +947,7 @@ func TestTeaModelQueryChangeClearsSmear(t *testing.T) {
 }
 
 func TestTeaModelReducedMotionSkipsSmear(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "1")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "1")
 	m := newTeaModel([]model.Session{{Name: "api"}, {Name: "web"}}, Options{})
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	m = updated.(teaModel)
@@ -1275,7 +1271,7 @@ func TestRowUsesAgentStatusIndicators(t *testing.T) {
 }
 
 func TestTeaModelAnimatesWorkingAgentStatusIndicator(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	m := newTeaModel([]model.Session{{Source: "herdr", Name: "api", AgentStatus: "working"}}, Options{})
 	before := ansi.Strip(renderedList(m, 80, 1))
 
@@ -1289,7 +1285,7 @@ func TestTeaModelAnimatesWorkingAgentStatusIndicator(t *testing.T) {
 }
 
 func TestTeaModelStartsAgentStatusSpinner(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "")
 	m := newTeaModel(nil, Options{Backend: &fakeBackend{refreshAgentStatuses: func() (map[string]string, error) { return nil, nil }}})
 	batch, ok := m.Init()().(tea.BatchMsg)
 	require.True(t, ok)
@@ -1508,7 +1504,7 @@ func TestTeaModelHidePreviewDoesNotRunInitialPreview(t *testing.T) {
 }
 
 func TestTeaModelHidePreviewDoesNotRefreshAfterSelection(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "1")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "1")
 	marker := filepath.Join(t.TempDir(), "preview-ran")
 	m := newTeaModel([]model.Session{{Name: "api", Path: "/tmp/api"}, {Name: "web", Path: "/tmp/web"}}, Options{DisplayOptions: DisplayOptions{HidePreview: true, DefaultPreviewCommand: fmt.Sprintf("touch %q", marker)}})
 	m.listFocused = true
@@ -1687,7 +1683,7 @@ func TestTeaModelCancelsPreviewOnQuitOrNoPreview(t *testing.T) {
 }
 
 func TestTeaModelCancelsRestartedPreviewWhenQuittingPendingClose(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "1")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "1")
 	closeStarted := make(chan struct{})
 	previewStarted := make(chan struct{})
 	previewCanceled := make(chan struct{})

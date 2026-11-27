@@ -17,8 +17,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/uitheme"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
+	"github.com/fullerzz/rex-plugin-sesh/internal/uitheme"
 )
 
 type Result struct {
@@ -535,7 +535,7 @@ func (m Model) saved(msg savedMsg) (tea.Model, tea.Cmd) { //nolint:ireturn // Bu
 	m = m.styleInputs()
 	m.status = "Saved. Settings apply when you return to the picker."
 	if oldMigration != nil {
-		m.problem = "Migration complete. Legacy files were preserved.\nFor future launches, use --config " + msg.doc.SelectedPath + " or set HERDR_SESH_CONFIG=" + strconv.Quote(msg.doc.SelectedPath) + " if your current override still selects " + oldMigration.LegacyPath + "."
+		m.problem = "Migration complete. Legacy files were preserved.\nFor future launches, use --config " + msg.doc.SelectedPath + " or set REX_SESH_CONFIG=" + strconv.Quote(msg.doc.SelectedPath) + " if your current override still selects " + oldMigration.LegacyPath + "."
 	}
 	if msg.warning != "" {
 		m.problem = "Config saved, but cache invalidation failed:\n" + msg.warning

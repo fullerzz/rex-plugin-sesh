@@ -3,7 +3,7 @@ package picker
 import (
 	"context"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/settings"
+	"github.com/fullerzz/rex-plugin-sesh/internal/settings"
 )
 
 type fakeBackend struct {

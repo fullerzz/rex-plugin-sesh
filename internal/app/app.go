@@ -11,19 +11,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
-	clonepkg "github.com/fullerzz/herdr-plugin-sesh/internal/clone"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
-	connectpkg "github.com/fullerzz/herdr-plugin-sesh/internal/connect"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/herdr"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/namer"
-	pickerpkg "github.com/fullerzz/herdr-plugin-sesh/internal/picker"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/preview"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/sources"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/state"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/namer"
+	pickerpkg "github.com/fullerzz/rex-plugin-sesh/internal/picker"
+	"github.com/fullerzz/rex-plugin-sesh/internal/preview"
+	"github.com/fullerzz/rex-plugin-sesh/internal/sources"
+	"github.com/fullerzz/rex-plugin-sesh/internal/state"
 )
 
 var Version = "dev"
@@ -40,26 +36,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 	switch args[0] {
 	case "--version", "version":
-		_, err := fmt.Fprintf(a.Out, "herdr-sesh %s\n", Version)
+		_, err := fmt.Fprintf(a.Out, "rex-sesh %s\n", Version)
 		return err
 	case "list":
 		return a.list(ctx, args[1:])
-	case "connect":
-		return a.connect(ctx, args[1:])
 	case "preview":
 		return a.preview(ctx, args[1:])
-	case "clone":
-		return a.clone(ctx, args[1:])
 	case "root":
 		return a.root(ctx, args[1:])
-	case "last":
-		return a.last(ctx, args[1:])
-	case "window":
-		return a.window(ctx, args[1:])
-	case "plugin":
-		return a.plugin(ctx, args[1:])
-	case "app":
-		return appCommand(args[1:])
 	case "config":
 		return a.config(ctx, args[1:])
 	case "picker":
@@ -69,7 +53,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 }
 func (a *App) usage() error {
-	_, err := fmt.Fprintln(a.Out, "herdr-sesh list|connect|preview|clone|root|last|window|picker|plugin|app|config|--version")
+	_, err := fmt.Fprintln(a.Out, "rex-sesh list|preview|root|picker|config|--version")
 	return err
 }
 
@@ -95,56 +79,11 @@ func (a *App) loadConfig(path string) (config.Config, error) {
 	cfg, _, err := config.Load(config.LoadOptions{Path: path, Warn: a.Err})
 	return cfg, err
 }
-func (a *App) collect(ctx context.Context, cfg config.Config, target string) ([]model.Session, error) {
-	hs := sources.HerdrWorkspaces{Client: herdr.NewBackend()}
-	return a.collectFrom(ctx, cfg, target, hs, false)
-}
 
-func (a *App) collectAllowUnavailableHerdr(ctx context.Context, cfg config.Config, target string) ([]model.Session, error) {
-	hs := sources.HerdrWorkspaces{Client: herdr.NewBackend()}
-	return a.collectFrom(ctx, cfg, target, ignoreSource{hs}, false)
-}
-
-// lacksMachines reports a backend that cannot open a space on another
-// machine, such as the Herdr TUI server. list and the picker omit
-// [[workspace]] entries on another machine under it; connect and preview keep
-// them, so a remote name fails with herdr.ErrNoMachines instead of matching
-// nothing.
-func lacksMachines(client herdr.Backend) bool {
-	_, ok := client.(herdr.MachineClient)
-	return !ok
-}
-
-type pickerCollection struct {
-	Sessions        []model.Session
-	HerdrWorkspaces []model.Session
-	// HerdrErr reports a failed Herdr workspace listing that the merge
-	// tolerated; callers must surface it or the picker looks empty for no
-	// visible reason.
-	HerdrErr error
-}
-
-// collectPicker merges picker sessions. When the Herdr listing fails, the
-// non-nil herdrFallback stands in for it so a reload keeps the last known
-// workspaces instead of dropping them.
-func (a *App) collectPicker(ctx context.Context, cfg config.Config, herdrFallback []model.Session) (pickerCollection, error) {
-	return a.collectPickerWithClient(ctx, cfg, herdrFallback, herdr.NewBackend())
-}
-
-func (a *App) collectPickerWithClient(ctx context.Context, cfg config.Config, herdrFallback []model.Session, client herdr.Backend) (pickerCollection, error) {
-	herdrSource := &capturingSource{Source: sources.HerdrWorkspaces{Client: client}, fallback: herdrFallback}
-	sessions, err := a.collectFrom(ctx, cfg, "", herdrSource, lacksMachines(client))
-	col := pickerCollection{Sessions: sessions, HerdrErr: herdrSource.err}
-	if herdrSource.err == nil {
-		col.HerdrWorkspaces = herdrSource.sessions.Ordered()
-	} else {
-		col.HerdrWorkspaces = herdrFallback
-	}
-	return col, err
-}
-
-func (a *App) collectFrom(ctx context.Context, cfg config.Config, target string, herdrSource sources.Source, localOnly bool) ([]model.Session, error) {
-	srcs := []sources.Source{herdrSource, sources.ConfigSessions{Config: cfg, LocalOnly: localOnly}, sources.Zoxide{}}
+// collect merges config and zoxide sessions. localOnly drops [[workspace]]
+// entries on another machine: list and the picker cannot open them yet.
+func (a *App) collect(ctx context.Context, cfg config.Config, target string, localOnly bool) ([]model.Session, error) {
+	srcs := []sources.Source{sources.ConfigSessions{Config: cfg, LocalOnly: localOnly}, sources.Zoxide{}}
 	if target != "" {
 		direct := sources.DirectPath{Path: target}
 		// Naming runs git in the target, so only a local directory is named:
@@ -160,36 +99,6 @@ func (a *App) collectFrom(ctx context.Context, cfg config.Config, target string,
 	}
 	sources.ApplyConfig(&merged, cfg, "")
 	return merged.Ordered(), nil
-}
-
-type ignoreSource struct{ sources.Source }
-
-func (i ignoreSource) List(ctx context.Context) (model.Sessions, error) {
-	ss, err := i.Source.List(ctx)
-	if err != nil {
-		return model.NewSessions(), nil
-	}
-	return ss, nil
-}
-
-type capturingSource struct {
-	sources.Source
-
-	fallback []model.Session
-	sessions model.Sessions
-	err      error
-}
-
-func (s *capturingSource) List(ctx context.Context) (model.Sessions, error) {
-	s.sessions, s.err = s.Source.List(ctx)
-	if s.err != nil {
-		fallback := model.NewSessions()
-		for _, session := range s.fallback {
-			fallback.Add(session)
-		}
-		return fallback, nil
-	}
-	return s.sessions, nil
 }
 
 func (a *App) list(ctx context.Context, args []string) error {
@@ -208,21 +117,20 @@ func (a *App) list(ctx context.Context, args []string) error {
 	}
 	cacheable := cfg.Cache && !*blacklisted && *hideDup
 	if cacheable {
-		if cached, ok, err := state.LoadSessionCache(sessionStateDir(), resolvedConfigPath, 5*time.Second, time.Now()); err != nil {
+		if cached, ok, err := state.LoadSessionCache(stateDir(), resolvedConfigPath, 5*time.Second, time.Now()); err != nil {
 			a.warnf("ignoring session cache: %v", err)
 		} else if ok {
 			return a.printSessions(cached, *jsonOut)
 		}
 	}
-	client := herdr.NewBackend()
-	ss, err := sources.Merge(ctx, []sources.Source{ignoreSource{sources.HerdrWorkspaces{Client: client}}, sources.ConfigSessions{Config: cfg, LocalOnly: lacksMachines(client)}, sources.Zoxide{}}, cfg.SortOrder, cfg.Blacklist, *blacklisted, *hideDup)
+	ss, err := sources.Merge(ctx, []sources.Source{sources.ConfigSessions{Config: cfg, LocalOnly: true}, sources.Zoxide{}}, cfg.SortOrder, cfg.Blacklist, *blacklisted, *hideDup)
 	if err != nil {
 		return err
 	}
 	sources.ApplyConfig(&ss, cfg, "")
 	sessions := ss.Ordered()
 	if cacheable {
-		if err := state.SaveSessionCache(sessionStateDir(), resolvedConfigPath, sessions, time.Now()); err != nil {
+		if err := state.SaveSessionCache(stateDir(), resolvedConfigPath, sessions, time.Now()); err != nil {
 			a.warnf("could not save session cache: %v", err)
 		}
 	}
@@ -275,6 +183,8 @@ func (a *App) printSessions(sessions []model.Session, jsonOut bool) error {
 	return nil
 }
 
+// picker prints the chosen session's name. Switching to it comes with the Rex
+// client.
 func (a *App) picker(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("picker", flag.ContinueOnError)
 	fs.SetOutput(a.Err)
@@ -284,90 +194,30 @@ func (a *App) picker(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	a.refreshOverlayGeometry(ctx, "picker")
 	cfg, activeConfigPath, err := config.Load(config.LoadOptions{Path: *cfgPath, Warn: a.Err})
 	if err != nil {
 		return err
 	}
-	useFZF := *fzfPicker || strings.EqualFold(os.Getenv("HERDR_SESH_PICKER"), "fzf")
-	client := herdr.NewBackend()
-	backend := &pickerBackend{app: a, ctx: ctx, client: client, cfg: cfg,
-		activeConfigPath: activeConfigPath, pickerWorkspaceID: client.CurrentWorkspaceID(ctx)}
-	var sessions []model.Session
+	sessions, err := a.collect(ctx, cfg, "", true)
+	if err != nil {
+		return err
+	}
+	if *jsonOut {
+		return a.printSessions(sessions, true)
+	}
+	opts := pickerOptionsFromConfig(ctx, a.Out, cfg)
 	var selected model.Session
 	var ok bool
-	if useFZF || *jsonOut {
-		sessions, err = a.collectFrom(ctx, cfg, "", ignoreSource{sources.HerdrWorkspaces{Client: client}}, lacksMachines(client))
-		if err != nil {
-			return err
-		}
-		if *jsonOut {
-			return a.printSessions(sessions, true)
-		}
-		selected, ok, err = pickerpkg.RunFZF(ctx, sessions, pickerpkg.Options{DisplayOptions: pickerOptionsFromConfig(ctx, a.Out, cfg)})
+	if *fzfPicker || strings.EqualFold(os.Getenv("REX_SESH_PICKER"), "fzf") {
+		selected, ok, err = pickerpkg.RunFZF(ctx, sessions, pickerpkg.Options{DisplayOptions: opts})
 	} else {
-		var opts pickerpkg.DisplayOptions
-		sessions, opts, err = backend.initialize(ctx)
-		backend.flushWarnings()
-		if err != nil {
-			return err
-		}
+		backend := &pickerBackend{app: a, ctx: ctx, cfg: cfg, activeConfigPath: activeConfigPath}
 		selected, ok, err = pickerpkg.Run(sessions, pickerpkg.Options{DisplayOptions: opts, Backend: backend})
-		backend.flushWarnings()
 	}
 	if err != nil || !ok {
 		return err
 	}
-	revision := a.historyRevision()
-	res, err := connectpkg.Open(ctx, backend.client, selected, connectpkg.Options{Warnf: a.warnf})
-	if err != nil {
-		return err
-	}
-	a.recordWorkspaceSwitch(backend.pickerWorkspaceID, res.Session.WorkspaceID, revision)
-	return nil
-}
-
-func (a *App) connect(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("connect", flag.ContinueOnError)
-	fs.SetOutput(a.Err)
-	noFocus := fs.Bool("no-focus", false, "")
-	cfgPath := fs.String("config", "", "")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() < 1 {
-		return errors.New("connect requires target")
-	}
-	target := fs.Arg(0)
-	cfg, err := a.loadConfig(*cfgPath)
-	if err != nil {
-		return err
-	}
-	client := herdr.NewBackend()
-	herdrSource := &capturingSource{Source: sources.HerdrWorkspaces{Client: client}}
-	sessions, err := a.collectFrom(ctx, cfg, target, herdrSource, false)
-	if err != nil {
-		return err
-	}
-	match, err := connectpkg.Resolve(ctx, sessions, target, func(ctx context.Context, p string) string { return namer.Namer{}.Name(ctx, p, cfg.DirLength) })
-	if err != nil {
-		return err
-	}
-	// Without a workspace list, a configured remote workspace may already be
-	// open, and creating it again would rerun its startup commands.
-	if herdrSource.err != nil && !lacksMachines(client) && match.Machine != "" && match.WorkspaceID == "" {
-		return fmt.Errorf("list Herdr workspaces before creating %q on machine %q: %w", match.Name, match.Machine, herdrSource.err)
-	}
-	currentWorkspaceID := client.CurrentWorkspaceID(ctx)
-	revision := a.historyRevision()
-	res, err := connectpkg.Open(ctx, client, match, connectpkg.Options{NoFocus: *noFocus, Warnf: a.warnf})
-	if err != nil {
-		return err
-	}
-	if !*noFocus {
-		a.recordWorkspaceSwitch(currentWorkspaceID, res.Session.WorkspaceID, revision)
-	}
-	_, err = fmt.Fprintf(a.Out, "%s\n", res.Session.Name)
+	_, err = fmt.Fprintln(a.Out, selected.Name)
 	return err
 }
 
@@ -386,52 +236,30 @@ func (a *App) preview(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	sessions, err := a.collectAllowUnavailableHerdr(ctx, cfg, target)
+	sessions, err := a.collect(ctx, cfg, target, false)
 	if err != nil {
 		return err
 	}
-	s, dir, ok := connectpkg.ResolveTarget(sessions, target)
+	s, dir, ok := resolveTarget(sessions, target)
 	if dir || !ok {
 		s = model.Session{Name: filepath.Base(target), Path: target}
 	}
-	machines, _ := herdr.NewBackend().(herdr.MachineClient)
-	out, err := preview.RenderWith(ctx, machines, s, cfg.DefaultSessionConfig.PreviewCommand)
+	out, err := preview.Render(ctx, s, cfg.DefaultSessionConfig.PreviewCommand)
 	if err != nil {
 		return err
 	}
 	_, err = fmt.Fprint(a.Out, out)
 	return err
 }
-func (a *App) clone(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("clone", flag.ContinueOnError)
-	fs.SetOutput(a.Err)
-	cmdDir := fs.String("cmdDir", "", "")
-	dir := fs.String("dir", "", "")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() < 1 {
-		return errors.New("clone requires repo")
-	}
-	dest, err := clonepkg.Clone(ctx, clonepkg.Request{Repo: fs.Arg(0), CmdDir: *cmdDir, Dir: *dir})
-	if err != nil {
-		return err
-	}
-	return a.connect(ctx, []string{dest})
-}
 func (a *App) root(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("root", flag.ContinueOnError)
 	fs.SetOutput(a.Err)
-	doConnect := fs.Bool("connect", false, "")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	root, err := gitRoot(ctx, ".")
 	if err != nil {
 		return err
-	}
-	if *doConnect {
-		return a.connect(ctx, []string{root})
 	}
 	_, err = fmt.Fprintln(a.Out, root)
 	return err
@@ -444,342 +272,67 @@ func gitRoot(ctx context.Context, dir string) (string, error) {
 	}
 	return strings.TrimSpace(string(b)), nil
 }
-func (a *App) last(ctx context.Context, _ []string) error {
-	historyDir, err := historyStateDir()
-	if err != nil {
-		return err
-	}
-	client := herdr.NewBackend()
-	currentWorkspaceID := client.CurrentWorkspaceID(ctx)
-	history, err := loadLastHistory(ctx, client, historyDir)
-	if err != nil {
-		return err
-	}
-	id, ok := history.PreviousWorkspace(currentWorkspaceID)
-	if !ok {
-		return errors.New("no previous workspace recorded")
-	}
-	if err := client.WorkspaceFocus(ctx, id); err != nil {
-		return err
-	}
-	if err := recordSwitch(historyDir, currentWorkspaceID, id, history.Revision); err != nil {
-		a.warnf("could not record workspace history: %v", err)
-	}
-	return nil
-}
 
-// loadLastHistory loads the history `last` picks from. herdr-app has no history
-// watcher to drop spaces closed in its UI, so the app backend prunes history
-// against the live spaces first.
-func loadLastHistory(ctx context.Context, client herdr.Backend, dir string) (state.History, error) {
-	if !herdr.UsesApp() {
-		return state.LoadHistory(dir)
+// stateDir holds rex-sesh's session cache: REX_SESH_STATE_DIR, or rex-sesh
+// under the XDG state home. It is "" when there is nowhere to cache, which
+// disables caching.
+func stateDir() string {
+	if dir := os.Getenv("REX_SESH_STATE_DIR"); dir != "" {
+		return dir
 	}
-	workspaces, err := client.WorkspaceList(ctx)
-	if err != nil {
-		return state.History{}, err
-	}
-	live := make([]string, 0, len(workspaces))
-	for _, w := range workspaces {
-		live = append(live, w.ID)
-	}
-	return state.RetainWorkspaces(dir, live)
-}
-
-// historyRevision captures history before a focus request for RecordSwitch.
-func (a *App) historyRevision() uint64 {
-	historyDir, err := historyStateDir()
-	var revision uint64
-	if err == nil {
-		revision, err = state.HistoryRevision(historyDir)
-	}
-	if err != nil {
-		a.warnf("could not read workspace history: %v", err)
-	}
-	return revision
-}
-
-func (a *App) recordWorkspaceSwitch(fromWorkspaceID, toWorkspaceID string, revision uint64) {
-	historyDir, err := historyStateDir()
-	if err == nil {
-		err = recordSwitch(historyDir, fromWorkspaceID, toWorkspaceID, revision)
-	}
-	if err != nil {
-		a.warnf("could not record workspace history: %v", err)
-	}
-}
-
-// historyStateDir and sessionStateDir keep each backend's state apart, so
-// herdr-app space IDs never reach the Herdr plugin's history or cache, even
-// when HERDR_SESH_BACKEND=app runs inside a Herdr pane.
-// recordSwitch defers to the Herdr TUI's history watcher where one runs;
-// herdr-app has none, so every herdr-sesh switch records its origin.
-func recordSwitch(dir, from, to string, revision uint64) error {
-	if herdr.UsesApp() {
-		return state.RecordUnwatchedSwitch(dir, from, to)
-	}
-	return state.RecordSwitch(dir, from, to, revision)
-}
-
-func historyStateDir() (string, error) {
-	if herdr.UsesApp() {
-		return appStateDir()
-	}
-	return state.SessionHistoryDir(os.Getenv("HERDR_PLUGIN_STATE_DIR"), os.Getenv("HERDR_SOCKET_PATH"))
-}
-
-// sessionStateDir is "" when there is nowhere to cache, which disables caching.
-func sessionStateDir() string {
-	if !herdr.UsesApp() {
-		return os.Getenv("HERDR_PLUGIN_STATE_DIR")
-	}
-	dir, err := appStateDir()
-	if err != nil {
-		return ""
-	}
-	return dir
-}
-
-func appStateDir() (string, error) {
 	base := os.Getenv("XDG_STATE_HOME")
 	if base == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return "", err
+			return ""
 		}
 		base = filepath.Join(home, ".local", "state")
 	}
-	return filepath.Join(base, "herdr-sesh", "herdr-app"), nil
+	return filepath.Join(base, "rex-sesh")
 }
 
-func (a *App) window(ctx context.Context, args []string) error {
-	c := herdr.NewBackend()
-	workspaceID := c.CurrentWorkspaceID(ctx)
-	if workspaceID == "" {
-		return errors.New("window: could not determine the current workspace")
-	}
-	if len(args) == 0 {
-		tabs, err := c.TabList(ctx, workspaceID)
-		if err != nil {
-			return err
-		}
-		for _, t := range tabs {
-			if _, err := fmt.Fprintf(a.Out, "%s\t%s\n", t.ID, t.Label); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	_, err := c.TabCreate(ctx, herdr.TabCreateRequest{WorkspaceID: workspaceID, CWD: args[0], Label: filepath.Base(args[0]), Focus: true})
-	return err
-}
-func (a *App) plugin(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return errors.New("unknown plugin command")
-	}
-	switch args[0] {
-	// Plugin panes, hooks and the history watcher exist only in the Herdr TUI.
-	case "open-settings":
-		return herdr.NewCLIClient().PluginPaneOpen(ctx, "fullerzz.sesh", "settings", "overlay")
-	case "open-picker":
-		return herdr.NewCLIClient().PluginPaneOpen(ctx, "fullerzz.sesh", "picker", "overlay")
-	case "watch-history":
-		return a.watchHistory(ctx)
-	default:
-		return errors.New("unknown plugin command")
-	}
-}
-
-// appCommand serves the herdr-app sesh-last mod, as plugin serves Herdr's hooks.
-// It always writes herdr-app history: the mod runs it outside any terminal.
-func appCommand(args []string) error {
-	if len(args) != 3 || args[0] != "record-switch" {
-		return errors.New("usage: herdr-sesh app record-switch FROM TO")
-	}
-	dir, err := appStateDir()
-	if err != nil {
-		return err
-	}
-	return state.RecordUnwatchedSwitch(dir, args[1], args[2])
-}
-
-func (a *App) watchHistory(ctx context.Context) (err error) {
-	stateDir := os.Getenv("HERDR_PLUGIN_STATE_DIR")
-	socketPath := os.Getenv("HERDR_SOCKET_PATH")
-	// Elect first so non-winning startup and focus hooks cannot migrate history.
-	release, acquired, err := electHistoryWatcher(ctx, stateDir, socketPath)
-	if err != nil {
-		return err
-	}
-	if acquired {
-		defer func() { err = errors.Join(err, release()) }()
-	}
-	if !acquired && os.Getenv("HERDR_PLUGIN_EVENT") != "workspace.closed" {
-		return nil
-	}
-	historyDir, err := state.SessionHistoryDir(stateDir, socketPath)
-	if err != nil {
-		return err
-	}
-	if err := applyHistoryHook(historyDir); err != nil {
-		return err
-	}
-	if !acquired {
-		return nil
-	}
-
-	// Marker failures only cost the sidebar indicator, so they never stop history.
-	markerClient := herdr.NewCLIClient()
-	focusedID := ""
-	// Config reloads on every event, so repeat its legacy or load warnings only
-	// when they change; a clean load resets them.
-	lastConfigWarning := ""
-	syncMarker := func() {
-		var warning strings.Builder
-		cfg, _, err := config.Load(config.LoadOptions{Warn: &warning})
-		if err != nil {
-			_, _ = fmt.Fprintf(&warning, "warning: could not load last-workspace marker settings: %v\n", err)
-		}
-		if warning.String() != lastConfigWarning && a.Err != nil {
-			_, _ = io.WriteString(a.Err, warning.String())
-		}
-		lastConfigWarning = warning.String()
-		if err != nil {
-			return
-		}
-		if err := syncLastWorkspaceMarker(ctx, markerClient, historyDir, focusedID, cfg.History.LastWorkspaceLabel); err != nil {
-			a.warnf("could not update last-workspace marker: %v", err)
+// resolveTarget finds the session a preview target names, in this order: an
+// exact workspace ID on any machine; a local session by configured root; any
+// local session by name or path; a local directory at the target; the
+// [[workspace]] entry on another machine with that name. For a bare local
+// directory dir is true and only Path is set: the caller names it.
+func resolveTarget(candidates []model.Session, target string) (s model.Session, dir, ok bool) {
+	for _, c := range candidates {
+		if c.WorkspaceID != "" && c.WorkspaceID == target {
+			return c, false, true
 		}
 	}
-	return herdr.WatchWorkspaceEvents(ctx, socketPath,
-		func(workspaceID string) error {
-			if err := retryHistoryMutation(ctx, func() error { return state.Record(historyDir, workspaceID) }); err != nil {
-				return err
-			}
-			focusedID = workspaceID
-			syncMarker()
-			return nil
-		},
-		func(workspaceID string) error {
-			if err := retryHistoryMutation(ctx, func() error { return state.RemoveWorkspace(historyDir, workspaceID) }); err != nil {
-				return err
-			}
-			if workspaceID == focusedID {
-				focusedID = ""
-			}
-			syncMarker()
-			return nil
-		},
-	)
-}
-
-// historyWatcherHandoff bounds how long a startup hook waits for the previous
-// server's watcher, which exits once its event stream closes but may still be
-// draining buffered events. Focus and close hooks never wait.
-var historyWatcherHandoff = 5 * time.Second
-
-const historyWatcherHandoffInterval = 50 * time.Millisecond
-
-func electHistoryWatcher(ctx context.Context, stateDir, socketPath string) (release func() error, acquired bool, err error) {
-	deadline := time.Now().Add(historyWatcherHandoff)
-	terminated := false
-	for {
-		release, acquired, err = state.TryHistoryWatcherLock(stateDir, socketPath)
-		if err != nil || acquired || os.Getenv("HERDR_PLUGIN_EVENT") != "startup" {
-			return release, acquired, err
-		}
-		if time.Now().After(deadline) {
-			if terminated {
-				return nil, false, nil
-			}
-			// A holder that outlives the handoff is not draining the previous
-			// server, such as a watcher from an older release that reconnects forever.
-			if err := terminateHistoryWatcher(ctx, state.HistoryWatcherLockPath(stateDir, socketPath)); err != nil {
-				return nil, false, err
-			}
-			terminated = true
-			deadline = time.Now().Add(historyWatcherHandoff)
-		}
-		select {
-		case <-ctx.Done():
-			return nil, false, ctx.Err()
-		case <-time.After(historyWatcherHandoffInterval):
+	for _, c := range candidates {
+		if c.Machine == "" && c.ConfiguredPath != "" && c.ConfiguredPath == target {
+			return c, false, true
 		}
 	}
-}
-
-// terminateHistoryWatcher signals the stale election holders. Only plugin
-// hooks open the lock, and losing contenders close it immediately.
-func terminateHistoryWatcher(ctx context.Context, lockPath string) error {
-	pids, err := historyWatcherPIDs(ctx, lockPath)
-	if err != nil {
-		return fmt.Errorf("find stale history watcher: %w", err)
-	}
-	for _, pid := range pids {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if pid == os.Getpid() {
-			continue
-		}
-		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
-			return fmt.Errorf("stop stale history watcher %d: %w", pid, err)
+	// Remote sessions resolve only by qualified ID here, so a local name or
+	// path never selects a session on another machine.
+	for _, c := range candidates {
+		if c.Machine == "" && (c.Name == target || c.Path == target) {
+			return c, false, true
 		}
 	}
-	return nil
-}
-
-func retryHistoryMutation(ctx context.Context, mutate func() error) error {
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		err := mutate()
-		if !errors.Is(err, state.ErrHistoryLockTimeout) {
-			return err
+	if st, err := os.Stat(target); err == nil && st.IsDir() {
+		return model.Session{Path: target}, true, true
+	}
+	// A configured remote workspace's path is a path on that machine, so a
+	// target never matches it: a local directory with the same path would
+	// otherwise resolve to the remote entry.
+	for _, c := range candidates {
+		if c.Machine != "" && (c.Source == "config" || c.Configured) && c.Name == target {
+			return c, false, true
 		}
 	}
-}
-
-func applyHistoryHook(historyDir string) error {
-	eventName := os.Getenv("HERDR_PLUGIN_EVENT")
-	if eventName == "" || eventName == "startup" {
-		return nil
-	}
-	switch eventName {
-	case "workspace.focused":
-		return nil
-	case "workspace.closed":
-		var payload struct {
-			Data struct {
-				WorkspaceID string `json:"workspace_id"`
-			} `json:"data"`
-		}
-		raw := os.Getenv("HERDR_PLUGIN_EVENT_JSON")
-		if raw == "" {
-			return errors.New("HERDR_PLUGIN_EVENT_JSON is required for workspace.closed")
-		}
-		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-			return fmt.Errorf("decode HERDR_PLUGIN_EVENT_JSON: %w", err)
-		}
-		if payload.Data.WorkspaceID == "" {
-			return errors.New("workspace.closed event payload is missing data.workspace_id")
-		}
-		return state.RemoveWorkspace(historyDir, payload.Data.WorkspaceID)
-	default:
-		return fmt.Errorf("unknown Herdr plugin event %q", eventName)
-	}
+	return model.Session{}, false, false
 }
 
 func (a *App) config(ctx context.Context, args []string) error { //nolint:gocyclo // Routes config subcommands; implementations are kept separate.
 	if len(args) == 0 {
 		return errors.New("config requires path, init, validate, migrate, or edit")
 	}
-	dir := os.Getenv("HERDR_PLUGIN_CONFIG_DIR")
-	if dir == "" {
-		home, _ := os.UserHomeDir()
-		dir = filepath.Join(home, ".config", "herdr-sesh")
-	}
+	dir := config.PluginConfigDir(config.LoadOptions{})
 	switch args[0] {
 	case "edit":
 		return a.editSettings(ctx, args[1:])
@@ -805,7 +358,7 @@ func (a *App) config(ctx context.Context, args []string) error { //nolint:gocycl
 			_, err = fmt.Fprintln(a.Out, p)
 			return err
 		}
-		if target := os.Getenv("HERDR_SESH_CONFIG"); target != "" {
+		if target := os.Getenv("REX_SESH_CONFIG"); target != "" {
 			p, err := config.InitConfigAt(config.ExpandHome(target, ""))
 			if err != nil {
 				return err
@@ -850,18 +403,18 @@ func (a *App) config(ctx context.Context, args []string) error { //nolint:gocycl
 		if err != nil {
 			return err
 		}
-		if envPath := config.ExpandHome(os.Getenv("HERDR_SESH_CONFIG"), ""); envPath != "" {
+		if envPath := config.ExpandHome(os.Getenv("REX_SESH_CONFIG"), ""); envPath != "" {
 			if sameFile(envPath, legacy) {
-				a.warnf("migrated %s; set HERDR_SESH_CONFIG=%s before deleting %s", legacy, native, legacy)
+				a.warnf("migrated %s; set REX_SESH_CONFIG=%s before deleting %s", legacy, native, legacy)
 			} else {
-				a.warnf("migrated %s; HERDR_SESH_CONFIG continues to select %s", legacy, envPath)
+				a.warnf("migrated %s; REX_SESH_CONFIG continues to select %s", legacy, envPath)
 			}
 		} else {
 			resolved, resolveErr := config.ResolvePath(config.LoadOptions{})
 			if resolveErr == nil && filepath.Base(resolved) == config.NativeFileName && sameFile(resolved, native) {
 				a.warnf("migrated %s; the native file now takes precedence — delete the legacy file once satisfied: %s", legacy, legacy)
 			} else {
-				a.warnf("migrated %s; set HERDR_SESH_CONFIG=%s before deleting %s (or keep using --config %s)", legacy, native, legacy, native)
+				a.warnf("migrated %s; set REX_SESH_CONFIG=%s before deleting %s (or keep using --config %s)", legacy, native, legacy, native)
 			}
 		}
 		_, err = fmt.Fprintln(a.Out, native)

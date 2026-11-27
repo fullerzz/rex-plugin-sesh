@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 )
 
 var batPreviewFiles = []string{"README.md", "README", "AGENTS.md", "go.mod", "package.json", "pyproject.toml"}

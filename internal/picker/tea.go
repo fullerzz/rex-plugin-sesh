@@ -20,11 +20,11 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
-	sessionmodel "github.com/fullerzz/herdr-plugin-sesh/internal/model"
-	previewpkg "github.com/fullerzz/herdr-plugin-sesh/internal/preview"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/settings"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/uitheme"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
+	sessionmodel "github.com/fullerzz/rex-plugin-sesh/internal/model"
+	previewpkg "github.com/fullerzz/rex-plugin-sesh/internal/preview"
+	"github.com/fullerzz/rex-plugin-sesh/internal/settings"
+	"github.com/fullerzz/rex-plugin-sesh/internal/uitheme"
 )
 
 const (
@@ -390,7 +390,7 @@ func newTeaModel(items []sessionmodel.Session, opts Options) teaModel {
 		workspaceCloseContext: closeContext,
 		previewParentContext:  closeContext,
 		reduceMotion:          reduceMotionRequested(),
-		smear:                 newSmearPreset(os.Getenv("HERDR_SESH_SMEAR_PRESET")),
+		smear:                 newSmearPreset(os.Getenv("REX_SESH_SMEAR_PRESET")),
 	}
 	if current, ok := list.Current(); ok && !m.hidePreview {
 		m, _ = m.startPreview(current)
@@ -398,14 +398,14 @@ func newTeaModel(items []sessionmodel.Session, opts Options) teaModel {
 	return m
 }
 
-// configureMotion applies HERDR_SESH_REDUCE_MOTION to bloom's animations.
+// configureMotion applies REX_SESH_REDUCE_MOTION to bloom's animations.
 // Motion is process-wide in bloom, so it is set both ways on every run.
 func configureMotion() {
 	anim.SetMotion(!reduceMotionRequested())
 }
 
 func reduceMotionRequested() bool {
-	value := os.Getenv("HERDR_SESH_REDUCE_MOTION")
+	value := os.Getenv("REX_SESH_REDUCE_MOTION")
 	return value == "1" || strings.EqualFold(value, "true")
 }
 

@@ -3,7 +3,7 @@ package settings
 import (
 	"reflect"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
 )
 
 type field struct {

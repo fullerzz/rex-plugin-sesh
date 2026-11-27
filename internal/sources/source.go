@@ -3,7 +3,7 @@ package sources
 import (
 	"context"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 )
 
 type Source interface {

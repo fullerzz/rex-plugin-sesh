@@ -93,7 +93,7 @@ func TestSettingsDestinationExpandsPluginConfigDir(t *testing.T) {
 	t.Chdir(root)
 	opts := LoadOptions{
 		Home: home,
-		Env:  map[string]string{"HERDR_PLUGIN_CONFIG_DIR": "~/.config/custom"},
+		Env:  map[string]string{"REX_SESH_CONFIG_DIR": "~/.config/custom"},
 	}
 	path := SettingsDestination(opts)
 	assert.Equal(t, filepath.Join(home, ".config", "custom", NativeFileName), path)

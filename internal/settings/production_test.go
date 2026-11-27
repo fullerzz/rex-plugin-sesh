@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -161,7 +161,7 @@ func TestSettingsMigrationRequiresSeparateConfirmation(t *testing.T) {
 	assert.True(t, m.result.Saved)
 	assert.Equal(t, form, m.mode)
 	assert.Equal(t, 2, m.doc.Config.DirLength)
-	assert.Contains(t, m.problem, "HERDR_SESH_CONFIG")
+	assert.Contains(t, m.problem, "REX_SESH_CONFIG")
 }
 
 func TestSettingsMigrationFromSharedSeshDirTargetsPluginDir(t *testing.T) {
@@ -169,10 +169,10 @@ func TestSettingsMigrationFromSharedSeshDirTargetsPluginDir(t *testing.T) {
 	legacy := filepath.Join(home, ".config", "sesh", "sesh.toml")
 	require.NoError(t, os.MkdirAll(filepath.Dir(legacy), 0700))
 	require.NoError(t, os.WriteFile(legacy, []byte("dir_length=2\n"), 0600))
-	m, err := Open(config.LoadOptions{Home: home, Env: map[string]string{"HERDR_SESH_CONFIG": legacy}}, nil)
+	m, err := Open(config.LoadOptions{Home: home, Env: map[string]string{"REX_SESH_CONFIG": legacy}}, nil)
 	require.NoError(t, err)
 	require.Equal(t, migration, m.mode)
-	assert.Equal(t, filepath.Join(home, ".config", "herdr-sesh", config.NativeFileName), m.migration.NativePath)
+	assert.Equal(t, filepath.Join(home, ".config", "rex-sesh", config.NativeFileName), m.migration.NativePath)
 }
 
 func TestTextEditorPreservesTabs(t *testing.T) {

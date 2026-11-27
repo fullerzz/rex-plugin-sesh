@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 )
 
 type ConfigSessions struct {

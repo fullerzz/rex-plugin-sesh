@@ -1,8 +1,0 @@
-api-docs
-build-tools
-cli-kit
-event-worker
-infra-modules
-metrics-agent
-release-notes
-web-components

@@ -6,8 +6,8 @@ import (
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	sessionmodel "github.com/fullerzz/herdr-plugin-sesh/internal/model"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/settings"
+	sessionmodel "github.com/fullerzz/rex-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/settings"
 )
 
 type settingsOpenedMsg struct {

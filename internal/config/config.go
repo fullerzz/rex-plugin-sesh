@@ -1,6 +1,6 @@
 package config
 
-import "github.com/fullerzz/herdr-plugin-sesh/internal/model"
+import "github.com/fullerzz/rex-plugin-sesh/internal/model"
 
 const (
 	// Preview output is captured through sh rather than a TTY, so eza's

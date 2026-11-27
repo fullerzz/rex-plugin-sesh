@@ -1,0 +1,168 @@
+# rex-plugin-sesh: plan from herdr-plugin-sesh
+
+Date: 2026-11-27. Rex app 0.1.0-preview.36, Rex server 0.1.0-preview.19 (control API revision 14).
+
+## Summary
+
+Fork herdr-plugin-sesh and strip it. Keep the Bubble Tea/bloom picker, the session model, the theme, and the preview code. Replace the Herdr client with a Rex client that runs the `rex` CLI. Replace the plugin manifest with a Lua snippet for `init.lua`. A custom action opens the picker in a floating layer. The picker calls the app's `session.select` action and then exits, and Rex closes the layer.
+
+## Decisions (2026-11-27)
+
+- Reuse: fork and strip. Create a new repo, copy the code, and delete the Herdr parts. Extract a shared core later only if real duplication appears.
+- Switching: require Remote Control in v1. On refusal, the picker stays open and shows the app's message. The README tells users to turn on Remote Control. The `rex.ui.pick` palette fallback waits for a server with control API revision 17.
+
+## What Rex provides (verified on this machine)
+
+| Need | Rex mechanism | Verified |
+| --- | --- | --- |
+| Session list with metadata | One `rex do - --json` Lua script: `session.list`, then `session.attach` + `session.view` per session, then the `pwd` block method on each focused block | Yes, about 20 ms for 5 sessions |
+| Picker as an overlay | `rex.session.new_layer{ window_id, bounds, focus = true, layout = rex.layout.block{ flavor = "com.superlogical.terminal.shell", options = { command = argv } } }` in a `rex.action` | Yes (the user's `floating_lazygit` action uses it) |
+| Layer cleanup | The layer closes when its program exits | Yes |
+| Switch the app's session | Client action `session.select` (`session_id`, optional `window_id`): `rex -C CLIENT do session.select session_id=ID` | Exit 0 with Remote Control on. Not tested with it off |
+| Preview | `rex capture -s SESSION -b BLOCK --trim` | Yes, across sessions |
+| Create a session (later, for zoxide) | `rex new LABEL --cwd DIR --json`, then `session.select` | Documented, not tested |
+| Agent status | Block method `program_status` (OSC 7501: working, blocked) | Documented, not tested |
+| Key binding | `rex.bind("ctrl+a>s", "sesh_picker")` in `init.lua`, then `rex config reload` | Documented |
+
+### Caveats
+
+- `session.view` fails for a session the connection hasn't attached. Call `session.attach` first.
+- `pwd` returns a `file://host/path` URL. Decode it as `floating_lazygit` does.
+- `block.method` takes the short name: `method = "pwd"`, not `com.superlogical.terminal.pwd`.
+- No `REX_CLIENT` is set in panes. The action must pass `ctx.client_id` to the picker in argv.
+- `rex.ui.pick` (the native palette picker) is nil here. It needs control API revision 17, and this server reports 14.
+- `init.lua` cannot hold event handlers. `rex.on` only works in `rex do` scripts. No server event reports that a client changed the session it shows.
+
+## Main risk: Remote Control
+
+The picker process runs after the launching action has returned. Its only way to switch sessions is a CLI-origin client action, and the app accepts those only when Remote Control is on in its settings. Remote Control is off by default.
+
+Mitigations:
+
+1. On refusal, keep the picker open and show the app's message, for example "Turn on Remote Control in Rex settings". Don't exit, because exiting closes the layer and the message with it.
+2. Later, add a palette fallback: a pure-Lua action that calls `rex.exec{ "rex-sesh", "list", "--json" }`, then `rex.ui.pick`, then `rex.client.queue("session.select", { session_id = id })`. An action-origin queue probably needs no Remote Control. This is inferred from the docs and needs server API revision 17.
+
+## Launch snippet (ship as `sesh.lua`; the user adds `require("sesh")` to `init.lua`)
+
+```lua
+rex.action{
+  name = "sesh_picker",
+  title = "Sesh: Pick Session",
+  run = function(ctx)
+    assert(ctx.block_id, "Sesh needs a focused terminal")
+    local source = assert(rex.session.describe_block{ block_id = ctx.block_id })
+    local window = assert(source.block.window_id, "The terminal must be in a tab")
+    local argv = { "rex-sesh", "picker", "--from-session", ctx.session_id }
+    if ctx.client_id then
+      argv[#argv + 1] = "--client"
+      argv[#argv + 1] = ctx.client_id
+    end
+    return assert(rex.session.new_layer{
+      window_id = window,
+      bounds = { 0.1, 0.1, 0.8, 0.8 },
+      focus = true,
+      layout = rex.layout.block{
+        flavor = "com.superlogical.terminal.shell",
+        options = { command = argv },
+      },
+    })
+  end,
+}
+rex.bind("ctrl+a>s", "sesh_picker")
+```
+
+If `--client` is missing, the picker lists the session's clients with `rex client ls -s SESSION --json`. It uses the only `app` client if there is exactly one, and otherwise reports an error.
+
+## Package map: keep, replace, drop
+
+### Keep (rename `herdr` references)
+
+- `internal/picker`: `tea.go`, `layout.go`, `effects.go`, `theme.go`, `model.go`, `fzf.go`, `settings.go`. `tea.go` has about 200 herdr/workspace references, such as `Source == "herdr"`, worktree tree prefixes, agent status, and close-workspace.
+- `internal/model`. Rename `WorkspaceID` to `SessionID` with gopls rename after the fork.
+- `internal/uitheme`, `internal/preview` (bat directory preview), `internal/state` (JSON helpers), `internal/namer`.
+- `internal/config` (Sesh TOML) and `internal/settings` (settings overlay). Strip the Herdr-native and migration parts later.
+- `justfile`, `mise.toml`, `golangci` setup, and the docs toolchain.
+- The bloom pin `bloomfx.dev/bloom v0.0.0-alpha.11`. Keep it until the port is green.
+
+### Replace
+
+| Herdr piece | Rex replacement |
+| --- | --- |
+| `internal/herdr` (`Client`, `Backend`, `CLIClient`, `AppClient`) | `internal/rex`: a narrow client over `rex` with the same `Runner` seam for fakes. Methods: `Sessions` (embedded Lua, `go:embed`), `Select(client, sessionID)`, `Capture(session, block)`, `Destroy(sessionID)`, `Create(label, cwd)` (later) |
+| `sources/herdr_workspaces.go` | `sources/rex_sessions.go` |
+| `app/picker_backend.go` | Rex implementation of `picker.Backend` (`CloseWorkspace` becomes `session.destroy`; `RefreshAgentStatuses` uses `program_status`) |
+| `connect.Open` | Existing session: `session.select`. New session (zoxide or config, later): `rex new` and then `session.select` |
+| `herdr-plugin.toml` (actions, overlay panes, events) | `sesh.lua` snippet with the action and binding, plus `rex-sesh lua` to print it |
+| Pane preview (`herdr/pane_preview.go`) | `rex capture` of the session's focused block |
+
+### Drop for v1
+
+- `history_watcher_*`, `last_marker`, and the `last` command: no client-switch event exists. At most, record switches the picker makes.
+- `startup` (tab and pane layouts), `clone`, remote machines, worktree relations, and Herdr config migration.
+- The zoxide and directories sources (zoxide comes later, by request).
+
+### Tests
+
+- Regenerate the golden frames in `internal/picker/testdata/frames`.
+- Port `fake_client.go` to a fake Rex runner.
+- Add a regression test for the `file://` decoding and for client resolution.
+
+## v1 milestones
+
+1. Fork, rename the module and binary, delete the Drop list, and get `just test` green.
+2. `internal/rex` with the embedded session script, `rex-sesh list --json`, and tests with a fake runner.
+3. The picker shows Rex sessions only, with the current session marked from `--from-session`.
+4. Selection calls `session.select`, with the in-picker error on refusal.
+5. `sesh.lua` snippet, `rex-sesh lua`, and README setup steps (including Remote Control).
+6. Preview from `rex capture` and agent status from `program_status`.
+
+## Verified session script (prototype)
+
+```lua
+local list = assert(rex.call("session.list"))
+local out = {}
+for _, s in ipairs(list.sessions or {}) do
+  local item = { session_id = s.session_id, label = s.label, windows = 0 }
+  rex.call("session.attach", { session_id = s.session_id })
+  local view = rex.call("session.view", { session_id = s.session_id })
+  if view then
+    item.windows = #(view.windows or {})
+    for _, w in ipairs(view.windows or {}) do
+      if w.window_id == view.active_window_id and w.focused_block_id then
+        item.focused_block_id = w.focused_block_id
+        item.pwd = rex.call("block.method", {
+          session_id = s.session_id, block_id = w.focused_block_id,
+          creator = "com.superlogical.terminal", method = "pwd",
+        })
+      end
+    end
+  end
+  out[#out + 1] = item
+end
+return out
+```
+
+## Milestone 1 status (2026-11-27)
+
+Done on branch `strip-herdr`. The work is staged, not committed.
+
+- The module is `github.com/fullerzz/rex-plugin-sesh` and the binary is `rex-sesh`. Commands: `list`, `preview`, `root`, `picker`, `config`, `--version`.
+- Removed: `internal/herdr`, `connect`, `startup`, `clone`, the Herdr workspace source, remote previews, the history watcher, `last`, `window`, `plugin`, `app`, `herdr-plugin.toml`, `herdr-app/`, `demo/`, and the Herdr verify skill.
+- `just check` passes with 755 tests (1,073 before the strip). `just build-docs` passes.
+
+### Deviations from the plan
+
+- The config and zoxide sources still feed `list` and `picker`. The plan dropped them for v1. Milestone 3 decides whether they stay beside Rex sessions.
+- `root` stays, without `--connect`.
+- New environment variables: `REX_SESH_CONFIG`, `REX_SESH_PICKER`, `REX_SESH_SMEAR_PRESET`, and `REX_SESH_REDUCE_MOTION` replace their `HERDR_SESH_*` names. `REX_SESH_CONFIG_DIR` and `REX_SESH_STATE_DIR` replace the Herdr plugin-host variables.
+- The config directory is `~/.config/rex-sesh`. The cache directory is `$XDG_STATE_HOME/rex-sesh` (default `~/.local/state/rex-sesh`).
+- The picker prints the chosen session's name. Switching comes in milestone 4.
+- `docs/herdr-app.md` was restored, because the docs nav and pages link to it.
+- `test-release-ref` was removed from `just check`, because it reads the removed `herdr-plugin.toml`.
+
+### Still Herdr
+
+- Picker text, icons and golden frames (milestone 3).
+- `uitheme` reads `HERDR_CONFIG_PATH` to inherit Herdr's theme.
+- `state/history.go`, which nothing uses now.
+- The README, the docs site, `zensical.toml`, the release and changelog workflows, `cliff.toml`, and `.agents/setup` and `.agents/resume`.

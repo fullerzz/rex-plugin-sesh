@@ -133,7 +133,7 @@ func TestRecordKeepsCurrentHistoryFile(t *testing.T) {
 }
 
 func TestHistoryMutationsWaitForProcessLock(t *testing.T) {
-	if os.Getenv("HERDR_SESH_HISTORY_LOCK_HELPER") == "1" {
+	if os.Getenv("REX_SESH_HISTORY_LOCK_HELPER") == "1" {
 		runHistoryLockHelper(t)
 		return
 	}
@@ -218,7 +218,7 @@ func assertHistoryMutationWaitsForLock(t *testing.T, dir, action string) {
 
 	//nolint:gosec // Test re-executes its own test binary.
 	cmd := exec.Command(os.Args[0], "-test.run=^TestHistoryMutationsWaitForProcessLock$")
-	cmd.Env = append(os.Environ(), "HERDR_SESH_HISTORY_LOCK_HELPER=1", "HERDR_SESH_HISTORY_LOCK_DIR="+dir, "HERDR_SESH_HISTORY_LOCK_ACTION="+action)
+	cmd.Env = append(os.Environ(), "REX_SESH_HISTORY_LOCK_HELPER=1", "REX_SESH_HISTORY_LOCK_DIR="+dir, "REX_SESH_HISTORY_LOCK_ACTION="+action)
 	stdout, err := cmd.StdoutPipe()
 	require.NoError(t, err)
 	require.NoError(t, cmd.Start())
@@ -279,8 +279,8 @@ func assertHistoryMutationWaitsForLock(t *testing.T, dir, action string) {
 
 func runHistoryLockHelper(t *testing.T) {
 	t.Helper()
-	dir := os.Getenv("HERDR_SESH_HISTORY_LOCK_DIR")
-	action := os.Getenv("HERDR_SESH_HISTORY_LOCK_ACTION")
+	dir := os.Getenv("REX_SESH_HISTORY_LOCK_DIR")
+	action := os.Getenv("REX_SESH_HISTORY_LOCK_ACTION")
 	fmt.Println("ready")
 	var mutateErr error
 	switch action {
@@ -468,7 +468,7 @@ func TestRecordSwitchDeduplicatesAndCapsHistory(t *testing.T) {
 }
 
 // Without a watcher, a switch made in the app UI is never recorded; the next
-// herdr-sesh switch must still record its real origin.
+// rex-sesh switch must still record its real origin.
 func TestRecordUnwatchedSwitchRecordsOriginWhenTargetHeadsHistory(t *testing.T) {
 	d := t.TempDir()
 	require.NoError(t, SaveHistory(d, History{Workspaces: []string{"B", "A"}}))

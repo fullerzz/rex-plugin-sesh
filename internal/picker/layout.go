@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	sessionmodel "github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	sessionmodel "github.com/fullerzz/rex-plugin-sesh/internal/model"
 
 	"bloomfx.dev/bloom"
 	"bloomfx.dev/bloom/fx"

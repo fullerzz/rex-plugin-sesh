@@ -18,9 +18,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/settings"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/settings"
 )
 
 // The frames were written while the bloom tree still matched, case for
@@ -356,7 +356,7 @@ func TestToastWheelUsesTheFrameItWasFoundIn(t *testing.T) {
 }
 
 func TestReduceMotionShowsToastWithoutAnimating(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "1")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "1")
 	configureMotion()
 	t.Cleanup(func() { anim.SetMotion(true) })
 	m := newTeaModel([]model.Session{{Name: "api"}}, Options{})
@@ -1111,7 +1111,7 @@ func TestWheelStepsOverPreviewBorderAddUp(t *testing.T) {
 }
 
 func TestReduceMotionStillsAgentSpinner(t *testing.T) {
-	t.Setenv("HERDR_SESH_REDUCE_MOTION", "1")
+	t.Setenv("REX_SESH_REDUCE_MOTION", "1")
 	m := newTeaModel([]model.Session{{Name: "api", Source: "herdr", WorkspaceID: "w1", AgentStatus: "working"}}, Options{})
 	t.Cleanup(func() { m.cancelActivePreview() })
 	m.width, m.height = 120, 12

@@ -13,36 +13,23 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fullerzz/herdr-plugin-sesh/internal/config"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/herdr"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 )
 
-func RenderPane(ctx context.Context, s model.Session) (string, error) {
-	if s.Source != "herdr" || s.WorkspaceID == "" {
-		return "Pane preview is only available for running Herdr workspaces\n", nil
-	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	return herdr.NewBackend().WorkspacePaneRead(ctx, s.WorkspaceID)
+// ErrPaneUnavailable reports that rex-sesh cannot read a session's pane yet.
+var ErrPaneUnavailable = errors.New("pane preview is not available yet")
+
+// RenderPane returns ErrPaneUnavailable until Rex pane capture is wired in.
+func RenderPane(context.Context, model.Session) (string, error) {
+	return "", ErrPaneUnavailable
 }
 
-// Render previews s, reaching a remote session's machine through the backend
-// herdr.NewBackend selects.
+// Render previews s. A remote session's preview runs nothing and shows its
+// metadata.
 func Render(ctx context.Context, s model.Session, fallbackCommand string) (string, error) {
-	var machines herdr.MachineClient
 	if s.Machine != "" {
-		machines, _ = herdr.NewBackend().(herdr.MachineClient)
-	}
-	return RenderWith(ctx, machines, s, fallbackCommand)
-}
-
-// RenderWith previews s, reaching a remote session's machine through
-// machines. With nil machines, a backend without machines, a remote session's
-// preview runs nothing and shows its metadata.
-func RenderWith(ctx context.Context, machines herdr.MachineClient, s model.Session, fallbackCommand string) (string, error) {
-	if s.Machine != "" {
-		return renderRemote(ctx, machines, s), nil
+		return remoteSummary(s), nil
 	}
 	if s.Path == "" {
 		if s.WorkspaceID != "" {

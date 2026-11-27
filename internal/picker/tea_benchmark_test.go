@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/fullerzz/herdr-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 )
 
 var benchmarkPickerOutput string
