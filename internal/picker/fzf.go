@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -16,6 +17,10 @@ import (
 func RunFZF(ctx context.Context, items []sessionmodel.Session, opts Options) (sessionmodel.Session, bool, error) {
 	if len(items) == 0 {
 		return sessionmodel.Session{}, false, nil
+	}
+	if opts.WorkspaceSort == workspaceSortRecent {
+		items = slices.Clone(items)
+		sortRexSessions(items, opts.RecentSessionIDs)
 	}
 	command := opts.FZFCommand
 	if command == "" {

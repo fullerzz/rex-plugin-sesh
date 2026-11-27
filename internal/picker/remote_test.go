@@ -12,8 +12,9 @@ import (
 )
 
 func TestRemoteMachineSearchAndDisplay(t *testing.T) {
-	remote := model.Session{Source: "rex", Machine: "buntu26", Name: "api", Path: "/src/api", SessionID: "buntu26/sp1"}
-	local := model.Session{Source: "rex", Name: "api", Path: "/src/api", SessionID: "sp1"}
+	// Each server issues its own session IDs, so two hosts can share one.
+	remote := model.Session{Source: "rex", Machine: "buntu26", Name: "api", Path: "/src/api", SessionID: "session:1"}
+	local := model.Session{Source: "rex", Name: "api", Path: "/src/api", SessionID: "session:1"}
 	m := New([]model.Session{local, remote})
 	m.Filter("BUNTU26")
 	require.Equal(t, []model.Session{remote}, m.Filtered)
@@ -21,12 +22,34 @@ func TestRemoteMachineSearchAndDisplay(t *testing.T) {
 	assert.NotContains(t, ansi.Strip(row(local, true, 100, true, "")), "[buntu26]")
 	assert.Contains(t, fzfInput([]model.Session{remote}, false), "[buntu26] api")
 	view := newTeaModel([]model.Session{remote}, Options{DisplayOptions: DisplayOptions{
-		LastSessionID: remote.SessionID, RexSessions: []model.Session{local, remote},
+		LastSessionID: remote.Ref(), RexSessions: []model.Session{local, remote},
 	}})
 	label, path := view.lastWorkspaceStatus()
 	assert.Equal(t, "[buntu26] api", label)
 	assert.Equal(t, remote.Path, path)
 	assert.Contains(t, ansi.Strip(view.previewTitle()), "[buntu26] api")
+}
+
+// The recent sort ranks a host's session by host and ID, so a session on
+// this machine with the same ID keeps its own place.
+func TestRecentSortTellsHostsApart(t *testing.T) {
+	local := model.Session{Source: "rex", Name: "api", SessionID: "session:1"}
+	other := model.Session{Source: "rex", Name: "web", SessionID: "session:2"}
+	remote := model.Session{Source: "rex", Machine: "devbox", Name: "train", SessionID: "session:1"}
+	m := newTeaModel([]model.Session{local, other, remote}, Options{DisplayOptions: DisplayOptions{
+		HidePreview: true, WorkspaceSort: "recent", RecentSessionIDs: []string{remote.Ref(), other.Ref(), local.Ref()},
+	}})
+	assert.Equal(t, []string{"train", "web", "api"}, sessionNames(m.list.All))
+}
+
+// A status refresh keys sessions by Ref, so same-ID sessions on two hosts
+// keep their own statuses.
+func TestAgentStatusesTellHostsApart(t *testing.T) {
+	local := model.Session{Source: "rex", Name: "api", SessionID: "session:1"}
+	remote := model.Session{Source: "rex", Machine: "devbox", Name: "api", SessionID: "session:1"}
+	m := New([]model.Session{local, remote})
+	m.UpdateAgentStatuses(map[string]string{local.Ref(): "blocked", remote.Ref(): "idle"})
+	assert.Equal(t, []string{"blocked", "idle"}, []string{m.All[0].AgentStatus, m.All[1].AgentStatus})
 }
 
 func TestRemoteMachineAndNameSearchTogether(t *testing.T) {
@@ -61,7 +84,7 @@ func TestRemoteSessionsSkipLocalHomeHeuristics(t *testing.T) {
 	assert.Contains(t, ansi.Strip(row(remoteHome, false, 120, true, "")), home)
 
 	view := newTeaModel(nil, Options{DisplayOptions: DisplayOptions{
-		LastSessionID: remoteHome.SessionID, RexSessions: []model.Session{remoteHome},
+		LastSessionID: remoteHome.Ref(), RexSessions: []model.Session{remoteHome},
 	}})
 	assert.Contains(t, ansi.Strip(view.lastWorkspaceText()), "[buntu26] ~  "+home)
 }

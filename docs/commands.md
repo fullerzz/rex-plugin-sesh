@@ -33,7 +33,7 @@ its flags.
 | Command | Purpose |
 | --- | --- |
 | `--version` or `version` | Print the build version. |
-| `picker [--config PATH] [--client ID] [--fzf] [--json] [--wait-on-error]` | Open the picker and switch the Rex app to the chosen row, or print the rows as JSON. |
+| `picker [--config PATH] [--client ID] [--opener ID] [--fzf] [--json] [--wait-on-error]` | Open the picker and switch the Rex app to the chosen row, or print the rows as JSON. |
 | `list [--config PATH] [--json] [--blacklisted] [--hide-duplicates=false]` | List Rex sessions, hosts' sessions, config entries and zoxide directories. |
 | `preview [--config PATH] TARGET` | Print the command preview for a session, config entry or directory. |
 | `lua [--key KEY]` | Print the Rex config module that adds the picker action. |
@@ -57,12 +57,14 @@ terminal, it marks the session that holds that terminal with `◆`.
 Enter switches the Rex app to the selected session, and the picker exits once
 the switch succeeds. On a directory, the picker first creates a Rex session
 named after it, starting there. After a switch, the picker prints the chosen
-row's name.
+row's name, and records the switch in the app's
+[session history](rex-app.md#session-history).
 
 | Flag | Effect |
 | --- | --- |
 | `--config PATH` | Load this config file instead of the usual [lookup](config.md). |
 | `--client ID` | Switch this Rex app, given as a client ID or label. |
+| `--opener ID` | The Rex app that opened the picker, given as a client ID. The [Lua action](rex-app.md) passes it for a key or the command palette. The picker switches that app unless `--client` names another, and records the session it is in as the one the app switched from. |
 | `--fzf` | Use the fzf picker instead of the native picker. `REX_SESH_PICKER=fzf` does the same. |
 | `--json` | Print the picker's rows as JSON and exit, without switching. |
 | `--wait-on-error` | After an error, print it with "Press Enter to close." and wait for ++enter++ before exiting. |
@@ -77,9 +79,10 @@ names the host.
 For a session on this machine, or a directory, the picker uses the first of:
 
 1. `--client`.
-2. `REX_CLIENT`.
-3. The only Rex app connected to this machine's server.
-4. With several apps connected, the only one attached to the session that holds
+2. `--opener`.
+3. `REX_CLIENT`.
+4. The only Rex app connected to this machine's server.
+5. With several apps connected, the only one attached to the session that holds
    the picker.
 
 Otherwise the switch fails with "2 Rex apps are connected; choose one with
@@ -87,8 +90,8 @@ Otherwise the switch fails with "2 Rex apps are connected; choose one with
 "no Rex app is connected to switch".
 
 For a host's session, the picker switches through that host's server, where
-the Rex app has another client ID. `--client` and `REX_CLIENT` name an app only
-on this machine's server. The picker uses the only app connected to the host.
+the Rex app has another client ID. `--client`, `--opener` and `REX_CLIENT` name
+an app only on this machine's server. The picker uses the only app connected to the host.
 With several, it uses the one whose device name matches the app it chose on
 this machine, by the steps above.
 
@@ -197,9 +200,9 @@ current directory.
 | --- | --- |
 | `REX_SESH_CONFIG` | Config file to load. |
 | `REX_SESH_CONFIG_DIR` | Directory searched for `config.toml` and `sesh.toml`. |
-| `REX_SESH_STATE_DIR` | Directory for the `list` cache. |
+| `REX_SESH_STATE_DIR` | Directory for the `list` cache and the session history. |
 | `REX_SESH_REX_BIN` | The `rex` binary to run. |
-| `REX_CLIENT` | The Rex app that `picker` switches when `--client` is not given. |
+| `REX_CLIENT` | The Rex app that `picker` switches when neither `--client` nor `--opener` is given. |
 | `REX_SESH_PICKER` | Set to `fzf` to use the fzf picker. |
 | `REX_SESH_REDUCE_MOTION` | Set to `1` or `true` to turn off the picker's animations. |
 | `REX_SESH_SMEAR_PRESET` | The selection cursor's trail: `crisp` (default), `gooey` or `ghost`. |

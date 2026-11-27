@@ -38,6 +38,17 @@ func (f *fakeApps) AppClients(_ context.Context, sessionID string) ([]rex.AppCli
 	return apps, f.err
 }
 
+func (f *fakeApps) InspectApp(ctx context.Context, selector string) (rex.AppClient, error) {
+	apps, err := f.AppClients(ctx, "")
+	if err != nil {
+		return rex.AppClient{}, err
+	}
+	if match, ok := uniqueLabel(apps, selector); ok {
+		return match, nil
+	}
+	return rex.AppClient{}, errors.New("no unique Rex app matches " + selector)
+}
+
 func TestResolveClientPrefersFlagThenEnv(t *testing.T) {
 	apps := &fakeApps{all: []string{"client:a", "client:b"}}
 	t.Setenv("REX_CLIENT", "client:env")
@@ -212,7 +223,7 @@ func TestResolveHostClientUsesTheHostsOnlyApp(t *testing.T) {
 	local := &fakeApps{all: []string{"client:mac"}}
 	got, err := resolveHostClient(t.Context(), local, &fakeApps{all: []string{"client:mac-on-devbox"}}, "devbox", switchTarget{client: "client:mac"})
 	require.NoError(t, err)
-	assert.Equal(t, "client:mac-on-devbox", got)
+	assert.Equal(t, "client:mac-on-devbox", got.ID)
 	assert.Empty(t, local.calls, "one app on the host needs no local lookup")
 
 	_, err = resolveHostClient(t.Context(), local, &fakeApps{}, "devbox", switchTarget{})
@@ -224,10 +235,10 @@ func TestResolveHostClientMatchesTheDeviceLabel(t *testing.T) {
 	remote := &fakeApps{all: []string{"client:r-ipad", "client:r-mac"}, labels: map[string]string{"client:r-ipad": "iPad", "client:r-mac": "Studio Mac"}}
 	got, err := resolveHostClient(t.Context(), local, remote, "devbox", switchTarget{client: "client:mac"})
 	require.NoError(t, err)
-	assert.Equal(t, "client:r-mac", got)
+	assert.Equal(t, "client:r-mac", got.ID)
 	got, err = resolveHostClient(t.Context(), local, remote, "devbox", switchTarget{client: "iPad"})
 	require.NoError(t, err)
-	assert.Equal(t, "client:r-ipad", got, "--client may be a label")
+	assert.Equal(t, "client:r-ipad", got.ID, "--client may be a label")
 
 	_, err = resolveHostClient(t.Context(), local, remote, "devbox", switchTarget{client: "client:gone"})
 	require.EqualError(t, err, "2 Rex apps are connected to devbox, and none is this machine's app")
@@ -279,10 +290,10 @@ func TestRefreshKeepsStatusesOfAHostThatStopsAnswering(t *testing.T) {
 	backend := &pickerBackend{app: &App{}, ctx: t.Context(), cfg: config.Default()}
 	statuses, err := backend.RefreshAgentStatuses()
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"session:1": "", "session:9": "working"}, statuses)
+	assert.Equal(t, map[string]string{"session:1": "", "devbox\x00session:9": "working"}, statuses)
 
 	useFakeRex(t, strings.Replace(fakeRexHosts, `*"-S devbox do -"*)`, `*"-S devbox do -"*) exit 1 ;; *"-S nowhere"*)`, 1))
 	statuses, err = backend.RefreshAgentStatuses()
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"session:1": "", "session:9": "working"}, statuses)
+	assert.Equal(t, map[string]string{"session:1": "", "devbox\x00session:9": "working"}, statuses)
 }

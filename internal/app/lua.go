@@ -18,10 +18,10 @@ var seshLuaTemplate string
 var seshLua = template.Must(template.New("sesh.lua").Funcs(template.FuncMap{"lua": luaString}).Parse(seshLuaTemplate))
 
 // pickerStart is the shell script the picker's layer runs, as
-// sh -c pickerStart BIN picker [--client ID]. The layer runs on the machine
+// sh -c pickerStart BIN picker [--opener ID]. The layer runs on the machine
 // that holds the session, which for a session on another host is not this
 // one. There BIN is missing, so the script runs that host's own copy, which
-// "just install-host" puts in ~/.local/bin, and leaves out --client, because
+// "just install-host" puts in ~/.local/bin, and leaves out --opener, because
 // the app has another client ID on that host's server.
 const pickerStart = `if [ -x "$0" ]; then exec "$0" "$@"; fi
 for c in "$HOME/.local/bin/rex-sesh" "$(command -v rex-sesh)"; do

@@ -185,7 +185,7 @@ one warning and still exits 0.
 ### Tests and your machine
 
 The unit tests need neither Rex nor zoxide, and they don't touch your Rex
-sessions, cache, or zoxide history:
+sessions, cache, session history, or zoxide history:
 
 - `TestMain` in `internal/app/main_test.go` writes a fake `rex` to a temporary
   directory and points `REX_SESH_REX_BIN` at it. The fake records each call and
