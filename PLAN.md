@@ -383,7 +383,14 @@ Done in `0bad985`, then committed to `main` under the standing approval.
 - `ser8` runs its Rex server from `~/.local/bin/rex` with `--tailscale`; `rex` is not on the SSH session's `PATH`, but Rex terminals set `REX_BIN_DIR`.
 - A `rex -S HOST do` script must call `session.attach` and pass `session_id` before `rex.session.new_layer` on that host.
 
-### Not checked yet
+### Checked by the user (2026-11-27)
 
-- Enter in a picker opened inside a host's session. That switch moves the user's app, so the user checks it.
+- In `lunar-dune` on `rex-buntu26`, `ctrl+a s` opened the host's copy, and Enter on `sunlit-delta` switched the app to it.
+
+### Decision: rex-homelab (2026-11-27)
+
+Skipped for now. It has no SSH alias on this Mac and no sessions.
+
+### Notes
+
 - After `just install-host`, copies on hosts fall behind until it runs again.
