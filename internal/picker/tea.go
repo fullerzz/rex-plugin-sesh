@@ -1669,6 +1669,10 @@ func rowWithRail(s sessionmodel.Session, selected bool, width int, showIcons, re
 	rail := "  "
 	if selected {
 		rail = selectedRail
+	} else if s.Attached {
+		// The session the picker was opened from. The status column is left
+		// to agent status, whose done glyph is ●.
+		rail = currentMarkerStyle.Render("◆ ")
 	}
 	label := s.Name
 	if s.Machine != "" {
@@ -1681,9 +1685,6 @@ func rowWithRail(s sessionmodel.Session, selected bool, width int, showIcons, re
 	status := "  "
 	if statusGlyph != "" {
 		status = agentStatusStyle(s.AgentStatus).Render(statusGlyph + " ")
-	} else if s.Attached {
-		// The session the picker was opened from.
-		status = currentMarkerStyle.Render("● ")
 	}
 	// Status is always two cells: a glyph plus space, or two blanks.
 	fixedWidth := lipgloss.Width(rail) + 2

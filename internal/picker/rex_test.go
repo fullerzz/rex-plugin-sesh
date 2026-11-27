@@ -2,6 +2,7 @@ package picker
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -36,8 +37,16 @@ func TestDisableCloseRefusesCtrlXAndHidesIt(t *testing.T) {
 func TestCurrentSessionRowShowsMarker(t *testing.T) {
 	current := ansi.Strip(row(model.Session{Source: "rex", Name: "api", WorkspaceID: "session:1", Attached: true}, false, 80, false, ""))
 	other := ansi.Strip(row(model.Session{Source: "rex", Name: "web", WorkspaceID: "session:2"}, false, 80, false, ""))
-	assert.Contains(t, current, "● [rex]")
-	assert.NotContains(t, other, "●")
+	assert.True(t, strings.HasPrefix(current, "◆   [rex]"), current)
+	assert.NotContains(t, other, "◆")
+}
+
+// The marker sits in the rail, so an agent's status glyph still shows.
+func TestCurrentMarkerKeepsTheAgentStatus(t *testing.T) {
+	got := ansi.Strip(row(model.Session{Source: "rex", Name: "api", WorkspaceID: "session:1", Attached: true, AgentStatus: "done"}, false, 80, false, ""))
+	assert.True(t, strings.HasPrefix(got, "◆ ● [rex]"), got)
+	selected := ansi.Strip(row(model.Session{Source: "rex", Name: "api", WorkspaceID: "session:1", Attached: true}, true, 80, false, ""))
+	assert.True(t, strings.HasPrefix(selected, "┃"), "the selection rail wins on the selected row")
 }
 
 // Without history or agent statuses every sort mode keeps rex ls order.

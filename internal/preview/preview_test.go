@@ -14,9 +14,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRenderPaneReportsUnavailable(t *testing.T) {
-	_, err := RenderPane(context.Background(), model.Session{Source: "rex", WorkspaceID: "w2"})
-	require.ErrorIs(t, err, ErrPaneUnavailable)
+type fakeScreen struct{ session, block string }
+
+func (f *fakeScreen) Screen(_ context.Context, sessionID, blockID string) (string, error) {
+	f.session, f.block = sessionID, blockID
+	return "screen\n", nil
+}
+
+func TestRenderPaneReadsTheSessionBlock(t *testing.T) {
+	fake := &fakeScreen{}
+	original := newScreenReader
+	newScreenReader = func() screenReader { return fake }
+	t.Cleanup(func() { newScreenReader = original })
+	text, err := RenderPane(context.Background(), model.Session{Source: "rex", WorkspaceID: "session:1", BlockID: "block:9"})
+	require.NoError(t, err)
+	assert.Equal(t, "screen\n", text)
+	assert.Equal(t, &fakeScreen{session: "session:1", block: "block:9"}, fake)
+}
+
+func TestRenderPaneReportsSessionsWithoutABlock(t *testing.T) {
+	for _, s := range []model.Session{
+		{Source: "rex", WorkspaceID: "session:1"},
+		{Source: "config", Path: "/tmp"},
+	} {
+		_, err := RenderPane(context.Background(), s)
+		require.ErrorIs(t, err, ErrPaneUnavailable)
+	}
 }
 
 func TestRenderUsesPreviewCommand(t *testing.T) {

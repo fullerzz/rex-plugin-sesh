@@ -265,3 +265,18 @@ Mac sessions only for now. The picker lists and switches this Mac's sessions. Op
 - This Mac can list another host's sessions: `rex -S rex-buntu26 ls --json` works.
 - `session.select` takes only a session ID, so whether the Mac app can show another host's session through it is unproven. `client.host.switch` takes no arguments.
 - Under every option, opening the picker from a remote session needs `rex-sesh` on that host. A picker there must find the app itself, because the Mac's client ID would not resolve there.
+
+## Milestone 6 status (2026-11-27)
+
+Done on branch `pane-preview`, then committed to `main` under the standing approval.
+
+- `ctrl+o` pane mode shows the session's live screen. The session script records a preview block for each session: the active tab's focused block, or its first tiled block when the focused one is the floating picker. `screen.lua` reads that block's size and VT text, and Go keeps the last `rows` lines. The picker refreshes it every second.
+- Rows show agent status. The script reads `program_status` from every block in a session and keeps the most urgent state: blocked, then working, then done, then idle. Rex's `error` state counts as idle, because the picker has no glyph for it. The picker refreshes statuses every second with the same script.
+- The current-session marker moved to the rail column as a sky `◆`, because the status column now shows agent glyphs and `done` is drawn as `●`. On the selected row, the selection rail replaces it.
+- Checked live: `◆` with a working spinner on this session. Pane mode showed `alt-harness-rex-brainstorm`'s and `pipeline-state-diagram`'s screens.
+- `just check` passes with 805 tests.
+
+### Notes
+
+- Each refresh runs the session script, which attaches to every session for a moment, once a second while the picker is open.
+- The pane preview shows the visible screen only, not the scrollback.

@@ -68,13 +68,15 @@ then run `rex config reload`.
 | Type | Filter sessions by name or path. |
 | `enter` | Switch the Rex app to the selected session and close the picker. |
 | `ctrl+j` / `ctrl+k`, arrows | Move the selection. |
-| `ctrl+o` | Cycle the preview between command output and pane mode. |
+| `ctrl+o` | Switch the preview between command output and the session's live screen. |
 | `f2` | Open the settings editor. |
 | `esc` | Close the picker. |
 
-`●` marks the session the picker was opened from. If the Rex app refuses a
-switch, for example because Remote Control is off, the picker stays open and
-shows the app's message.
+`◆` marks the session the picker was opened from. Beside each session, a glyph
+shows the most urgent status its programs report through Rex: a spinner while
+working, `◉` blocked, `●` done, and `✓` idle. If the Rex app refuses a switch,
+for example because Remote Control is off, the picker stays open and shows the
+app's message.
 
 If your Rex config binds a key the picker uses, the app takes the key first.
 For example, binding `f2` in `init.lua` hides the settings editor; run

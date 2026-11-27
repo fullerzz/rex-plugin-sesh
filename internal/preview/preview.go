@@ -15,14 +15,26 @@ import (
 
 	"github.com/fullerzz/rex-plugin-sesh/internal/config"
 	"github.com/fullerzz/rex-plugin-sesh/internal/model"
+	"github.com/fullerzz/rex-plugin-sesh/internal/rex"
 )
 
-// ErrPaneUnavailable reports that rex-sesh cannot read a session's pane yet.
-var ErrPaneUnavailable = errors.New("pane preview is not available yet")
+// ErrPaneUnavailable reports a session with no Rex terminal to show.
+var ErrPaneUnavailable = errors.New("this session has no terminal to preview")
 
-// RenderPane returns ErrPaneUnavailable until Rex pane capture is wired in.
-func RenderPane(context.Context, model.Session) (string, error) {
-	return "", ErrPaneUnavailable
+// screenReader reads a Rex block's visible screen; *rex.Client implements it.
+type screenReader interface {
+	Screen(ctx context.Context, sessionID, blockID string) (string, error)
+}
+
+// newScreenReader is replaced in tests.
+var newScreenReader = func() screenReader { return rex.NewClient() }
+
+// RenderPane returns the visible screen of the session's preview block.
+func RenderPane(ctx context.Context, s model.Session) (string, error) {
+	if s.Source != "rex" || s.WorkspaceID == "" || s.BlockID == "" {
+		return "", ErrPaneUnavailable
+	}
+	return newScreenReader().Screen(ctx, s.WorkspaceID, s.BlockID)
 }
 
 // Render previews s. A remote session's preview runs nothing and shows its

@@ -8,6 +8,7 @@ import (
 	"github.com/fullerzz/rex-plugin-sesh/internal/config"
 	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 	pickerpkg "github.com/fullerzz/rex-plugin-sesh/internal/picker"
+	"github.com/fullerzz/rex-plugin-sesh/internal/rex"
 	"github.com/fullerzz/rex-plugin-sesh/internal/settings"
 )
 
@@ -56,8 +57,22 @@ func (b *pickerBackend) ReloadPicker(ctx context.Context) (pickerpkg.ReloadResul
 	return pickerpkg.ReloadResult{Sessions: col.Sessions}, nil
 }
 
+// RefreshAgentStatuses maps each Rex session ID to the most urgent state its
+// programs report. The picker calls it every second.
 func (b *pickerBackend) RefreshAgentStatuses() (map[string]string, error) {
-	return map[string]string{}, nil
+	client := b.app.Rex
+	if client == nil {
+		client = rex.NewClient()
+	}
+	sessions, err := client.Sessions(b.ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	statuses := make(map[string]string, len(sessions))
+	for _, s := range sessions {
+		statuses[s.ID] = s.AgentStatus
+	}
+	return statuses, nil
 }
 
 func (b *pickerBackend) OpenSettings() (settings.Model, error) {

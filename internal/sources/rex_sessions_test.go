@@ -27,13 +27,13 @@ func (f fakeRex) Sessions(_ context.Context, selfBlockID string) ([]rex.Session,
 func TestRexSessionsListsOpenSessions(t *testing.T) {
 	var block string
 	got, err := RexSessions{BlockID: "block:7", Client: fakeRex{block: &block, sessions: []rex.Session{
-		{ID: "session:1", Label: "api", Path: "/src/api", Windows: 2},
+		{ID: "session:1", Label: "api", Path: "/src/api", Windows: 2, BlockID: "block:9", AgentStatus: "working"},
 		{ID: "session:2", Label: "scratch", Current: true},
 	}}}.List(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "block:7", block)
 	assert.Equal(t, []model.Session{
-		{Source: "rex", Name: "api", Path: "/src/api", WorkspaceID: "session:1"},
+		{Source: "rex", Name: "api", Path: "/src/api", WorkspaceID: "session:1", BlockID: "block:9", AgentStatus: "working"},
 		{Source: "rex", Name: "scratch", WorkspaceID: "session:2", Attached: true},
 	}, got.Ordered())
 }

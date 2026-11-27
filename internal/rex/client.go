@@ -14,10 +14,15 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 //go:embed sessions.lua
 var sessionsScript []byte
+
+//go:embed screen.lua
+var screenScript []byte
 
 // requestTimeout bounds one rex invocation.
 const requestTimeout = 5 * time.Second
@@ -32,8 +37,12 @@ type Session struct {
 	Label string
 	// Windows counts the session's tabs.
 	Windows int
-	// FocusedBlockID is the focused block of the active tab, or "".
-	FocusedBlockID string
+	// BlockID is the block to preview: the active tab's focused block, unless
+	// that is the caller's floating picker, or "".
+	BlockID string
+	// AgentStatus is the most urgent state any program in the session
+	// reports (blocked, working, done or idle), or "".
+	AgentStatus string
 	// Path is the directory a terminal in the active tab last reported, or "".
 	Path string
 	// Current marks the session that holds the block passed to Sessions.
@@ -107,12 +116,13 @@ func (c *Client) Sessions(ctx context.Context, selfBlockID string) ([]Session, e
 		return nil, fmt.Errorf("decode rex sessions: %w", err)
 	}
 	var raw []struct {
-		ID             string `json:"session_id"`
-		Label          string `json:"label"`
-		Windows        int    `json:"windows"`
-		FocusedBlockID string `json:"focused_block_id"`
-		PWD            string `json:"pwd"`
-		Current        bool   `json:"current"`
+		ID          string `json:"session_id"`
+		Label       string `json:"label"`
+		Windows     int    `json:"windows"`
+		BlockID     string `json:"block_id"`
+		PWD         string `json:"pwd"`
+		Current     bool   `json:"current"`
+		AgentStatus string `json:"agent_status"`
 	}
 	if trimmed := bytes.TrimSpace(result.Sessions); len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("{}")) && !bytes.Equal(trimmed, []byte("null")) {
 		if err := json.Unmarshal(trimmed, &raw); err != nil {
@@ -122,15 +132,53 @@ func (c *Client) Sessions(ctx context.Context, selfBlockID string) ([]Session, e
 	sessions := make([]Session, 0, len(raw))
 	for _, r := range raw {
 		sessions = append(sessions, Session{
-			ID:             r.ID,
-			Label:          r.Label,
-			Windows:        r.Windows,
-			FocusedBlockID: r.FocusedBlockID,
-			Path:           PathFromFileURL(r.PWD),
-			Current:        r.Current,
+			ID:          r.ID,
+			Label:       r.Label,
+			Windows:     r.Windows,
+			BlockID:     r.BlockID,
+			Path:        PathFromFileURL(r.PWD),
+			Current:     r.Current,
+			AgentStatus: r.AgentStatus,
 		})
 	}
 	return sessions, nil
+}
+
+// Screen returns the visible screen of a block as VT text: the last lines that
+// fit the terminal's rows, without trailing blank lines.
+func (c *Client) Screen(ctx context.Context, sessionID, blockID string) (string, error) {
+	args, err := json.Marshal(map[string]string{"session_id": sessionID, "block_id": blockID})
+	if err != nil {
+		return "", err
+	}
+	out, err := c.run(ctx, requestTimeout, screenScript, "capture", "do", "-", "--args", string(args), "--json")
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		Rows    int    `json:"rows"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return "", fmt.Errorf("decode rex screen: %w", err)
+	}
+	return visibleLines(result.Content, result.Rows), nil
+}
+
+// visibleLines keeps the last rows lines of content and drops trailing lines
+// that show nothing. rows < 1 keeps every line.
+func visibleLines(content string, rows int) string {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	for len(lines) > 0 && strings.TrimSpace(ansi.Strip(lines[len(lines)-1])) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if rows > 0 && len(lines) > rows {
+		lines = lines[len(lines)-rows:]
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 // AppClients lists the IDs of the connected Rex apps, leaving out command-line

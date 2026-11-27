@@ -36,13 +36,13 @@ func TestSessionsRunsEmbeddedScriptWithoutAutostart(t *testing.T) {
 
 func TestSessionsDecodesListAndPaths(t *testing.T) {
 	runner := &fakeRunner{stdout: `{"sessions":[
-		{"session_id":"session:1","label":"api","windows":2,"focused_block_id":"block:9","pwd":"file://mac.local/Users/me/src/my%20api"},
+		{"session_id":"session:1","label":"api","windows":2,"block_id":"block:9","pwd":"file://mac.local/Users/me/src/my%20api","agent_status":"blocked"},
 		{"session_id":"session:2","label":"scratch","windows":0,"current":true}
 	]}`}
 	got, err := (&Client{Bin: "rex", Runner: runner}).Sessions(t.Context(), "")
 	require.NoError(t, err)
 	assert.Equal(t, []Session{
-		{ID: "session:1", Label: "api", Windows: 2, FocusedBlockID: "block:9", Path: "/Users/me/src/my api"},
+		{ID: "session:1", Label: "api", Windows: 2, BlockID: "block:9", Path: "/Users/me/src/my api", AgentStatus: "blocked"},
 		{ID: "session:2", Label: "scratch", Current: true},
 	}, got)
 }
@@ -124,4 +124,25 @@ func TestSelectSessionReportsRefusal(t *testing.T) {
 	runner := &fakeRunner{stderr: "Error: Remote Control is off\n", err: errors.New("exit status 1")}
 	err := (&Client{Bin: "rex", Runner: runner}).SelectSession(t.Context(), "client:app", "session:2")
 	require.EqualError(t, err, "rex session.select: Remote Control is off")
+}
+
+func TestScreenKeepsTheVisibleLines(t *testing.T) {
+	runner := &fakeRunner{stdout: `{"rows":2,"content":"old\r\n\u001b[32mtwo\u001b[0m\r\nthree\r\n\u001b[0m   \r\n\r\n"}`}
+	got, err := (&Client{Bin: "rex", Runner: runner}).Screen(t.Context(), "session:1", "block:9")
+	require.NoError(t, err)
+	assert.Equal(t, "\x1b[32mtwo\x1b[0m\nthree\n", got)
+	assert.Equal(t, []string{"--autostart=false", "do", "-", "--args", `{"block_id":"block:9","session_id":"session:1"}`, "--json"}, runner.args)
+	assert.Equal(t, screenScript, runner.stdin)
+}
+
+func TestVisibleLinesHandlesShortAndEmptyScreens(t *testing.T) {
+	assert.Equal(t, "a\nb\n", visibleLines("a\nb\n\n", 10))
+	assert.Empty(t, visibleLines("\n  \n", 5))
+	assert.Equal(t, "a\nb\n", visibleLines("a\nb", 0), "rows < 1 keeps every line")
+}
+
+func TestScreenReportsRexError(t *testing.T) {
+	runner := &fakeRunner{stderr: "Error: block not found\n", err: errors.New("exit status 1")}
+	_, err := (&Client{Bin: "rex", Runner: runner}).Screen(t.Context(), "session:1", "block:9")
+	require.EqualError(t, err, "rex capture: block not found")
 }

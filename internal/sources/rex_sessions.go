@@ -30,7 +30,10 @@ func (s RexSessions) List(ctx context.Context) (model.Sessions, error) {
 		return out, err
 	}
 	for _, rs := range sessions {
-		out.Add(model.Session{Source: "rex", Name: rs.Label, Path: rs.Path, WorkspaceID: rs.ID, Attached: rs.Current})
+		out.Add(model.Session{
+			Source: "rex", Name: rs.Label, Path: rs.Path, WorkspaceID: rs.ID, BlockID: rs.BlockID,
+			AgentStatus: rs.AgentStatus, Attached: rs.Current,
+		})
 	}
 	return out, nil
 }

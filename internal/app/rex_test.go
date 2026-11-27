@@ -159,3 +159,11 @@ func TestPickerReloadReportsRexError(t *testing.T) {
 	require.EqualError(t, err, "list Rex sessions: no server")
 	assert.Empty(t, errb.String())
 }
+
+func TestPickerBackendRefreshesAgentStatuses(t *testing.T) {
+	useFakeRex(t, `printf '%s' '{"sessions":[{"session_id":"session:1","label":"api","agent_status":"blocked"},{"session_id":"session:2","label":"web"}]}'`)
+	backend := &pickerBackend{app: &App{}, ctx: t.Context(), cfg: config.Default()}
+	statuses, err := backend.RefreshAgentStatuses()
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"session:1": "blocked", "session:2": ""}, statuses)
+}

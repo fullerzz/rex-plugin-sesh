@@ -14,12 +14,14 @@ type WorktreeRelation struct {
 }
 
 type Session struct {
-	Machine               string           `json:"machine,omitempty"`
-	Source                string           `json:"source"`
-	Name                  string           `json:"name"`
-	Path                  string           `json:"path,omitempty"`
-	WorkspaceID           string           `json:"workspace_id,omitempty"`
-	TabID                 string           `json:"tab_id,omitempty"`
+	Machine     string `json:"machine,omitempty"`
+	Source      string `json:"source"`
+	Name        string `json:"name"`
+	Path        string `json:"path,omitempty"`
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	TabID       string `json:"tab_id,omitempty"`
+	// BlockID is the Rex block a pane preview shows.
+	BlockID               string           `json:"block_id,omitempty"`
 	StartupCommand        string           `json:"startup_command,omitempty"`
 	PreviewCommand        string           `json:"preview_command,omitempty"`
 	DisableStartupCommand bool             `json:"disable_startup_command,omitempty"`
