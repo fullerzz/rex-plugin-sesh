@@ -704,7 +704,7 @@ func (m Model) View() tea.View {
 		path = m.migration.LegacyPath
 	}
 	header := make([]string, 0, max(4, m.height))
-	header = append(header, heading.Render("HERDR SESH / "+title), muted.Render(strings.ReplaceAll(safe(path), "\n", "\\n")), muted.Render(fmt.Sprintf("%d pending changes", len(m.changes()))), muted.Render(strings.Repeat("─", width)))
+	header = append(header, heading.Render("REX SESH / "+title), muted.Render(strings.ReplaceAll(safe(path), "\n", "\\n")), muted.Render(fmt.Sprintf("%d pending changes", len(m.changes()))), muted.Render(strings.Repeat("─", width)))
 	foot := m.wrap(footer)
 	// Description is shown in the form only; long text remains available in edit view.
 	if m.mode == form && m.problem == "" && m.width >= 60 && m.height >= 18 {

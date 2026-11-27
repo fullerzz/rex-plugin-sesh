@@ -20,7 +20,7 @@ func fieldsFromConfig(c config.Config) []field {
 		{key: "picker.preview_mode", label: "Preview mode", help: "Command output or the current session pane.", value: c.TUI.PreviewMode, choices: []string{"command", "pane"}},
 		{key: "picker.workspace_sort", label: "Session order", help: "Default ordering when the picker opens.", value: c.TUI.DefaultSort, choices: []string{"workspace", "recent", "agent"}},
 		{key: "picker.prioritize_home", label: "Prioritize home", help: "Prioritize the home directory in the picker.", value: c.TUI.PrioritizeHome},
-		{key: "picker.herdr_theme_inherit", label: "Inherit Herdr theme", help: "Use the host theme in the native picker.", value: c.TUI.HerdrThemeInherit},
+		{key: "picker.herdr_theme_inherit", label: "Inherit Herdr theme", help: "Take the native picker's colors from Herdr's theme file.", value: c.TUI.HerdrThemeInherit},
 		{key: "picker.replace_worktree_icon", label: "Worktree icons", help: "Replace source icons for Git worktrees.", value: c.TUI.ReplaceWorktreeIcon},
 		{key: "picker.show_last_workspace", label: "Last session", help: "Show the previous session in the picker footer.", value: c.TUI.ShowLastWorkspace},
 		{key: "picker.show_last_workspace_path", label: "Last session path", help: "Show the previous session directory.", value: c.TUI.ShowLastWorkspacePath},

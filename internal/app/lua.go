@@ -28,7 +28,8 @@ for c in "$HOME/.local/bin/rex-sesh" "$(command -v rex-sesh)"; do
   if [ -n "$c" ] && [ -x "$c" ]; then exec "$c" picker; fi
 done
 printf '%s\n' "Sesh cannot start: rex-sesh is not installed on this machine." \
-  "Install it at ~/.local/bin/rex-sesh with: just install-host HOST" >&2
+  "On this machine, rebuild it with: just build" \
+  "On another host, install it from your main machine with: just install-host HOST" >&2
 exit 127`
 
 // lua prints the Rex config module that adds the picker action, pointing at

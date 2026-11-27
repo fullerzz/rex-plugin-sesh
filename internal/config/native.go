@@ -266,7 +266,7 @@ func (n nativeConfig) validateWorkspaces(fail func(key, format string, args ...a
 		}
 		workspaceNames[w.Name] = true
 		if w.Machine != "" && !machinePattern.MatchString(w.Machine) {
-			return fail("workspace.machine", "workspace %q has invalid machine name %q; use a name from `hc machine ls`", w.Name, w.Machine)
+			return fail("workspace.machine", "workspace %q has invalid machine name %q", w.Name, w.Machine)
 		}
 		if w.Machine != "" && otherUsersHome(w.Path) {
 			return fail("workspace.path", "workspace %q on machine %q: path %q names another user's home; use an absolute path", w.Name, w.Machine, w.Path)
