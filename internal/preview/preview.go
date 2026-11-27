@@ -26,15 +26,21 @@ type screenReader interface {
 	Screen(ctx context.Context, sessionID, blockID string) (string, error)
 }
 
-// newScreenReader is replaced in tests.
-var newScreenReader = func() screenReader { return rex.NewClient() }
+// newScreenReader reads screens on the server of host, or on this machine's
+// for host "". Tests replace it.
+var newScreenReader = func(host string) screenReader {
+	if host != "" {
+		return rex.NewHostClient(host)
+	}
+	return rex.NewClient()
+}
 
 // RenderPane returns the visible screen of the session's preview block.
 func RenderPane(ctx context.Context, s model.Session) (string, error) {
 	if s.Source != "rex" || s.SessionID == "" || s.BlockID == "" {
 		return "", ErrPaneUnavailable
 	}
-	return newScreenReader().Screen(ctx, s.SessionID, s.BlockID)
+	return newScreenReader(s.Machine).Screen(ctx, s.SessionID, s.BlockID)
 }
 
 // Render previews s. A remote session's preview runs nothing and shows its
@@ -64,6 +70,9 @@ func Render(ctx context.Context, s model.Session, fallbackCommand string) (strin
 }
 
 func remoteSummary(s model.Session) string {
+	if s.Source == "rex" {
+		return fmt.Sprintf("session: %s\nhost: %s\nid: %s\npath: %s\n", s.Name, s.Machine, s.SessionID, s.Path)
+	}
 	return fmt.Sprintf("workspace: %s\nmachine: %s\nid: %s\npath: %s\n", s.Name, s.Machine, s.SessionID, s.Path)
 }
 

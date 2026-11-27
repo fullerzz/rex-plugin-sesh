@@ -74,12 +74,21 @@ func (ExecRunner) Run(ctx context.Context, bin string, args []string, stdin []by
 type Client struct {
 	Bin    string
 	Runner Runner
+	// Server is the host label each call passes as -S, or "" for this
+	// machine's server.
+	Server string
 }
 
 // NewClient finds rex the way Rex terminals do: REX_SESH_REX_BIN, then the
 // server's own binary in REX_BIN_DIR, then rex on PATH.
 func NewClient() *Client {
 	return &Client{Bin: Bin(), Runner: ExecRunner{}}
+}
+
+// NewHostClient is NewClient for the server of the host labelled server, as
+// "rex hosts" lists it.
+func NewHostClient(server string) *Client {
+	return &Client{Bin: Bin(), Runner: ExecRunner{}, Server: server}
 }
 
 // Bin returns the rex binary NewClient uses.
@@ -181,10 +190,43 @@ func visibleLines(content string, rows int) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-// AppClients lists the IDs of the connected Rex apps, leaving out command-line
-// and other clients. With sessionID set, it lists only apps attached to that
-// session.
-func (c *Client) AppClients(ctx context.Context, sessionID string) ([]string, error) {
+// AppClient is a Rex app connected to a server.
+type AppClient struct {
+	ID string
+	// Label names the device the app runs on. An app connected to several
+	// servers has a different ID on each, and the same label.
+	Label string
+}
+
+// Hosts lists the labels of the other Rex servers this machine connects to,
+// in "rex hosts" order. The command ignores Server.
+func (c *Client) Hosts(ctx context.Context) ([]string, error) {
+	out, err := c.run(ctx, requestTimeout, nil, "hosts", "hosts", "--json")
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Hosts []struct {
+			Host struct {
+				Label string `json:"label"`
+			} `json:"host"`
+		} `json:"hosts"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return nil, fmt.Errorf("decode rex hosts: %w", err)
+	}
+	var labels []string
+	for _, h := range result.Hosts {
+		if h.Host.Label != "" {
+			labels = append(labels, h.Host.Label)
+		}
+	}
+	return labels, nil
+}
+
+// AppClients lists the connected Rex apps, leaving out command-line and other
+// clients. With sessionID set, it lists only apps attached to that session.
+func (c *Client) AppClients(ctx context.Context, sessionID string) ([]AppClient, error) {
 	args := []string{"client", "ls", "--json"}
 	if sessionID != "" {
 		args = append(args, "-s", sessionID)
@@ -197,20 +239,21 @@ func (c *Client) AppClients(ctx context.Context, sessionID string) ([]string, er
 		Clients []struct {
 			ID   string `json:"client_id"`
 			Info struct {
-				Kind string `json:"kind"`
+				Kind  string `json:"kind"`
+				Label string `json:"label"`
 			} `json:"info"`
 		} `json:"clients"`
 	}
 	if err := json.Unmarshal(out, &result); err != nil {
 		return nil, fmt.Errorf("decode rex clients: %w", err)
 	}
-	var ids []string
+	var apps []AppClient
 	for _, client := range result.Clients {
 		if client.Info.Kind == "app" {
-			ids = append(ids, client.ID)
+			apps = append(apps, AppClient{ID: client.ID, Label: client.Info.Label})
 		}
 	}
-	return ids, nil
+	return apps, nil
 }
 
 // NewSession creates a session whose first terminal starts in cwd, and returns
@@ -251,7 +294,11 @@ func (c *Client) run(ctx context.Context, timeout time.Duration, stdin []byte, l
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	argv := append([]string{"--autostart=false"}, args...)
+	argv := []string{"--autostart=false"}
+	if c.Server != "" {
+		argv = append(argv, "-S", c.Server)
+	}
+	argv = append(argv, args...)
 	out, errb, err := c.Runner.Run(ctx, c.Bin, argv, stdin)
 	if err != nil {
 		if msg := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(errb)), "Error:")); msg != "" {

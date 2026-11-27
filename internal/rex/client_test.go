@@ -100,13 +100,13 @@ func TestBinPrefersOverrideThenServerBinary(t *testing.T) {
 
 func TestAppClientsKeepsOnlyApps(t *testing.T) {
 	runner := &fakeRunner{stdout: `{"clients":[
-		{"client_id":"client:app","info":{"kind":"app","name":"Rex"}},
+		{"client_id":"client:app","info":{"kind":"app","name":"Rex","label":"Studio Mac"}},
 		{"client_id":"client:cli","info":{"kind":"cli"}},
 		{"client_id":"client:bare"}
 	]}`}
 	got, err := (&Client{Bin: "rex", Runner: runner}).AppClients(t.Context(), "session:1")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"client:app"}, got)
+	assert.Equal(t, []AppClient{{ID: "client:app", Label: "Studio Mac"}}, got)
 	assert.Equal(t, []string{"--autostart=false", "client", "ls", "--json", "-s", "session:1"}, runner.args)
 
 	_, err = (&Client{Bin: "rex", Runner: runner}).AppClients(t.Context(), "")
@@ -168,4 +168,27 @@ func TestScreenReportsRexError(t *testing.T) {
 	runner := &fakeRunner{stderr: "Error: block not found\n", err: errors.New("exit status 1")}
 	_, err := (&Client{Bin: "rex", Runner: runner}).Screen(t.Context(), "session:1", "block:9")
 	require.EqualError(t, err, "rex capture: block not found")
+}
+
+func TestHostClientPassesTheServer(t *testing.T) {
+	runner := &fakeRunner{stdout: `{"sessions":[]}`}
+	_, err := (&Client{Bin: "rex", Runner: runner, Server: "devbox"}).Sessions(t.Context(), "")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"--autostart=false", "-S", "devbox", "do", "-", "--args", `{"block_id":""}`, "--json"}, runner.args)
+}
+
+func TestHostsListsLabelsInOrder(t *testing.T) {
+	runner := &fakeRunner{stdout: `{"home":{"this_machine":true},"hosts":[
+		{"host":{"label":"devbox","endpoints":["https://devbox.example"]},"from":"home"},
+		{"host":{"label":""}},
+		{"host":{"label":"lab"}}
+	]}`}
+	got, err := (&Client{Bin: "rex", Runner: runner}).Hosts(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"devbox", "lab"}, got)
+	assert.Equal(t, []string{"--autostart=false", "hosts", "--json"}, runner.args)
+
+	got, err = (&Client{Bin: "rex", Runner: &fakeRunner{stdout: `{"sessions":{}}`}}).Hosts(t.Context())
+	require.NoError(t, err)
+	assert.Empty(t, got, "a reply without hosts lists none")
 }

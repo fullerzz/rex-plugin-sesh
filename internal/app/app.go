@@ -33,6 +33,9 @@ type App struct {
 	Err io.Writer
 	// Rex lists Rex sessions; nil uses the rex CLI.
 	Rex sources.SessionLister
+	// RexHosts finds other Rex hosts. When both it and Rex are nil, it uses
+	// the rex CLI; a test that sets only Rex lists no hosts.
+	RexHosts sources.RexHosts
 
 	// opened maps a directory to the Rex session a switch created for it, so
 	// a retry after a refused switch selects that session instead of creating
@@ -100,6 +103,16 @@ type capturingSource struct {
 	sources.Source
 
 	err error
+	// hostWarnings words each host the Rex source could not list.
+	hostWarnings []string
+}
+
+func (s *capturingSource) hostFailed(host string, err error) {
+	if host == "" {
+		s.hostWarnings = append(s.hostWarnings, fmt.Sprintf("rex hosts unavailable: %v", err))
+		return
+	}
+	s.hostWarnings = append(s.hostWarnings, fmt.Sprintf("rex host %s unavailable: %v", host, err))
 }
 
 func (s *capturingSource) List(ctx context.Context) (model.Sessions, error) {
@@ -111,22 +124,37 @@ func (s *capturingSource) List(ctx context.Context) (model.Sessions, error) {
 	return ss, nil
 }
 
-// rexSource lists Rex sessions. With blockID set, the session holding that
-// block is marked current; only the picker asks, because list caches its
-// output for every session to read.
+// rexSource lists Rex sessions on this machine, then on each host. With
+// blockID set, the session holding that block is marked current; only the
+// picker asks, because list caches its output for every session to read.
 func (a *App) rexSource(blockID string) *capturingSource {
-	client := a.Rex
+	client, hosts := a.Rex, a.RexHosts
 	if client == nil {
 		client = rex.NewClient()
+		if hosts == nil {
+			hosts = cliHosts{}
+		}
 	}
-	return &capturingSource{Source: sources.RexSessions{Client: client, BlockID: blockID}}
+	src := &capturingSource{}
+	src.Source = sources.RexSessions{Client: client, BlockID: blockID, Hosts: hosts, HostErr: src.hostFailed}
+	return src
+}
+
+// cliHosts finds Rex hosts with the rex CLI.
+type cliHosts struct{}
+
+func (cliHosts) Hosts(ctx context.Context) ([]string, error) { return rex.NewClient().Hosts(ctx) }
+func (cliHosts) Host(label string) sources.SessionLister { //nolint:ireturn // RexHosts contract.
+	return rex.NewHostClient(label)
 }
 
 // collection is a merged session list. RexErr says why Rex sessions are
-// missing from it; callers report it.
+// missing from it, and HostWarnings which hosts' sessions are; callers report
+// them.
 type collection struct {
-	Sessions []model.Session
-	RexErr   error
+	Sessions     []model.Session
+	RexErr       error
+	HostWarnings []string
 }
 
 // collect merges Rex, config, and zoxide sessions. localOnly drops
@@ -149,7 +177,7 @@ func (a *App) collect(ctx context.Context, cfg config.Config, target string, loc
 		return collection{}, err
 	}
 	sources.ApplyConfig(&merged, cfg, "")
-	return collection{Sessions: merged.Ordered(), RexErr: rexSrc.err}, nil
+	return collection{Sessions: merged.Ordered(), RexErr: rexSrc.err, HostWarnings: rexSrc.hostWarnings}, nil
 }
 
 // collectPicker lists the picker's rows: the open Rex sessions, with the one
@@ -162,7 +190,7 @@ func (a *App) collectPicker(ctx context.Context, cfg config.Config) (collection,
 		return collection{}, err
 	}
 	sources.ApplyConfig(&merged, cfg, "")
-	return collection{Sessions: merged.Ordered(), RexErr: rexSrc.err}, nil
+	return collection{Sessions: merged.Ordered(), RexErr: rexSrc.err, HostWarnings: rexSrc.hostWarnings}, nil
 }
 
 // rexWarning words an unavailable Rex server for the user, or "" when Rex
@@ -206,6 +234,10 @@ func (a *App) list(ctx context.Context, args []string) error {
 	if warning := rexWarning(rexSrc.err); warning != "" {
 		a.warnf("%s", warning)
 		// A cache without Rex sessions would hide them after the server returns.
+		cacheable = false
+	}
+	for _, warning := range rexSrc.hostWarnings {
+		a.warnf("%s", warning)
 		cacheable = false
 	}
 	if cacheable {
@@ -308,6 +340,9 @@ func (a *App) runPicker(ctx context.Context, cfgPath string, jsonOut, fzfPicker 
 		return fmt.Errorf("list Rex sessions: %w", col.RexErr)
 	}
 	if jsonOut {
+		for _, warning := range col.HostWarnings {
+			a.warnf("%s", warning)
+		}
 		return a.printSessions(col.Sessions, true)
 	}
 	opts := pickerOptionsFromConfig(ctx, a.Out, cfg)
@@ -361,8 +396,17 @@ func (a *App) switchTo(ctx context.Context, target switchTarget, s model.Session
 		return fmt.Errorf("%q is not a Rex session or a directory on this machine", s.DisplayName())
 	}
 	client := rex.NewClient()
-	// Find the app before creating anything, so a failure leaves no session.
-	clientID, err := resolveClient(ctx, client, target)
+	var clientID string
+	var err error
+	if s.Machine != "" {
+		// A host's session is found on the host's own server.
+		host := rex.NewHostClient(s.Machine)
+		clientID, err = resolveHostClient(ctx, client, host, s.Machine, target)
+		client = host
+	} else {
+		// Find the app before creating anything, so a failure leaves no session.
+		clientID, err = resolveClient(ctx, client, target)
+	}
 	if err != nil {
 		return err
 	}
@@ -406,7 +450,7 @@ func (a *App) openDirectory(ctx context.Context, client *rex.Client, s model.Ses
 
 // appLister lists connected Rex apps; *rex.Client implements it.
 type appLister interface {
-	AppClients(ctx context.Context, sessionID string) ([]string, error)
+	AppClients(ctx context.Context, sessionID string) ([]rex.AppClient, error)
 }
 
 // resolveClient picks the Rex app to switch: --client, then REX_CLIENT, then
@@ -420,14 +464,14 @@ func resolveClient(ctx context.Context, apps appLister, target switchTarget) (st
 	if id := os.Getenv("REX_CLIENT"); id != "" {
 		return id, nil
 	}
-	ids, err := apps.AppClients(ctx, "")
+	all, err := apps.AppClients(ctx, "")
 	if err != nil {
 		return "", err
 	}
-	if len(ids) == 1 {
-		return ids[0], nil
+	if len(all) == 1 {
+		return all[0].ID, nil
 	}
-	if len(ids) == 0 {
+	if len(all) == 0 {
 		return "", errors.New("no Rex app is connected to switch")
 	}
 	if target.currentSessionID != "" {
@@ -436,10 +480,53 @@ func resolveClient(ctx context.Context, apps appLister, target switchTarget) (st
 			return "", err
 		}
 		if len(attached) == 1 {
-			return attached[0], nil
+			return attached[0].ID, nil
 		}
 	}
-	return "", fmt.Errorf("%d Rex apps are connected; choose one with --client", len(ids))
+	return "", fmt.Errorf("%d Rex apps are connected; choose one with --client", len(all))
+}
+
+// resolveHostClient picks the Rex app to switch to a session on host. The app
+// has another client ID on each server, so --client and REX_CLIENT name it
+// only here. The only app connected to the host wins. With several, the one
+// whose device label matches the app resolveClient picks here wins.
+func resolveHostClient(ctx context.Context, local, remote appLister, host string, target switchTarget) (string, error) {
+	apps, err := remote.AppClients(ctx, "")
+	if err != nil {
+		return "", err
+	}
+	switch len(apps) {
+	case 0:
+		return "", fmt.Errorf("no Rex app is connected to %s", host)
+	case 1:
+		return apps[0].ID, nil
+	}
+	localID, err := resolveClient(ctx, local, target)
+	if err != nil {
+		return "", err
+	}
+	localApps, err := local.AppClients(ctx, "")
+	if err != nil {
+		return "", err
+	}
+	// --client may already be a label.
+	label := localID
+	for _, app := range localApps {
+		if app.ID == localID {
+			label = app.Label
+			break
+		}
+	}
+	var match []string
+	for _, app := range apps {
+		if app.Label != "" && app.Label == label {
+			match = append(match, app.ID)
+		}
+	}
+	if len(match) == 1 {
+		return match[0], nil
+	}
+	return "", fmt.Errorf("%d Rex apps are connected to %s, and none is this machine's app", len(apps), host)
 }
 
 func (a *App) preview(ctx context.Context, args []string) error {

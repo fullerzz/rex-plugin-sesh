@@ -318,9 +318,12 @@ Done on branch `zoxide`, then committed to `main` under the standing approval.
 - `just check` passes with 813 tests.
 - Checked live: `picker --json` listed 4 Rex sessions and 241 zoxide directories. With a session named `borgboi` created by `rex new`, the picker showed one `borgboi` row, the Rex one. The probe session was then killed.
 
+### Checked by the user (2026-11-27)
+
+- Enter on a zoxide row in the real picker opened a new session in that directory, and the app showed it. The picker later listed it as the Rex session `borgboi`, with no `borgboi` directory row.
+
 ### Not checked yet
 
-- Enter on a zoxide row in the real picker. I did not switch the app myself.
 - Whether `rex new` alone moves the app to the new session. No Rex API reports what the app shows.
 
 ### Notes
@@ -328,3 +331,34 @@ Done on branch `zoxide`, then committed to `main` under the standing approval.
 - If a switch is refused and the picker is then closed, the created session stays open in Rex.
 - If the remembered session is killed before a retry, the retry fails until the picker is reopened.
 - zoxide rows are local to this Mac, and new sessions start on this Mac's server.
+
+## Milestone 9 status (2026-11-27): sessions on other hosts
+
+Done on branch `hosts`, then committed to `main` under the standing approval.
+
+- The picker opened from a Mac session lists this Mac's sessions, then each host's sessions in `rex hosts` order, then zoxide directories. Host rows have `Machine` set to the host label and show as `[rex-buntu26] lunar-dune`. `list` includes them too.
+- Hosts are listed in parallel, at most 3 seconds each. A host that fails is left out, `list` and `picker --json` print `rex host NAME unavailable: …`, and the TUI says nothing. Only a failure of this Mac's server stops the picker from opening.
+- Enter on a host row runs `rex -S HOST -C APP do session.select session_id=ID`. The app has another client ID on each host, so `--client` and `REX_CLIENT` only work for this Mac's server. On the host, the picker uses the only connected app. With several, it uses the one whose `info.label` (the device name) matches the app it picked on this Mac.
+- `ctrl+o` pane mode reads a host session's screen through the host. The command preview shows `session`, `host`, `id` and `path`, because the directory isn't on this Mac.
+- The status refresh covers every host. While a host doesn't answer, its sessions keep their last status instead of losing it every second.
+- `just check` passes with 825 tests.
+
+### Facts found
+
+- The Mac app is a client of every host's server, with a different client ID on each, and the same `info.label` (`Zach’s MacBook Pro`).
+- A `session.select` with a made-up ID, sent through either this Mac's server or `rex-buntu26`'s, reached the app. The app answered `SessionNotFoundOnServerError`, so it looks a session up on the server the request came through. A host's session must be selected through that host.
+- `rex -S HOST do -` runs its Lua on this Mac and sends the API calls to the host: `os.getenv("HOME")` returned the Mac's home. Scripts can also reach hosts with `rex.servers()` and `rex.server(LABEL)`, which could later list every host in one `rex` process.
+- Listing takes about 70 ms per host over Tailscale. `picker --json` with 5 Mac sessions, 2 host sessions and 304 directories takes 0.25 s.
+- `rex.ui.pick` is still missing on this Mac's server and on `rex-buntu26`.
+
+### Checked live
+
+- Opened unfocused, the picker showed 5 Mac sessions with `◆` on this one, then `[rex-buntu26] lunar-dune` and `[rex-buntu26] sunlit-delta`, then zoxide. On `lunar-dune`, pane mode showed its screen from `rex-buntu26`, and command mode showed its summary. Esc closed the layer.
+
+### Not checked yet
+
+- Enter on a host row. A switch moves the user's app, so the user checks it.
+
+### Decision: the picker opened inside a host's session (2026-11-27)
+
+Decide after the user tries the Mac picker with host sessions. Until then it shows "Sesh cannot start". A copy of `rex-sesh` on a host would list that host's server as its own. Whether it could reach this Mac's sessions is untested.

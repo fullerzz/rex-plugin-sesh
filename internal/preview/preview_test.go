@@ -23,13 +23,27 @@ func (f *fakeScreen) Screen(_ context.Context, sessionID, blockID string) (strin
 
 func TestRenderPaneReadsTheSessionBlock(t *testing.T) {
 	fake := &fakeScreen{}
+	var hosts []string
 	original := newScreenReader
-	newScreenReader = func() screenReader { return fake }
+	newScreenReader = func(host string) screenReader {
+		hosts = append(hosts, host)
+		return fake
+	}
 	t.Cleanup(func() { newScreenReader = original })
 	text, err := RenderPane(context.Background(), model.Session{Source: "rex", SessionID: "session:1", BlockID: "block:9"})
 	require.NoError(t, err)
 	assert.Equal(t, "screen\n", text)
 	assert.Equal(t, &fakeScreen{session: "session:1", block: "block:9"}, fake)
+	_, err = RenderPane(context.Background(), model.Session{Machine: "devbox", Source: "rex", SessionID: "session:2", BlockID: "block:3"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"", "devbox"}, hosts, "a host's session is read on that host")
+}
+
+// A host's directory is not on this machine, so its preview runs nothing.
+func TestRenderSummarizesAHostSession(t *testing.T) {
+	out, err := Render(context.Background(), model.Session{Machine: "devbox", Source: "rex", Name: "train", SessionID: "session:2", Path: "/home/me/train"}, "ls {}")
+	require.NoError(t, err)
+	assert.Equal(t, "session: train\nhost: devbox\nid: session:2\npath: /home/me/train\n", out)
 }
 
 func TestRenderPaneReportsSessionsWithoutABlock(t *testing.T) {

@@ -54,9 +54,11 @@ use the picker again.
 Press the key, or run **Sesh: Pick Session** from the command palette. The
 picker opens in a floating layer over the current tab.
 
-The picker runs on the machine that holds the current session, and lists the
-sessions on that machine's Rex server. Opened from a session on another host,
-where `rex-sesh` isn't installed, it shows "Sesh cannot start" instead. Close
+The picker runs on the machine that holds the current session. It lists that
+machine's Rex sessions, then the sessions on each host that `rex hosts` lists,
+marked with the host's name, such as `[devbox] api`. A host that doesn't answer
+within 3 seconds is left out. Opened from a session on another host, where
+`rex-sesh` isn't installed, the picker shows "Sesh cannot start" instead. Close
 that layer with its × button.
 
 To remove it, delete the `require("sesh")` line and `~/.config/rex/sesh.lua`,
@@ -73,7 +75,10 @@ then run `rex config reload`.
 | `f2` | Open the settings editor. |
 | `esc` | Close the picker. |
 
-The picker lists your open Rex sessions first, then your zoxide directories.
+The picker lists your open Rex sessions first, then each host's sessions, then
+your zoxide directories. A host's session switches through that host, and its
+command preview shows the session's details, because its directory isn't on this
+machine.
 Directories are named after their last path element, with parent elements added
 where two would share a name, such as `a/docs` and `b/docs`. A directory named
 like an open session is left out. Choosing a directory
@@ -126,7 +131,7 @@ native format. `rex-sesh config migrate` converts a legacy file.
 | `rex-sesh picker --wait-on-error` | After an error, wait for Enter before exiting. |
 | `rex-sesh picker --fzf` | Use the fzf picker. |
 | `rex-sesh picker --json` | Print the picker's sessions as JSON. |
-| `rex-sesh list --json` | List Rex, config, and zoxide sessions as JSON. |
+| `rex-sesh list --json` | List Rex sessions on this machine and every host, config entries, and zoxide directories as JSON. |
 | `rex-sesh preview TARGET` | Render the configured preview for a session. |
 | `rex-sesh root` | Print the current Git repository root. |
 | `rex-sesh lua [--key KEY]` | Print the Rex config module for the picker. |
@@ -137,7 +142,9 @@ native format. `rex-sesh config migrate` converts a legacy file.
 | `rex-sesh config migrate` | Convert a legacy Sesh-style config to the native format. |
 
 Without `--client`, the picker switches the app named by `REX_CLIENT`, or the
-only connected Rex app. With several apps connected, pass `--client`.
+only connected Rex app. With several apps connected, pass `--client`. On a host,
+the app has another client ID, so the picker switches the only app connected to
+that host, or the one with the same device name as this machine's app.
 
 ## Development
 

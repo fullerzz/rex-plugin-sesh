@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/fullerzz/rex-plugin-sesh/internal/config"
 	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 	pickerpkg "github.com/fullerzz/rex-plugin-sesh/internal/picker"
-	"github.com/fullerzz/rex-plugin-sesh/internal/rex"
 	"github.com/fullerzz/rex-plugin-sesh/internal/settings"
 )
 
@@ -27,6 +27,10 @@ type pickerBackend struct {
 	cfg              config.Config
 	activeConfigPath string
 	target           switchTarget
+
+	// lastStatuses is the previous RefreshAgentStatuses result.
+	statusMu     sync.Mutex
+	lastStatuses map[string]string
 }
 
 // Switch asks the Rex app to show s. The picker calls it on Enter and stays
@@ -57,21 +61,31 @@ func (b *pickerBackend) ReloadPicker(ctx context.Context) (pickerpkg.ReloadResul
 	return pickerpkg.ReloadResult{Sessions: col.Sessions}, nil
 }
 
-// RefreshAgentStatuses maps each Rex session ID to the most urgent state its
-// programs report. The picker calls it every second.
+// RefreshAgentStatuses maps each Rex session ID, on this machine and every
+// host, to the most urgent state its programs report. The picker calls it
+// every second, and clears the status of a session missing from the map. So
+// while any host fails to answer, sessions missing from this refresh keep
+// their last status.
 func (b *pickerBackend) RefreshAgentStatuses() (map[string]string, error) {
-	client := b.app.Rex
-	if client == nil {
-		client = rex.NewClient()
+	src := b.app.rexSource("")
+	sessions, _ := src.List(b.ctx)
+	if src.err != nil {
+		return nil, src.err
 	}
-	sessions, err := client.Sessions(b.ctx, "")
-	if err != nil {
-		return nil, err
+	statuses := make(map[string]string, len(sessions.Directory))
+	for _, s := range sessions.Ordered() {
+		statuses[s.SessionID] = s.AgentStatus
 	}
-	statuses := make(map[string]string, len(sessions))
-	for _, s := range sessions {
-		statuses[s.ID] = s.AgentStatus
+	b.statusMu.Lock()
+	defer b.statusMu.Unlock()
+	if len(src.hostWarnings) > 0 {
+		for id, status := range b.lastStatuses {
+			if _, ok := statuses[id]; !ok {
+				statuses[id] = status
+			}
+		}
 	}
+	b.lastStatuses = statuses
 	return statuses, nil
 }
 

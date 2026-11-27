@@ -62,3 +62,54 @@ func TestMergeKeepsOpenSessionsThatShareALabel(t *testing.T) {
 	assert.Equal(t, "session:2", items[1].SessionID)
 	assert.False(t, items[1].Configured)
 }
+
+type fakeHosts struct {
+	labels []string
+	err    error
+	hosts  map[string]fakeRex
+}
+
+func (f fakeHosts) Hosts(context.Context) ([]string, error) { return f.labels, f.err }
+func (f fakeHosts) Host(label string) SessionLister { //nolint:ireturn // RexHosts contract.
+	return f.hosts[label]
+}
+
+// Host sessions follow this machine's, in host order, marked with the host.
+// A host that fails is left out and reported; it never fails the listing.
+func TestRexSessionsAddsEachHostsSessions(t *testing.T) {
+	var failed []string
+	got, err := RexSessions{
+		Client: fakeRex{sessions: []rex.Session{{ID: "session:1", Label: "api", Current: true}}},
+		Hosts: fakeHosts{labels: []string{"devbox", "away", "lab"}, hosts: map[string]fakeRex{
+			"devbox": {sessions: []rex.Session{{ID: "session:2", Label: "api", Path: "/home/me/api", AgentStatus: "working"}}},
+			"away":   {err: errors.New("unreachable")},
+			"lab":    {sessions: []rex.Session{{ID: "session:3", Label: "train"}}},
+		}},
+		HostErr: func(host string, err error) { failed = append(failed, host+": "+err.Error()) },
+	}.List(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []model.Session{
+		{Source: "rex", Name: "api", SessionID: "session:1", Attached: true},
+		{Machine: "devbox", Source: "rex", Name: "api", Path: "/home/me/api", SessionID: "session:2", AgentStatus: "working"},
+		{Machine: "lab", Source: "rex", Name: "train", SessionID: "session:3"},
+	}, got.Ordered())
+	assert.Equal(t, []string{"away: unreachable"}, failed)
+}
+
+func TestRexSessionsKeepsLocalSessionsWhenHostsFail(t *testing.T) {
+	var failed []string
+	got, err := RexSessions{
+		Client:  fakeRex{sessions: []rex.Session{{ID: "session:1", Label: "api"}}},
+		Hosts:   fakeHosts{err: errors.New("no hosts file")},
+		HostErr: func(host string, err error) { failed = append(failed, host+": "+err.Error()) },
+	}.List(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, got.Ordered(), 1)
+	assert.Equal(t, []string{": no hosts file"}, failed)
+
+	_, err = RexSessions{
+		Client: fakeRex{err: errors.New("no server")},
+		Hosts:  fakeHosts{labels: []string{"lab"}, hosts: map[string]fakeRex{"lab": {}}},
+	}.List(context.Background())
+	require.EqualError(t, err, "no server", "this machine's failure still fails")
+}
