@@ -47,12 +47,12 @@ jobs:
               *) echo "Release ref must be a tag, got: $ref" >&2; exit 1 ;;
             esac
           fi
-          case "$tag" in
-            v*) ;;
-            *) echo "Release tag must start with v, got: $tag" >&2; exit 1 ;;
-          esac
-          if [[ ! "$tag" =~ ^v[0-9A-Za-z][0-9A-Za-z._+-]*$ ]]; then
-            echo "Release tag must match project-safe syntax: $tag" >&2
+          # The tag is the only version source: vMAJOR.MINOR.PATCH, optionally
+          # with a -PRERELEASE suffix. The justfile's release recipe and
+          # changelog.yml check the same version_re.
+          version_re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [[ ! "$tag" =~ $version_re ]]; then
+            echo "Release tag must be vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE, got: $tag" >&2
             exit 1
           fi
           if ! git check-ref-format "$ref" >/dev/null; then
@@ -90,8 +90,8 @@ jobs:
           test -z "$(gofmt -l .)"
           go vet ./...
           go test ./...
-          go build -o bin/herdr-sesh ./cmd/herdr-sesh
-          ./bin/herdr-sesh --version
+          go build -o bin/rex-sesh ./cmd/rex-sesh
+          ./bin/rex-sesh --version
 
   release:
     name: Build release assets
@@ -104,6 +104,7 @@ jobs:
       pull-requests: read
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
       commit: ${{ needs.test.outputs.commit }}
     steps:
       - name: Checkout
@@ -138,22 +139,18 @@ jobs:
           TAG: ${{ needs.test.outputs.tag }}
         run: |
           set -euo pipefail
+          # The tag is the only version source; the test job checked its form.
           tag="$TAG"
           version="${tag#v}"
-          manifest_version=$(awk -F'"' '
-            /^version = / { print $2; exit }
-          ' herdr-plugin.toml)
-          if [ "$manifest_version" != "$version" ]; then
-            echo "Tag mismatch: $tag != manifest $manifest_version" >&2
-            exit 1
-          fi
-          manifest_build_flag="-ldflags=-X=github.com/fullerzz/herdr-plugin-sesh/internal/app.Version=${version}"
-          if ! grep -Fq "\"${manifest_build_flag}\"," herdr-plugin.toml; then
-            echo "Manifest build version mismatch: expected $manifest_build_flag" >&2
-            exit 1
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          case "$version" in
+            *-*) prerelease=true ;;
+            *) prerelease=false ;;
+          esac
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build release assets
         shell: bash
@@ -162,7 +159,7 @@ jobs:
         run: |
           set -euo pipefail
           version="$VERSION"
-          module='github.com/fullerzz/herdr-plugin-sesh/internal/app'
+          module='github.com/fullerzz/rex-plugin-sesh/internal/app'
           mkdir -p dist/release dist/work
           targets=(
             linux/amd64
@@ -173,48 +170,65 @@ jobs:
           for target in "${targets[@]}"; do
             goos=${target%/*}
             goarch=${target#*/}
-            name="herdr-sesh_${version}_${goos}_${goarch}"
-            out="dist/work/${name}/bin/herdr-sesh"
+            name="rex-sesh_${version}_${goos}_${goarch}"
+            out="dist/work/${name}/bin/rex-sesh"
             mkdir -p "$(dirname "$out")"
             GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
               go build \
                 -trimpath \
                 -ldflags "-s -w -X ${module}.Version=${version}" \
                 -o "$out" \
-                ./cmd/herdr-sesh
-            cp README.md LICENSE herdr-plugin.toml "dist/work/${name}/"
+                ./cmd/rex-sesh
+            cp README.md LICENSE "dist/work/${name}/"
             tar -C dist/work -czf "dist/release/${name}.tar.gz" "$name"
           done
           smoke_dir=$(mktemp -d)
-          smoke_name="herdr-sesh_${version}_linux_amd64"
+          smoke_name="rex-sesh_${version}_linux_amd64"
           tar -xzf "dist/release/${smoke_name}.tar.gz" -C "$smoke_dir"
-          binary="$smoke_dir/${smoke_name}/bin/herdr-sesh"
-          manifest="$smoke_dir/${smoke_name}/herdr-plugin.toml"
+          packaged="$smoke_dir/${smoke_name}"
+          binary="$packaged/bin/rex-sesh"
           test -x "$binary"
-          grep -Fq './bin/herdr-sesh' "$manifest"
-          packaged_version=$(awk -F'"' '
-            /^version = / { print $2; exit }
-          ' "$manifest")
-          test "$packaged_version" = "$version"
-          test "$("$binary" --version)" = "herdr-sesh ${version}"
+          test -f "$packaged/README.md"
+          test -f "$packaged/LICENSE"
+          test "$("$binary" --version)" = "rex-sesh ${version}"
+          # With no Rex server on the runner, list prints a warning and still
+          # exits 0.
           "$binary" list --json \
-            --config testdata/herdr-sesh.toml \
-            >/tmp/herdr-sesh-release-list.json
-          test -s /tmp/herdr-sesh-release-list.json
+            --config testdata/rex-sesh.toml \
+            >"$smoke_dir/list.json"
+          test -s "$smoke_dir/list.json"
           (cd dist/release && sha256sum -- *.tar.gz > checksums.txt)
 
+      # Artifact attestations work only in public repositories on GitHub Free,
+      # Pro and Team plans; private repositories need GitHub Enterprise Cloud.
+      # This repository is private on a personal account, so the step runs only
+      # once the repository is public, and a private release doesn't fail.
+      # https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations
       - name: Attest build provenance
         if: github.event.repository.visibility == 'public'
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-checksums: dist/release/checksums.txt
 
+      - name: Resolve changelog range
+        id: changelog-range
+        shell: bash
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          range=$(bash .github/scripts/changelog-range.sh "$TAG")
+          echo "range=$range" >> "$GITHUB_OUTPUT"
+
+      # The notes hold only the commits this tag releases. git-cliff's
+      # --current would ignore the range and, for the first release, include
+      # all Herdr history from before the fork.
       - name: Generate changelog
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4
         with:
-          version: v2.13.1
+          version: v2.14.2
           config: cliff.toml
-          args: --current --strip header --verbose
+          args: --strip header --verbose ${{ steps.changelog-range.outputs.range }}
         env:
           OUTPUT: dist/release/CHANGELOG.md
           GITHUB_REPO: ${{ github.repository }}
@@ -235,18 +249,41 @@ jobs:
           set -euo pipefail
           tag="$TAG"
           version="$VERSION"
+          archive="rex-sesh_${version}_darwin_arm64.tar.gz"
           {
-            echo "# herdr-plugin-sesh ${tag}"
+            echo "# rex-sesh ${tag}"
             echo
-            echo "Sesh-style smart workspace/session management for Herdr."
+            echo "A Sesh-style session picker for the Rex terminal."
             echo
             cat dist/release/CHANGELOG.md
             echo
-            echo "## Install Plugin"
+            echo "## Install"
+            echo
+            echo "Each archive holds \`bin/rex-sesh\`, \`README.md\` and \`LICENSE\`."
+            echo "Choose the archive for your OS (\`darwin\` or \`linux\`) and CPU"
+            echo "(\`arm64\` or \`amd64\`). This example installs the macOS Apple"
+            echo "silicon build at \`~/.local/bin/rex-sesh\`:"
             echo
             echo '```bash'
-            echo "herdr plugin install fullerzz/herdr-plugin-sesh --ref ${tag}"
+            echo "gh release download ${tag} --repo ${GITHUB_REPOSITORY} --pattern '${archive}' --pattern checksums.txt"
+            echo "shasum -a 256 --check --ignore-missing checksums.txt"
+            echo "tar -xzf ${archive}"
+            echo "mkdir -p ~/.local/bin"
+            echo "install -m 755 ${archive%.tar.gz}/bin/rex-sesh ~/.local/bin/rex-sesh"
             echo '```'
+            echo
+            cat <<'NOTES'
+          If a browser downloaded the archive on macOS, clear the quarantine
+          flag: `xattr -d com.apple.quarantine ~/.local/bin/rex-sesh`.
+
+          Then follow the Rex setup in `README.md`. Run `rex-sesh lua` from
+          where you installed it, because the config module points at the
+          binary that prints it:
+
+          ```bash
+          ~/.local/bin/rex-sesh lua --key 'ctrl+a>s' > ~/.config/rex/sesh.lua
+          ```
+          NOTES
             echo
             echo "Version: ${version}"
             echo "Commit: ${COMMIT}"
@@ -255,7 +292,7 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: herdr-plugin-sesh-${{ steps.meta.outputs.tag }}
+          name: rex-sesh-${{ steps.meta.outputs.tag }}
           path: dist/release/*
 
   publish:
@@ -271,13 +308,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.release.outputs.tag }}
+          PRERELEASE: ${{ needs.release.outputs.prerelease }}
           EXPECTED_COMMIT: ${{ needs.release.outputs.commit }}
         run: |
           set -euo pipefail
           mkdir -p dist/release
           gh run download "$GITHUB_RUN_ID" \
             --repo "$GITHUB_REPOSITORY" \
-            --name "herdr-plugin-sesh-${TAG}" \
+            --name "rex-sesh-${TAG}" \
             --dir dist/release
 
           if ! object=$(gh api \
@@ -308,10 +346,12 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" \
               --title "$TAG" \
+              --prerelease="$PRERELEASE" \
               --notes-file dist/release/RELEASE_NOTES.md
           else
             gh release create "$TAG" dist/release/* \
               --verify-tag \
               --title "$TAG" \
+              --prerelease="$PRERELEASE" \
               --notes-file dist/release/RELEASE_NOTES.md
           fi

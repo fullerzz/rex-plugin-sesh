@@ -30,8 +30,8 @@ jobs:
       - name: Run tests
         run: just test
 
-      # test-release-ref returns once release tooling reads a version source
-      # other than the removed herdr-plugin.toml; see the justfile's check.
+      - name: Test release tooling
+        run: just test-release-ref
 
       - name: Build
         run: just build

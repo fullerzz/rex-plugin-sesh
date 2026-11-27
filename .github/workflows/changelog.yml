@@ -19,27 +19,37 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify version
+      - name: Verify tag
         shell: bash
         env:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          version="${TAG#v}"
-          manifest_version=$(awk -F'"' '
-            /^version = / { print $2; exit }
-          ' herdr-plugin.toml)
-          if [ "$manifest_version" != "$version" ]; then
-            echo "Tag mismatch: $TAG != manifest $manifest_version" >&2
+          # The tag is the only version source: vMAJOR.MINOR.PATCH, optionally
+          # with a -PRERELEASE suffix. The justfile's release recipe and
+          # release.yml check the same version_re.
+          version_re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [[ ! "$TAG" =~ $version_re ]]; then
+            echo "Release tag must be vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE, got: $TAG" >&2
             exit 1
           fi
+
+      # The range keeps the Herdr history from before the fork out of the
+      # changelog.
+      - name: Resolve changelog range
+        id: changelog-range
+        shell: bash
+        run: |
+          set -euo pipefail
+          range=$(bash .github/scripts/changelog-range.sh)
+          echo "range=$range" >> "$GITHUB_OUTPUT"
 
       - name: Generate changelog
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4
         with:
-          version: v2.13.1
+          version: v2.14.2
           config: cliff.toml
-          args: --verbose
+          args: --verbose ${{ steps.changelog-range.outputs.range }}
         env:
           OUTPUT: CHANGELOG.md
 

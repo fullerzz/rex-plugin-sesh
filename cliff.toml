@@ -1,9 +1,13 @@
 # git-cliff configuration
 # https://git-cliff.org/docs/configuration
+#
+# The history before the Rex fork is Herdr's and must never reach the
+# changelog. Every git-cliff run passes the commit range that
+# .github/scripts/changelog-range.sh prints, which holds the fork base.
 
 [remote.github]
 owner = "fullerzz"
-repo = "herdr-plugin-sesh"
+repo = "rex-plugin-sesh"
 
 [changelog]
 body = """
@@ -30,8 +34,8 @@ body = """
 trim = true
 render_always = true
 postprocessors = [
-    { pattern = "(^|[^\\x5b])#([0-9]+)", replace = '${1}[#${2}](https://github.com/fullerzz/herdr-plugin-sesh/issues/${2})' },
-    { pattern = "<REPO>", replace = "https://github.com/fullerzz/herdr-plugin-sesh" },
+    { pattern = "(^|[^\\x5b])#([0-9]+)", replace = '${1}[#${2}](https://github.com/fullerzz/rex-plugin-sesh/issues/${2})' },
+    { pattern = "<REPO>", replace = "https://github.com/fullerzz/rex-plugin-sesh" },
 ]
 
 [git]
@@ -66,7 +70,7 @@ commit_parsers = [
 ]
 filter_commits = false
 link_parsers = [
-    { pattern = "#(\\d+)", href = "https://github.com/fullerzz/herdr-plugin-sesh/issues/$1" },
+    { pattern = "#(\\d+)", href = "https://github.com/fullerzz/rex-plugin-sesh/issues/$1" },
 ]
 use_branch_tags = false
 topo_order = false

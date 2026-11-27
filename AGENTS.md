@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is `rex-sesh`, a Go CLI that brings a Sesh-style session picker to the Rex terminal. It is forked from herdr-plugin-sesh. The Herdr client, plugin manifest, and history watcher have been removed. The docs site and the release tooling still describe Herdr until they are rewritten.
+This repository is `rex-sesh`, a Go CLI that brings a Sesh-style session picker to the Rex terminal. It is forked from herdr-plugin-sesh. The Herdr client, plugin manifest, and history watcher have been removed. The docs site and the release tooling describe rex-sesh for Rex.
 
 - `cmd/rex-sesh/` contains the executable entry point.
 - `internal/app/` owns CLI routing and command behavior.
@@ -50,4 +50,4 @@ Pull requests should include a short description, linked issue when applicable, 
 
 ## Release & Configuration Notes
 
-Release tags must start with `v`. The release version source is undecided. `just release`, `release.yml`, `changelog.yml`, and `cliff.toml` still read the removed `herdr-plugin.toml`, so fix them before the first release. Configuration lookup order is documented in `README.md`; preserve compatibility with Sesh-style TOML and existing `testdata/sesh.toml` fixtures.
+The git tag is the version: `just release vX.Y.Z` tags and pushes, and `release.yml` builds the assets. Every git-cliff call takes its commit range from `.github/scripts/changelog-range.sh`, so the changelog starts at the Rex fork. `just test-release-ref` checks the release tooling. Configuration lookup order is documented in `README.md`; preserve compatibility with Sesh-style TOML and existing `testdata/sesh.toml` fixtures.

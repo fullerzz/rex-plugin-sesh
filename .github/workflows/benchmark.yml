@@ -71,7 +71,7 @@ jobs:
           awk -F '│' '
             /^pkg: / {
               pkg = $0
-              sub(/^pkg: github.com\/fullerzz\/herdr-plugin-sesh\/internal\//, "", pkg)
+              sub(/^pkg: github.com\/fullerzz\/rex-plugin-sesh\/internal\//, "", pkg)
             }
             /│.*vs base/ {
               metric = $2

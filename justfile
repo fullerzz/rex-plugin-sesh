@@ -96,16 +96,15 @@ test:
 
 # Run the application benchmark suite
 bench count='1':
-    @echo 'Unit commands/op better=lower assume=exact'
     @echo 'Unit canceled/op assume=exact'
     @echo 'Unit completed/op assume=exact'
-    go test -run '^$' -bench=. -benchmem -count={{count}} ./internal/sources ./internal/picker
+    go test -run '^$' -bench=. -benchmem -count={{count}} ./internal/picker
 
 # Compare two saved benchmark runs
 bench-compare base candidate:
     go tool benchstat "base={{base}}" "candidate={{candidate}}"
 
-# Exercise release tag resolution against a same-named branch/tag collision
+# Exercise the release recipe, workflows, changelog range and tag resolution in throwaway repositories
 test-release-ref:
     bash .github/scripts/test-release-ref.sh
 
@@ -119,10 +118,12 @@ preview-changelog $version='':
         exit 1
     fi
 
+    # The range keeps the Herdr history from before the fork out of the changelog.
+    range=$(bash .github/scripts/changelog-range.sh)
     if [[ -n "$version" ]]; then
-        mise exec -- git-cliff --tag "$version"
+        mise exec -- git-cliff --tag "$version" "$range"
     else
-        mise exec -- git-cliff
+        mise exec -- git-cliff "$range"
     fi
 
 # Validate, tag, and trigger the GitHub release workflow
@@ -131,9 +132,11 @@ release $tag:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    expected_tag="v$(sed -nE 's/^version = "([^"]+)".*/\1/p' herdr-plugin.toml)"
-    if [[ "$tag" != "$expected_tag" ]]; then
-        echo "Tag mismatch: $tag != manifest $expected_tag" >&2
+    # The tag is the only version source: vMAJOR.MINOR.PATCH, optionally with a
+    # -PRERELEASE suffix. release.yml and changelog.yml check the same version_re.
+    version_re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+    if [[ ! "$tag" =~ $version_re ]]; then
+        echo "Release tag must be vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE, got: $tag" >&2
         exit 1
     fi
     current_branch=$(git branch --show-current)
@@ -149,6 +152,11 @@ release $tag:
         echo "Tag already exists: $tag" >&2
         exit 1
     fi
+    remote_tag=$(git ls-remote --tags origin "refs/tags/$tag")
+    if [[ -n "$remote_tag" ]]; then
+        echo "Tag already exists on origin: $tag" >&2
+        exit 1
+    fi
     if [[ -z "${GITHUB_TOKEN:-}" ]]; then
         echo "GITHUB_TOKEN is required for GitHub changelog metadata" >&2
         exit 1
@@ -157,8 +165,11 @@ release $tag:
     just check
     just build
     ./bin/rex-sesh --version
+    # With no Rex server, list prints a warning and still exits 0.
     ./bin/rex-sesh list --json --config testdata/rex-sesh.toml >/dev/null
-    mise exec -- git-cliff --tag "$tag" --output CHANGELOG.md
+    # The range keeps the Herdr history from before the fork out of the changelog.
+    range=$(bash .github/scripts/changelog-range.sh)
+    mise exec -- git-cliff --tag "$tag" --output CHANGELOG.md "$range"
     if ! grep -Fq "## ${tag} " CHANGELOG.md; then
         echo "Generated changelog is missing $tag" >&2
         exit 1
@@ -176,7 +187,6 @@ release $tag:
     fi
     git push --atomic origin HEAD "refs/tags/$tag"
 
-# Run all checks for code changes. test-release-ref returns once release
-# tooling reads a version source other than the removed herdr-plugin.toml.
-check: lint fmt-check test
-    @echo "{{ BOLD + GREEN + BG_BLACK }} All checks passed!{{ NORMAL }}"
+# Run all checks for code changes
+check: lint fmt-check test test-release-ref
+    @echo "{{ BOLD + GREEN + BG_BLACK }} All checks passed!{{ NORMAL }}"
