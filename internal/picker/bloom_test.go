@@ -28,13 +28,13 @@ import (
 // Write them again with UPDATE_PICKER_FRAMES=1.
 func TestPickerFramesMatchGolden(t *testing.T) {
 	sessions := []model.Session{
-		{Name: "api", Source: "rex", WorkspaceID: "w1", Path: "/src/api", AgentStatus: "working"},
+		{Name: "api", Source: "rex", SessionID: "w1", Path: "/src/api", AgentStatus: "working"},
 		{Name: "web", Source: "zoxide", Path: "/src/web"},
 		{Name: "dots", Source: "config", Path: "/src/dots"},
 	}
 	many := make([]model.Session, 30)
 	for i := range many {
-		many[i] = model.Session{Name: fmt.Sprintf("workspace-%02d", i), Source: "rex", WorkspaceID: fmt.Sprintf("w%d", i)}
+		many[i] = model.Session{Name: fmt.Sprintf("workspace-%02d", i), Source: "rex", SessionID: fmt.Sprintf("w%d", i)}
 	}
 	longPreview := func(m *teaModel) {
 		lines := make([]string, 40)
@@ -89,11 +89,11 @@ func TestPickerFramesMatchGolden(t *testing.T) {
 		{name: "loading split", width: 120, height: 20, setup: func(m *teaModel) { m.previewLoading = true }},
 		{name: "loading stacked", width: 80, height: 20, setup: func(m *teaModel) { m.previewLoading = true }},
 		{name: "closing", width: 120, height: 28, setup: func(m *teaModel) {
-			m.closingWorkspaceID = "w1"
+			m.closingSessionID = "w1"
 			m.previewKey = ""
 		}},
 		{name: "closing list only", width: 120, height: 28, opts: DisplayOptions{HidePreview: true}, setup: func(m *teaModel) {
-			m.closingWorkspaceID = "w1"
+			m.closingSessionID = "w1"
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -177,7 +177,7 @@ func TestPreviewShowsSkeletonWhileLoading(t *testing.T) {
 }
 
 func TestClickWhileSettingsOpenDoesNotChooseWorkspace(t *testing.T) {
-	m := newTeaModel([]model.Session{{Source: "rex", Name: "api", WorkspaceID: "w1"}}, Options{DisplayOptions: DisplayOptions{HidePreview: true}})
+	m := newTeaModel([]model.Session{{Source: "rex", Name: "api", SessionID: "w1"}}, Options{DisplayOptions: DisplayOptions{HidePreview: true}})
 	m.width, m.height = 120, 28
 	m.View()
 	editor, err := settings.Open(config.LoadOptions{Path: filepath.Join(t.TempDir(), "config.toml")}, nil)
@@ -205,8 +205,8 @@ func TestBloomKeepsPreviewColors(t *testing.T) {
 
 func TestRowClickPassesThroughLayers(t *testing.T) {
 	items := []model.Session{
-		{Source: "rex", Name: "api", WorkspaceID: "w1"},
-		{Source: "rex", Name: "web", WorkspaceID: "w2"},
+		{Source: "rex", Name: "api", SessionID: "w1"},
+		{Source: "rex", Name: "web", SessionID: "w2"},
 	}
 	for _, tc := range []struct {
 		name  string
@@ -238,8 +238,8 @@ func TestRowClickPassesThroughLayers(t *testing.T) {
 
 func TestToastTakesClicksOnItself(t *testing.T) {
 	items := []model.Session{
-		{Source: "rex", Name: "api", WorkspaceID: "w1"},
-		{Source: "rex", Name: "web", WorkspaceID: "w2"},
+		{Source: "rex", Name: "api", SessionID: "w1"},
+		{Source: "rex", Name: "web", SessionID: "w2"},
 	}
 	m := newTeaModel(items, Options{DisplayOptions: DisplayOptions{HidePreview: true}})
 	m.width, m.height = 120, 12
@@ -661,7 +661,7 @@ func TestDividerGripAsksForPointerMotion(t *testing.T) {
 func TestMouseScrollIgnoredWhileWorkspaceCloses(t *testing.T) {
 	items := make([]model.Session, 30)
 	for i := range items {
-		items[i] = model.Session{Name: fmt.Sprintf("workspace-%02d", i), WorkspaceID: fmt.Sprintf("w%d", i)}
+		items[i] = model.Session{Name: fmt.Sprintf("workspace-%02d", i), SessionID: fmt.Sprintf("w%d", i)}
 	}
 	m := newTeaModel(items, Options{DisplayOptions: DisplayOptions{HidePreview: true}})
 	t.Cleanup(func() { m.cancelActivePreview() })
@@ -670,7 +670,7 @@ func TestMouseScrollIgnoredWhileWorkspaceCloses(t *testing.T) {
 	// The frame on screen is still the one drawn before the close started,
 	// so its handlers are the ones that run.
 	m.View()
-	m.closingWorkspaceID = "w0"
+	m.closingSessionID = "w0"
 	scrollbarX := m.contentWidth() + horizontalPadding - 1
 
 	for _, msg := range []tea.Msg{
@@ -684,7 +684,7 @@ func TestMouseScrollIgnoredWhileWorkspaceCloses(t *testing.T) {
 	require.Equal(t, 0, m.list.Selected)
 	require.Zero(t, m.listOffset)
 
-	m.closingWorkspaceID = ""
+	m.closingSessionID = ""
 	m.View()
 	updated, _ := m.Update(tea.MouseWheelMsg{X: 20, Y: 7, Button: tea.MouseWheelDown})
 
@@ -748,20 +748,20 @@ func TestFocusedBoxBorderIsLit(t *testing.T) {
 func TestClosingWorkspaceTurnsItsBoxRed(t *testing.T) {
 	for _, hidden := range []bool{false, true} {
 		t.Run(fmt.Sprintf("hide preview %t", hidden), func(t *testing.T) {
-			m := newTeaModel([]model.Session{{Source: "rex", Name: "api", WorkspaceID: "w1"}}, Options{DisplayOptions: DisplayOptions{HidePreview: hidden}})
+			m := newTeaModel([]model.Session{{Source: "rex", Name: "api", SessionID: "w1"}}, Options{DisplayOptions: DisplayOptions{HidePreview: hidden}})
 			t.Cleanup(func() { m.cancelActivePreview() })
 			m.width, m.height = 120, 20
 			red := fgSequence(redColor)
 			require.NotContains(t, m.View().Content, red)
 
-			m.closingWorkspaceID = "w1"
+			m.closingSessionID = "w1"
 			assert.Contains(t, strings.Split(m.View().Content, "\n")[listFirstRowIndex-1], red)
 		})
 	}
 }
 
 func TestPreviewFadesInTextForAnotherWorkspaceOnly(t *testing.T) {
-	m := newTeaModel([]model.Session{{Source: "rex", Name: "api", WorkspaceID: "w1"}}, Options{})
+	m := newTeaModel([]model.Session{{Source: "rex", Name: "api", SessionID: "w1"}}, Options{})
 	t.Cleanup(func() { m.cancelActivePreview() })
 	m.width, m.height, m.reduceMotion = 120, 20, false
 	settle := func() { m.previewIn.Advance(time.Now().Add(time.Hour)) }
@@ -883,11 +883,11 @@ func TestPreviewShownMatchesTheLayout(t *testing.T) {
 }
 
 func TestCollapsedPreviewMovesCloseStatusToTheFooter(t *testing.T) {
-	m := newTeaModel([]model.Session{{Source: "rex", Name: "api", WorkspaceID: "w1"}}, Options{})
+	m := newTeaModel([]model.Session{{Source: "rex", Name: "api", SessionID: "w1"}}, Options{})
 	t.Cleanup(func() { m.cancelActivePreview() })
 	m.width, m.height = 80, 11
 	require.False(t, m.previewShown(), "the stacked preview collapses at this height")
-	m.closingWorkspaceID = "w1"
+	m.closingSessionID = "w1"
 
 	view := m.View().Content
 	assert.Contains(t, ansi.Strip(view), "Closing session...")
@@ -899,8 +899,8 @@ func TestCollapsedPreviewMovesCloseStatusToTheFooter(t *testing.T) {
 
 func shortPaneItems() []model.Session {
 	return []model.Session{
-		{Source: "rex", Name: "workspace-00", WorkspaceID: "w0"},
-		{Source: "rex", Name: "workspace-01", WorkspaceID: "w1"},
+		{Source: "rex", Name: "workspace-00", SessionID: "w0"},
+		{Source: "rex", Name: "workspace-01", SessionID: "w1"},
 	}
 }
 
@@ -921,7 +921,7 @@ func TestShortPaneKeepsWorkspaceRowAndCloseStatus(t *testing.T) {
 			updated, closing := m.Update(tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl})
 			m = updated.(teaModel)
 			require.NotNil(t, closing)
-			require.Equal(t, "w0", m.closingWorkspaceID)
+			require.Equal(t, "w0", m.closingSessionID)
 			assert.Contains(t, ansi.Strip(m.View().Content), "Closing session...")
 		})
 	}
@@ -1003,8 +1003,8 @@ func TestDividerDragWhileSettingsLoadIsDropped(t *testing.T) {
 
 func TestLoadingPlaceholderShowsWhileWorkspaceCloses(t *testing.T) {
 	items := []model.Session{
-		{Source: "rex", Name: "api", WorkspaceID: "w1"},
-		{Source: "rex", Name: "web", WorkspaceID: "w2"},
+		{Source: "rex", Name: "api", SessionID: "w1"},
+		{Source: "rex", Name: "web", SessionID: "w2"},
 	}
 	m := newTeaModel(items, Options{Backend: &fakeBackend{}})
 	t.Cleanup(func() { m.cancelActivePreview() })
@@ -1013,7 +1013,7 @@ func TestLoadingPlaceholderShowsWhileWorkspaceCloses(t *testing.T) {
 	m = updated.(teaModel)
 	updated, _ = m.Update(tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl})
 	m = updated.(teaModel)
-	require.Equal(t, "w1", m.closingWorkspaceID)
+	require.Equal(t, "w1", m.closingSessionID)
 	for range 2 { // focus the list, then select web
 		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		m = updated.(teaModel)
@@ -1112,7 +1112,7 @@ func TestWheelStepsOverPreviewBorderAddUp(t *testing.T) {
 
 func TestReduceMotionStillsAgentSpinner(t *testing.T) {
 	t.Setenv("REX_SESH_REDUCE_MOTION", "1")
-	m := newTeaModel([]model.Session{{Name: "api", Source: "rex", WorkspaceID: "w1", AgentStatus: "working"}}, Options{})
+	m := newTeaModel([]model.Session{{Name: "api", Source: "rex", SessionID: "w1", AgentStatus: "working"}}, Options{})
 	t.Cleanup(func() { m.cancelActivePreview() })
 	m.width, m.height = 120, 12
 	before := strippedLines(m.View().Content)[listFirstRowIndex]

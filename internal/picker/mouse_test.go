@@ -99,8 +99,8 @@ func (m statusClickTestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func TestTeaModelClickUsesLastRenderedFrame(t *testing.T) {
 	items := []model.Session{
-		{Source: "rex", Name: "api-workspace", WorkspaceID: "w1"},
-		{Source: "rex", Name: "web-workspace", WorkspaceID: "w2"},
+		{Source: "rex", Name: "api-workspace", SessionID: "w1"},
+		{Source: "rex", Name: "web-workspace", SessionID: "w2"},
 	}
 	output := &mouseTestOutput{marker: "web-workspace", initial: make(chan struct{})}
 	statusApplied := make(chan struct{})
@@ -153,9 +153,9 @@ func TestTeaModelClickWithMultilinePrompt(t *testing.T) {
 			cfg, _, err := config.Load(config.LoadOptions{Path: configPath})
 			require.NoError(t, err)
 			m := newTeaModel([]model.Session{
-				{Source: "rex", Name: "api", WorkspaceID: "w1"},
-				{Source: "rex", Name: "web", WorkspaceID: "w2"},
-				{Source: "rex", Name: "cli", WorkspaceID: "w3"},
+				{Source: "rex", Name: "api", SessionID: "w1"},
+				{Source: "rex", Name: "web", SessionID: "w2"},
+				{Source: "rex", Name: "cli", SessionID: "w3"},
 			}, Options{DisplayOptions: DisplayOptions{HidePreview: !cfg.TUI.ShowPreview, Prompt: cfg.TUI.Prompt}})
 			t.Cleanup(func() { m.cancelActivePreview() })
 			m.width, m.height = tc.width, 28
@@ -171,7 +171,7 @@ func TestTeaModelClickWithMultilinePrompt(t *testing.T) {
 			chosen, output := runMouseInput(t, m, fmt.Sprintf("\x1b[<0;21;%dM", row+1))
 			require.Contains(t, ansi.Strip(output), "web")
 			require.True(t, chosen.chosen)
-			assert.Equal(t, "w2", chosen.choice.WorkspaceID)
+			assert.Equal(t, "w2", chosen.choice.SessionID)
 		})
 	}
 }
@@ -180,8 +180,8 @@ func TestTeaModelIgnoresStaleWorkspaceClick(t *testing.T) {
 	for _, state := range []string{"filtered out", "closing", "settings loading", "settings open"} {
 		t.Run(state, func(t *testing.T) {
 			m := newTeaModel([]model.Session{
-				{Source: "rex", Name: "api", WorkspaceID: "w1"},
-				{Source: "rex", Name: "web", WorkspaceID: "w2"},
+				{Source: "rex", Name: "api", SessionID: "w1"},
+				{Source: "rex", Name: "web", SessionID: "w2"},
 			}, Options{DisplayOptions: DisplayOptions{HidePreview: true}})
 			m.width, m.height = 120, 28
 			click := m.View().OnMouse(tea.MouseClickMsg{X: 20, Y: 5, Button: tea.MouseLeft})
@@ -190,7 +190,7 @@ func TestTeaModelIgnoresStaleWorkspaceClick(t *testing.T) {
 			case "filtered out":
 				m.list.Filter("web")
 			case "closing":
-				m.closingWorkspaceID = "w1"
+				m.closingSessionID = "w1"
 			case "settings loading":
 				m.settingsBusy = true
 			case "settings open":

@@ -70,8 +70,8 @@ func (m *Model) Move(delta int) {
 }
 func (m *Model) UpdateAgentStatuses(statuses map[string]string) {
 	for i := range m.All {
-		if m.All[i].WorkspaceID != "" {
-			m.All[i].AgentStatus = statuses[m.All[i].WorkspaceID]
+		if m.All[i].SessionID != "" {
+			m.All[i].AgentStatus = statuses[m.All[i].SessionID]
 		}
 	}
 	m.Filter(m.Query)

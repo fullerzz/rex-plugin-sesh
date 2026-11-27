@@ -195,7 +195,7 @@ func (m teaModel) filterRows() int {
 // selectable reports whether the mouse may move or choose the selection. It
 // may not while a workspace closes or settings reload.
 func (m teaModel) selectable() bool {
-	return m.closingWorkspaceID == "" && !m.settingsBusy
+	return m.closingSessionID == "" && !m.settingsBusy
 }
 
 func (m teaModel) pickerLayers(width int) []bloom.LayerNode {
@@ -232,7 +232,7 @@ func fitText(text string, width int) (bloom.SlotNode, int) {
 //nolint:ireturn // A shaking box is drawn through a transition.
 func (m teaModel) listBox(width int) bloom.Child {
 	style := panel(m.listFocused)
-	if m.closingWorkspaceID != "" && !m.previewShown() {
+	if m.closingSessionID != "" && !m.previewShown() {
 		style = closingPanel()
 	}
 	box := bloom.Box(style.PaddingLeft(1), m.listBody(width-panelInset)).
@@ -361,7 +361,7 @@ func (m teaModel) dragDivider(e on.Event) tea.Cmd {
 // while a workspace closes.
 func (m teaModel) previewBox(width int) routed {
 	style := panel(false)
-	if m.closingWorkspaceID != "" {
+	if m.closingSessionID != "" {
 		style = closingPanel()
 	}
 	return routed(func(frame func() *bloom.Frame) bloom.Child {
@@ -414,7 +414,7 @@ func (m teaModel) previewWheel(frame func() *bloom.Frame) func(int, int) tea.Cmd
 func (m teaModel) previewBody(width int) bloom.FlexNode {
 	text := strings.TrimRight(m.preview, "\n")
 	switch {
-	case m.closingWorkspaceID != "" && (m.previewKey == "" || m.quitAfterWorkspaceClose):
+	case m.closingSessionID != "" && (m.previewKey == "" || m.quitAfterWorkspaceClose):
 		status := "Closing session..."
 		if m.quitAfterWorkspaceClose {
 			status = "Cancelling session close..."

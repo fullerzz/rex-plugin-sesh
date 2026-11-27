@@ -17,7 +17,7 @@ func TestSessionJSONOmitsInternalPickerFields(t *testing.T) {
 		WindowConfigs: []WindowConfig{{
 			Name: "dev",
 		}},
-		Worktree: WorktreeRelation{Linked: true, ParentWorkspaceID: "w-parent", ParentWorkspaceName: "parent"},
+		Worktree: WorktreeRelation{Linked: true, ParentSessionID: "w-parent", ParentSessionName: "parent"},
 	}
 	b, err := json.Marshal(s)
 	require.NoError(t, err)
@@ -41,12 +41,12 @@ func TestKeyIsStableAndSourceScoped(t *testing.T) {
 	require.NotEqual(t, Key(c), Key(a))
 	b.AgentStatus = "working"
 	require.Equal(t, Key(b), Key(a))
-	b.Worktree = WorktreeRelation{Linked: true, ParentWorkspaceID: "w-parent", ParentWorkspaceName: "parent"}
+	b.Worktree = WorktreeRelation{Linked: true, ParentSessionID: "w-parent", ParentSessionName: "parent"}
 	assert.Equal(t, Key(b), Key(a))
 }
 
 func TestRemoteSessionIdentityIncludesMachineAndJSONPreservesIt(t *testing.T) {
-	local := Session{Source: "rex", Name: "api", Path: "/src/api", WorkspaceID: "sp1"}
+	local := Session{Source: "rex", Name: "api", Path: "/src/api", SessionID: "sp1"}
 	remote := local
 	remote.Machine = "buntu26"
 	assert.NotEqual(t, Key(local), Key(remote))

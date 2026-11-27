@@ -31,10 +31,10 @@ var newScreenReader = func() screenReader { return rex.NewClient() }
 
 // RenderPane returns the visible screen of the session's preview block.
 func RenderPane(ctx context.Context, s model.Session) (string, error) {
-	if s.Source != "rex" || s.WorkspaceID == "" || s.BlockID == "" {
+	if s.Source != "rex" || s.SessionID == "" || s.BlockID == "" {
 		return "", ErrPaneUnavailable
 	}
-	return newScreenReader().Screen(ctx, s.WorkspaceID, s.BlockID)
+	return newScreenReader().Screen(ctx, s.SessionID, s.BlockID)
 }
 
 // Render previews s. A remote session's preview runs nothing and shows its
@@ -44,8 +44,8 @@ func Render(ctx context.Context, s model.Session, fallbackCommand string) (strin
 		return remoteSummary(s), nil
 	}
 	if s.Path == "" {
-		if s.WorkspaceID != "" {
-			return fmt.Sprintf("session: %s\nid: %s\npath: %s\n", s.Name, s.WorkspaceID, s.Path), nil
+		if s.SessionID != "" {
+			return fmt.Sprintf("session: %s\nid: %s\npath: %s\n", s.Name, s.SessionID, s.Path), nil
 		}
 		return "No item path available\n", nil
 	}
@@ -57,14 +57,14 @@ func Render(ctx context.Context, s model.Session, fallbackCommand string) (strin
 	if cmd != "" {
 		return runShell(ctx, config.SubstitutePath(cmd, s.Path))
 	}
-	if s.WorkspaceID != "" {
-		return fmt.Sprintf("session: %s\nid: %s\npath: %s\n", s.Name, s.WorkspaceID, s.Path), nil
+	if s.SessionID != "" {
+		return fmt.Sprintf("session: %s\nid: %s\npath: %s\n", s.Name, s.SessionID, s.Path), nil
 	}
 	return directoryFallback(s.Path)
 }
 
 func remoteSummary(s model.Session) string {
-	return fmt.Sprintf("workspace: %s\nmachine: %s\nid: %s\npath: %s\n", s.Name, s.Machine, s.WorkspaceID, s.Path)
+	return fmt.Sprintf("workspace: %s\nmachine: %s\nid: %s\npath: %s\n", s.Name, s.Machine, s.SessionID, s.Path)
 }
 
 func runShell(ctx context.Context, command string) (string, error) {

@@ -15,11 +15,11 @@ import (
 func TestPanePreviewToggleRefreshAndSelection(t *testing.T) {
 	oldPane, oldPreview := renderPanePreview, renderPreview
 	t.Cleanup(func() { renderPanePreview, renderPreview = oldPane, oldPreview })
-	renderPanePreview = func(_ context.Context, s model.Session) (string, error) { return "pane " + s.WorkspaceID, nil }
+	renderPanePreview = func(_ context.Context, s model.Session) (string, error) { return "pane " + s.SessionID, nil }
 	renderPreview = func(_ context.Context, _ model.Session, command string) (string, error) { return command, nil }
 	m := newTeaModel([]model.Session{
-		{Source: "rex", Name: "one", WorkspaceID: "w1"},
-		{Source: "rex", Name: "two", WorkspaceID: "w2"},
+		{Source: "rex", Name: "one", SessionID: "w1"},
+		{Source: "rex", Name: "two", SessionID: "w2"},
 	}, Options{DisplayOptions: DisplayOptions{DefaultPreviewCommand: "configured preview"}})
 	initialContext, initialID, initialKey := m.previewContext, m.previewRequestID, m.previewKey
 	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
@@ -122,7 +122,7 @@ func TestInitialPreviewMode(t *testing.T) {
 				rendered += "command"
 				return rendered, nil
 			}
-			m := newTeaModel([]model.Session{{Source: "rex", WorkspaceID: "w1"}}, Options{DisplayOptions: DisplayOptions{PreviewMode: tc.mode, HidePreview: tc.hidden}})
+			m := newTeaModel([]model.Session{{Source: "rex", SessionID: "w1"}}, Options{DisplayOptions: DisplayOptions{PreviewMode: tc.mode, HidePreview: tc.hidden}})
 			executeTeaCommand(m.Init())
 			require.Equal(t, tc.want, rendered)
 			if !tc.hidden {

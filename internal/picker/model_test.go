@@ -50,8 +50,8 @@ func TestFilterRanksNameMatchesBeforePathMatches(t *testing.T) {
 }
 func TestFilterKeepsNameMatchAheadOfPathOnlyWorktreeParent(t *testing.T) {
 	m := New([]model.Session{
-		{Source: "rex", Name: "backend", Path: "/work/api", WorkspaceID: "w-parent"},
-		{Source: "rex", Name: "api-fix", Path: "/work/api-fix", WorkspaceID: "w-child", Worktree: model.WorktreeRelation{Linked: true, ParentWorkspaceID: "w-parent"}},
+		{Source: "rex", Name: "backend", Path: "/work/api", SessionID: "w-parent"},
+		{Source: "rex", Name: "api-fix", Path: "/work/api-fix", SessionID: "w-child", Worktree: model.WorktreeRelation{Linked: true, ParentSessionID: "w-parent"}},
 	})
 
 	m.Filter("api")

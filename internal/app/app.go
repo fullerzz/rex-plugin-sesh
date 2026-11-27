@@ -334,7 +334,7 @@ type switchTarget struct {
 func currentSessionID(sessions []model.Session) string {
 	for _, s := range sessions {
 		if s.Attached {
-			return s.WorkspaceID
+			return s.SessionID
 		}
 	}
 	return ""
@@ -342,7 +342,7 @@ func currentSessionID(sessions []model.Session) string {
 
 // switchTo asks the Rex app to show s.
 func (a *App) switchTo(ctx context.Context, target switchTarget, s model.Session) error {
-	if s.Source != "rex" || s.WorkspaceID == "" {
+	if s.Source != "rex" || s.SessionID == "" {
 		return fmt.Errorf("%q is not an open Rex session", s.DisplayName())
 	}
 	client := rex.NewClient()
@@ -350,7 +350,7 @@ func (a *App) switchTo(ctx context.Context, target switchTarget, s model.Session
 	if err != nil {
 		return err
 	}
-	return client.SelectSession(ctx, clientID, s.WorkspaceID)
+	return client.SelectSession(ctx, clientID, s.SessionID)
 }
 
 // appLister lists connected Rex apps; *rex.Client implements it.
@@ -469,7 +469,7 @@ func stateDir() string {
 // directory dir is true and only Path is set: the caller names it.
 func resolveTarget(candidates []model.Session, target string) (s model.Session, dir, ok bool) {
 	for _, c := range candidates {
-		if c.WorkspaceID != "" && c.WorkspaceID == target {
+		if c.SessionID != "" && c.SessionID == target {
 			return c, false, true
 		}
 	}

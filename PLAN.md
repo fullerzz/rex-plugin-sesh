@@ -175,7 +175,7 @@ Done in commit `e5d8aeb`, which is now `main`. The `strip-herdr` branch and the 
 Done on branch `rex-client`. The work is staged, not committed.
 
 - `internal/rex` runs `rex --autostart=false do - --json` with the embedded `sessions.lua`. A missing server is an error, and no new server starts. The binary comes from `REX_SESH_REX_BIN`, then `$REX_BIN_DIR/rex`, then `rex` on PATH.
-- `sources.RexSessions` (source name `rex`) lists each open session. Its label becomes the name, the focused terminal's directory becomes the path, and the session ID goes in `WorkspaceID`.
+- `sources.RexSessions` (source name `rex`) lists each open session. Its label becomes the name, the focused terminal's directory becomes the path, and the session ID goes in `WorkspaceID` (now `SessionID`, see milestone 7).
 - `list`, `picker` and `preview` include Rex sessions first. The default `source_order` is `rex, config, zoxide, dir`. A `herdr` entry from a herdr-sesh config is treated as `rex`.
 - When Rex is unavailable, `list` and `picker --json` print one warning and continue, and `list` skips writing its cache. The TUI and fzf pickers hold warnings until they exit. `preview` ignores the error.
 - `Merge` keeps two open sessions that share a label. A configured entry with that label merges into the first.
@@ -210,7 +210,7 @@ Done on branch `picker-rex`, then committed to `main` under the standing approva
 - Milestone 5: a picker that fails before opening (Rex unavailable) exits at once, and its floating layer closes with it. From a key binding, the error would flash and vanish, so the launch path must keep it readable.
 - The fzf picker (`--fzf` or `REX_SESH_PICKER=fzf`) lists Rex sessions only but shows no `●` mark.
 - Inert settings: `picker.workspace_sort` (`recent` and `agent` have no data), `picker.show_last_workspace` (the footer is hidden), and `ctrl+o` pane mode (shows "pane preview is not available yet" until milestone 6).
-- `WorkspaceID` still holds the Rex session ID. The rename to `SessionID` is a separate refactor.
+- `WorkspaceID` still holds the Rex session ID. The rename to `SessionID` is a separate refactor (done in milestone 7).
 - `picker.herdr_theme_inherit` still reads Herdr's theme file.
 
 ## Milestone 4 status (2026-11-27)
@@ -280,3 +280,18 @@ Done on branch `pane-preview`, then committed to `main` under the standing appro
 
 - Each refresh runs the session script, which attaches to every session for a moment, once a second while the picker is open.
 - The pane preview shows the visible screen only, not the scrollback.
+
+## Milestone 7 status (2026-11-27)
+
+Done on branch `session-id`, then committed to `main` under the standing approval.
+
+- `model.Session.WorkspaceID` is now `SessionID`. In JSON output (`list --json`, `picker --json`) and the session cache, the key `workspace_id` is now `session_id`. A cache written before the rename expires in 5 seconds and is then rebuilt.
+- `WorktreeRelation.ParentWorkspaceID` and `ParentWorkspaceName` are now `ParentSessionID` and `ParentSessionName`.
+- In the picker, the names that hold Rex session IDs or lists of Rex sessions now say session: `RecentSessionIDs`, `LastSessionID`, `LastSessionUnknown`, `RexSessions`, `closingSessionID`, `sessionOrder`, `rexSessionIDs`, `sortRexSessions`, `agentSessionOrder` and `rexSessionsByID`.
+- Renamed with `gopls rename`. No behaviour changes. `just check` passes with 805 tests.
+
+### Left as they are
+
+- The config keys `picker.workspace_sort`, `picker.show_last_workspace` and `picker.show_last_workspace_path`, the `[[workspace]]` config entries, and the Go names that mirror them (`WorkspaceSort`, `HideLastWorkspace`, `ShowLastWorkspace`). They keep herdr-sesh configs loading.
+- The close machinery (`CloseWorkspace`, `workspaceCloseMsg`, `workspaceCloseContext`). Closing is refused until it is implemented.
+- `state/history.go`, which nothing uses.

@@ -151,7 +151,7 @@ func benchmarkSessions(count int) []model.Session {
 			Source:      "rex",
 			Name:        fmt.Sprintf("service-%04d-api", i),
 			Path:        fmt.Sprintf("/repos/service-%04d", i),
-			WorkspaceID: fmt.Sprintf("workspace-%04d", i),
+			SessionID:   fmt.Sprintf("workspace-%04d", i),
 			AgentStatus: statuses[i%len(statuses)],
 		}
 	}

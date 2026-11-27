@@ -26,7 +26,7 @@ func TestRenderPaneReadsTheSessionBlock(t *testing.T) {
 	original := newScreenReader
 	newScreenReader = func() screenReader { return fake }
 	t.Cleanup(func() { newScreenReader = original })
-	text, err := RenderPane(context.Background(), model.Session{Source: "rex", WorkspaceID: "session:1", BlockID: "block:9"})
+	text, err := RenderPane(context.Background(), model.Session{Source: "rex", SessionID: "session:1", BlockID: "block:9"})
 	require.NoError(t, err)
 	assert.Equal(t, "screen\n", text)
 	assert.Equal(t, &fakeScreen{session: "session:1", block: "block:9"}, fake)
@@ -34,7 +34,7 @@ func TestRenderPaneReadsTheSessionBlock(t *testing.T) {
 
 func TestRenderPaneReportsSessionsWithoutABlock(t *testing.T) {
 	for _, s := range []model.Session{
-		{Source: "rex", WorkspaceID: "session:1"},
+		{Source: "rex", SessionID: "session:1"},
 		{Source: "config", Path: "/tmp"},
 	} {
 		_, err := RenderPane(context.Background(), s)
@@ -179,7 +179,7 @@ func TestRenderMissingPathWithoutWorkspaceReturnsStableText(t *testing.T) {
 }
 
 func TestRenderMissingPathWithSessionReturnsSessionSummary(t *testing.T) {
-	out, err := Render(context.Background(), model.Session{Name: "api", WorkspaceID: "ws1"}, "printf %s {}")
+	out, err := Render(context.Background(), model.Session{Name: "api", SessionID: "ws1"}, "printf %s {}")
 	require.NoError(t, err)
 	require.Contains(t, out, "session: api")
 	assert.Contains(t, out, "id: ws1")

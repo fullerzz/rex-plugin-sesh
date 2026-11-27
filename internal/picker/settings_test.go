@@ -113,24 +113,24 @@ func TestSettingsOpeningKeepsQuitKeyActive(t *testing.T) {
 }
 
 func TestSettingsSaveRetainsBackendOperationsAndRefreshesMetadata(t *testing.T) {
-	items := []sessionmodel.Session{{Source: "rex", Name: "alpha", WorkspaceID: "w1"}, {Source: "rex", Name: "beta", WorkspaceID: "w2"}}
+	items := []sessionmodel.Session{{Source: "rex", Name: "alpha", SessionID: "w1"}, {Source: "rex", Name: "beta", SessionID: "w2"}}
 	closed := ""
 	refreshed := false
 	backend := &fakeBackend{
 		closeWorkspace:       func(_ context.Context, id string) error { closed = id; return nil },
 		refreshAgentStatuses: func() (map[string]string, error) { refreshed = true; return map[string]string{"w1": "idle"}, nil },
 		reloadPicker: func(context.Context) (ReloadResult, error) {
-			return ReloadResult{Sessions: []sessionmodel.Session{items[1]}, RecentWorkspaceIDs: []string{"w2"}}, nil
+			return ReloadResult{Sessions: []sessionmodel.Session{items[1]}, RecentSessionIDs: []string{"w2"}}, nil
 		},
 	}
-	m := newTeaModel(items, Options{DisplayOptions: DisplayOptions{HidePreview: true, RecentWorkspaceIDs: []string{"w1"}}, Backend: backend})
+	m := newTeaModel(items, Options{DisplayOptions: DisplayOptions{HidePreview: true, RecentSessionIDs: []string{"w1"}}, Backend: backend})
 	m.settings = &settings.Model{}
-	updated, _ := m.Update(settingsReloadedMsg{options: DisplayOptions{HidePreview: true, WorkspaceSort: "recent"}, result: ReloadResult{Sessions: items, RecentWorkspaceIDs: []string{"w2", "w1"}, LastWorkspaceID: "w2", HerdrWorkspaces: items}})
+	updated, _ := m.Update(settingsReloadedMsg{options: DisplayOptions{HidePreview: true, WorkspaceSort: "recent"}, result: ReloadResult{Sessions: items, RecentSessionIDs: []string{"w2", "w1"}, LastSessionID: "w2", RexSessions: items}})
 	m = updated.(teaModel)
 	assert.Same(t, backend, m.backend)
-	assert.Equal(t, []string{"w2", "w1"}, m.recentWorkspaceIDs)
-	assert.Equal(t, "w2", m.lastWorkspaceID)
-	assert.Len(t, m.herdrWorkspaces, 2)
+	assert.Equal(t, []string{"w2", "w1"}, m.recentSessionIDs)
+	assert.Equal(t, "w2", m.lastSessionID)
+	assert.Len(t, m.rexSessions, 2)
 	assert.Equal(t, []string{"beta", "alpha"}, sessionNames(m.list.All))
 	_, statusCmd := m.Update(statusRefreshTickMsg{generation: m.refreshGeneration})
 	require.NotNil(t, statusCmd)
@@ -142,7 +142,7 @@ func TestSettingsSaveRetainsBackendOperationsAndRefreshesMetadata(t *testing.T) 
 	updated, _ = m.Update(closeCmd())
 	m = updated.(teaModel)
 	assert.Equal(t, "w1", closed)
-	assert.Equal(t, []string{"w2"}, m.recentWorkspaceIDs)
+	assert.Equal(t, []string{"w2"}, m.recentSessionIDs)
 }
 
 func TestSettingsReloadErrorRetainsPickerAndBackend(t *testing.T) {

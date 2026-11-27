@@ -90,7 +90,7 @@ func TestPickerBackendSwitchSelectsOnce(t *testing.T) {
 	t.Setenv("FAKE_REX_LOG", log)
 	useFakeRex(t, fakeRexWithApp)
 	backend := &pickerBackend{app: &App{}, ctx: t.Context(), cfg: config.Default()}
-	require.NoError(t, backend.Switch(t.Context(), model.Session{Source: "rex", Name: "web", WorkspaceID: "session:2"}))
+	require.NoError(t, backend.Switch(t.Context(), model.Session{Source: "rex", Name: "web", SessionID: "session:2"}))
 	assert.Equal(t, []string{"--autostart=false -C client:app do session.select session_id=session:2"}, selectCalls(t, log))
 }
 
@@ -99,7 +99,7 @@ func TestPickerBackendSwitchReportsRefusal(t *testing.T) {
 	t.Setenv("FAKE_REX_REFUSE", "Remote Control is off")
 	useFakeRex(t, fakeRexWithApp)
 	backend := &pickerBackend{app: &App{}, ctx: t.Context(), cfg: config.Default(), target: switchTarget{client: "client:named"}}
-	err := backend.Switch(t.Context(), model.Session{Source: "rex", Name: "web", WorkspaceID: "session:2"})
+	err := backend.Switch(t.Context(), model.Session{Source: "rex", Name: "web", SessionID: "session:2"})
 	require.EqualError(t, err, "rex session.select: Remote Control is off")
 	assert.Equal(t, []string{"--autostart=false -C client:named do session.select session_id=session:2"}, selectCalls(t, os.Getenv("FAKE_REX_LOG")))
 }

@@ -77,18 +77,18 @@ func (m teaModel) updateSettings(msg tea.Msg) (teaModel, tea.Cmd, bool) {
 		if current, ok := m.list.Current(); ok {
 			key = sessionmodel.Key(current)
 		}
-		msg.options.LastWorkspaceID = msg.result.LastWorkspaceID
-		msg.options.LastWorkspaceUnknown = msg.result.LastWorkspaceUnknown
-		msg.options.RecentWorkspaceIDs = m.recentWorkspaceIDs
-		if msg.result.RecentWorkspaceIDs != nil {
-			msg.options.RecentWorkspaceIDs = msg.result.RecentWorkspaceIDs
+		msg.options.LastSessionID = msg.result.LastSessionID
+		msg.options.LastSessionUnknown = msg.result.LastSessionUnknown
+		msg.options.RecentSessionIDs = m.recentSessionIDs
+		if msg.result.RecentSessionIDs != nil {
+			msg.options.RecentSessionIDs = msg.result.RecentSessionIDs
 		}
-		if msg.result.HerdrWorkspaces != nil {
-			msg.options.HerdrWorkspaces = msg.result.HerdrWorkspaces
+		if msg.result.RexSessions != nil {
+			msg.options.RexSessions = msg.result.RexSessions
 		} else {
-			msg.options.HerdrWorkspaces = make([]sessionmodel.Session, 0, len(m.herdrWorkspaces))
-			for _, workspace := range m.herdrWorkspaces {
-				msg.options.HerdrWorkspaces = append(msg.options.HerdrWorkspaces, workspace)
+			msg.options.RexSessions = make([]sessionmodel.Session, 0, len(m.rexSessions))
+			for _, workspace := range m.rexSessions {
+				msg.options.RexSessions = append(msg.options.RexSessions, workspace)
 			}
 		}
 		configureHerdrTheme(msg.options.HerdrThemeInherit)

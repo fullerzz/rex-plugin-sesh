@@ -21,14 +21,14 @@ type switchingBackend struct {
 }
 
 func (b *switchingBackend) Switch(_ context.Context, s model.Session) error {
-	b.switched = append(b.switched, s.WorkspaceID)
+	b.switched = append(b.switched, s.SessionID)
 	return b.err
 }
 
 func newSwitchingModel(backend *switchingBackend) teaModel {
 	return newTeaModel([]model.Session{
-		{Source: "rex", Name: "api", WorkspaceID: "session:1", Attached: true},
-		{Source: "rex", Name: "web", WorkspaceID: "session:2"},
+		{Source: "rex", Name: "api", SessionID: "session:1", Attached: true},
+		{Source: "rex", Name: "web", SessionID: "session:2"},
 	}, Options{Backend: backend})
 }
 

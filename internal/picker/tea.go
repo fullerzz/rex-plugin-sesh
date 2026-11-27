@@ -174,20 +174,20 @@ type DisplayOptions struct {
 	PreviewMode               string
 	DefaultPreviewCommand     string
 	FZFCommand                string
-	RecentWorkspaceIDs        []string
+	RecentSessionIDs          []string
 	WorkspaceSort             string
-	LastWorkspaceID           string
-	LastWorkspaceUnknown      bool
-	HerdrWorkspaces           []sessionmodel.Session
+	LastSessionID             string
+	LastSessionUnknown        bool
+	RexSessions               []sessionmodel.Session
 }
 
 // Nil metadata slices preserve existing picker metadata; empty slices clear it.
 type ReloadResult struct {
-	RecentWorkspaceIDs   []string
-	Sessions             []sessionmodel.Session
-	HerdrWorkspaces      []sessionmodel.Session
-	LastWorkspaceID      string
-	LastWorkspaceUnknown bool
+	RecentSessionIDs   []string
+	Sessions           []sessionmodel.Session
+	RexSessions        []sessionmodel.Session
+	LastSessionID      string
+	LastSessionUnknown bool
 }
 
 func Run(items []sessionmodel.Session, opts Options) (sessionmodel.Session, bool, error) {
@@ -260,14 +260,14 @@ type teaModel struct {
 	hideLastWorkspace       bool
 	disableClose            bool
 	hideLastWorkspacePath   bool
-	workspaceOrder          []string
-	recentWorkspaceIDs      []string
+	sessionOrder            []string
+	recentSessionIDs        []string
 	workspaceSort           string
-	lastWorkspaceID         string
-	lastWorkspaceUnknown    bool
-	herdrWorkspaces         map[string]sessionmodel.Session
+	lastSessionID           string
+	lastSessionUnknown      bool
+	rexSessions             map[string]sessionmodel.Session
 	workspaceCloseContext   context.Context
-	closingWorkspaceID      string
+	closingSessionID        string
 	cancelWorkspaceClose    context.CancelFunc
 	quitAfterWorkspaceClose bool
 	closeError              string
@@ -326,11 +326,11 @@ type sessionSwitchedMsg struct {
 }
 
 type workspaceCloseMsg struct {
-	workspaceID string
-	result      ReloadResult
-	reloadRan   bool
-	closeErr    error
-	reloadErr   error
+	sessionID string
+	result    ReloadResult
+	reloadRan bool
+	closeErr  error
+	reloadErr error
 }
 
 type smearTickMsg struct{}
@@ -347,17 +347,17 @@ func newTeaModel(items []sessionmodel.Session, opts Options) teaModel {
 	if closeContext == nil {
 		closeContext = context.Background()
 	}
-	workspaceOrder := herdrWorkspaceIDs(items)
+	order := rexSessionIDs(items)
 	items = append([]sessionmodel.Session(nil), items...)
 	workspaceSort := normalizeWorkspaceSort(opts.WorkspaceSort)
-	initialOrder := workspaceOrder
+	initialOrder := order
 	switch workspaceSort {
 	case workspaceSortRecent:
-		initialOrder = opts.RecentWorkspaceIDs
+		initialOrder = opts.RecentSessionIDs
 	case workspaceSortAgent:
-		initialOrder = agentWorkspaceOrder(items, workspaceOrder)
+		initialOrder = agentSessionOrder(items, order)
 	}
-	sortHerdrWorkspaces(items, initialOrder)
+	sortRexSessions(items, initialOrder)
 	list := New(items)
 	list.SeparatorAware = opts.SeparatorAware
 	list.DisableHomePrioritization = opts.DisableHomePrioritization
@@ -406,12 +406,12 @@ func newTeaModel(items []sessionmodel.Session, opts Options) teaModel {
 		hideLastWorkspace:     opts.HideLastWorkspace,
 		disableClose:          opts.DisableClose,
 		hideLastWorkspacePath: opts.HideLastWorkspacePath,
-		workspaceOrder:        workspaceOrder,
-		recentWorkspaceIDs:    append([]string(nil), opts.RecentWorkspaceIDs...),
+		sessionOrder:          order,
+		recentSessionIDs:      append([]string(nil), opts.RecentSessionIDs...),
 		workspaceSort:         workspaceSort,
-		lastWorkspaceID:       opts.LastWorkspaceID,
-		lastWorkspaceUnknown:  opts.LastWorkspaceUnknown,
-		herdrWorkspaces:       workspaceSessionsByID(opts.HerdrWorkspaces),
+		lastSessionID:         opts.LastSessionID,
+		lastSessionUnknown:    opts.LastSessionUnknown,
+		rexSessions:           rexSessionsByID(opts.RexSessions),
 		workspaceCloseContext: closeContext,
 		previewParentContext:  closeContext,
 		reduceMotion:          reduceMotionRequested(),
@@ -686,10 +686,10 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	if closed, ok := msg.(workspaceCloseMsg); ok {
-		if closed.workspaceID != m.closingWorkspaceID {
+		if closed.sessionID != m.closingSessionID {
 			return m, nil
 		}
-		m.closingWorkspaceID = ""
+		m.closingSessionID = ""
 		m.cancelWorkspaceClose = nil
 		if m.quitAfterWorkspaceClose {
 			m.quitAfterWorkspaceClose = false
@@ -701,31 +701,31 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.refreshPreview()
 		}
 		if closed.reloadRan {
-			m.lastWorkspaceID = closed.result.LastWorkspaceID
-			m.lastWorkspaceUnknown = closed.result.LastWorkspaceUnknown
+			m.lastSessionID = closed.result.LastSessionID
+			m.lastSessionUnknown = closed.result.LastSessionUnknown
 		}
-		if closed.result.RecentWorkspaceIDs != nil {
-			m.recentWorkspaceIDs = append([]string(nil), closed.result.RecentWorkspaceIDs...)
+		if closed.result.RecentSessionIDs != nil {
+			m.recentSessionIDs = append([]string(nil), closed.result.RecentSessionIDs...)
 		}
-		if closed.result.HerdrWorkspaces != nil {
-			m.herdrWorkspaces = workspaceSessionsByID(closed.result.HerdrWorkspaces)
+		if closed.result.RexSessions != nil {
+			m.rexSessions = rexSessionsByID(closed.result.RexSessions)
 		}
 		selectedKey := ""
 		if current, currentOK := m.list.Current(); currentOK {
 			selectedKey = sessionmodel.Key(current)
 		}
 		if closed.reloadErr == nil && closed.result.Sessions != nil {
-			m.workspaceOrder = herdrWorkspaceIDs(closed.result.Sessions)
+			m.sessionOrder = rexSessionIDs(closed.result.Sessions)
 			m.list.All = append(m.list.All[:0], closed.result.Sessions...)
 		} else {
 			remaining := m.list.All[:0]
 			for _, item := range m.list.All {
-				if item.Source == "rex" && item.WorkspaceID == closed.workspaceID {
+				if item.Source == "rex" && item.SessionID == closed.sessionID {
 					continue
 				}
-				if item.Worktree.ParentWorkspaceID == closed.workspaceID {
-					item.Worktree.ParentWorkspaceID = ""
-					item.Worktree.ParentWorkspaceName = ""
+				if item.Worktree.ParentSessionID == closed.sessionID {
+					item.Worktree.ParentSessionID = ""
+					item.Worktree.ParentSessionName = ""
 				}
 				remaining = append(remaining, item)
 			}
@@ -754,7 +754,7 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if clicked, ok := msg.(workspaceClickedMsg); ok {
-		if m.closingWorkspaceID != "" {
+		if m.closingSessionID != "" {
 			return m, nil
 		}
 		for i, item := range m.list.Filtered {
@@ -806,7 +806,7 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	m.closeError = ""
 	if m.cyclePreviewModeKey != "" && key.String() == m.cyclePreviewModeKey {
-		if m.hidePreview || m.closingWorkspaceID != "" {
+		if m.hidePreview || m.closingSessionID != "" {
 			return m, nil
 		}
 		m.panePreview = !m.panePreview
@@ -815,7 +815,7 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch key.String() {
 	case "ctrl+c", "esc":
-		if m.closingWorkspaceID != "" {
+		if m.closingSessionID != "" {
 			m.quitAfterWorkspaceClose = true
 			m.cancelWorkspaceClose()
 			return m, nil
@@ -867,7 +867,7 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // busy reports a close or switch in flight, whose result the picker awaits.
 func (m teaModel) busy() bool {
-	return m.closingWorkspaceID != "" || m.switchingKey != ""
+	return m.closingSessionID != "" || m.switchingKey != ""
 }
 
 func (m teaModel) chooseCurrent() (teaModel, tea.Cmd) {
@@ -900,27 +900,27 @@ func (m teaModel) closeSelectedWorkspace() (teaModel, tea.Cmd) {
 		return m.refuse()
 	}
 	current, ok := m.list.Current()
-	if !ok || current.Source != "rex" || current.WorkspaceID == "" || m.backend == nil || m.closingWorkspaceID != "" {
+	if !ok || current.Source != "rex" || current.SessionID == "" || m.backend == nil || m.closingSessionID != "" {
 		return m.refuse()
 	}
-	m.closingWorkspaceID = current.WorkspaceID
+	m.closingSessionID = current.SessionID
 	m.closeError = ""
 	m = m.cancelActivePreview()
 	m.previewKey = ""
 	closeCtx, cancel := context.WithCancel(m.workspaceCloseContext)
 	m.cancelWorkspaceClose = cancel
-	return m, closeWorkspaceCommand(closeCtx, cancel, m.backend, current.WorkspaceID)
+	return m, closeWorkspaceCommand(closeCtx, cancel, m.backend, current.SessionID)
 }
 
 func closeWorkspaceCommand(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	backend Backend,
-	workspaceID string,
+	sessionID string,
 ) tea.Cmd {
 	return func() tea.Msg {
 		defer cancel()
-		msg := workspaceCloseMsg{workspaceID: workspaceID, closeErr: backend.CloseWorkspace(ctx, workspaceID)}
+		msg := workspaceCloseMsg{sessionID: sessionID, closeErr: backend.CloseWorkspace(ctx, sessionID)}
 		if msg.closeErr == nil {
 			msg.result, msg.reloadErr = backend.ReloadPicker(ctx)
 			msg.reloadRan = true
@@ -930,14 +930,14 @@ func closeWorkspaceCommand(
 }
 
 func (m teaModel) resortWorkspaces() {
-	order := m.workspaceOrder
+	order := m.sessionOrder
 	switch m.workspaceSort {
 	case workspaceSortRecent:
-		order = m.recentWorkspaceIDs
+		order = m.recentSessionIDs
 	case workspaceSortAgent:
-		order = agentWorkspaceOrder(m.list.All, m.workspaceOrder)
+		order = agentSessionOrder(m.list.All, m.sessionOrder)
 	}
-	sortHerdrWorkspaces(m.list.All, order)
+	sortRexSessions(m.list.All, order)
 }
 
 func (m teaModel) toggleWorkspaceSort() (teaModel, tea.Cmd) {
@@ -1023,7 +1023,7 @@ func (m teaModel) View() tea.View {
 }
 
 func (m teaModel) footerText() string {
-	if !m.previewShown() && m.closingWorkspaceID != "" {
+	if !m.previewShown() && m.closingSessionID != "" {
 		status := "Closing session..."
 		if m.quitAfterWorkspaceClose {
 			status = "Cancelling session close..."
@@ -1046,11 +1046,11 @@ func (m teaModel) footerText() string {
 	return helpStyle.Render(help)
 }
 
-func herdrWorkspaceIDs(items []sessionmodel.Session) []string {
+func rexSessionIDs(items []sessionmodel.Session) []string {
 	ids := make([]string, 0, len(items))
 	for _, item := range items {
 		if item.Source == "rex" {
-			ids = append(ids, item.WorkspaceID)
+			ids = append(ids, item.SessionID)
 		}
 	}
 	return ids
@@ -1089,21 +1089,21 @@ func agentStatusRank(status string) int {
 	}
 }
 
-func agentWorkspaceOrder(items []sessionmodel.Session, workspaceOrder []string) []string {
+func agentSessionOrder(items []sessionmodel.Session, sessionOrder []string) []string {
 	statuses := make(map[string]string, len(items))
 	for _, item := range items {
-		if item.Source == "rex" && item.WorkspaceID != "" {
-			statuses[item.WorkspaceID] = item.AgentStatus
+		if item.Source == "rex" && item.SessionID != "" {
+			statuses[item.SessionID] = item.AgentStatus
 		}
 	}
-	order := append([]string(nil), workspaceOrder...)
+	order := append([]string(nil), sessionOrder...)
 	sort.SliceStable(order, func(i, j int) bool {
 		return agentStatusRank(statuses[order[i]]) < agentStatusRank(statuses[order[j]])
 	})
 	return order
 }
 
-func sortHerdrWorkspaces(items []sessionmodel.Session, order []string) {
+func sortRexSessions(items []sessionmodel.Session, order []string) {
 	ranks := make(map[string]int, len(order))
 	for i, id := range order {
 		if _, exists := ranks[id]; id != "" && !exists {
@@ -1125,13 +1125,13 @@ func sortHerdrWorkspaces(items []sessionmodel.Session, order []string) {
 		}
 		// Unranked workspaces get unique ranks past the order list, preserving
 		// their input order and sorting them after every ranked workspace.
-		rank, ranked := ranks[item.WorkspaceID]
+		rank, ranked := ranks[item.SessionID]
 		if !ranked {
 			rank = len(order) + len(workspaces)
 		}
 		workspaces = append(workspaces, rankedWorkspace{session: item, rank: rank})
-		if item.WorkspaceID != "" {
-			byID[item.WorkspaceID] = struct{}{}
+		if item.SessionID != "" {
+			byID[item.SessionID] = struct{}{}
 		}
 	}
 
@@ -1141,12 +1141,12 @@ func sortHerdrWorkspaces(items []sessionmodel.Session, order []string) {
 	familyRanks := make([]int, 0, len(workspaces))
 	for i := range workspaces {
 		entry := &workspaces[i]
-		familyID := entry.session.WorkspaceID
-		parentID := entry.session.Worktree.ParentWorkspaceID
+		familyID := entry.session.SessionID
+		parentID := entry.session.Worktree.ParentSessionID
 		if _, parentPresent := byID[parentID]; parentID != "" && parentPresent {
 			familyID = parentID
 		}
-		entry.parent = entry.session.WorkspaceID == familyID
+		entry.parent = entry.session.SessionID == familyID
 		ordinal, exists := familyOrdinals[familyID]
 		if familyID == "" || !exists {
 			ordinal = len(familyRanks)
@@ -1180,11 +1180,11 @@ func sortHerdrWorkspaces(items []sessionmodel.Session, order []string) {
 	}
 }
 
-func workspaceSessionsByID(items []sessionmodel.Session) map[string]sessionmodel.Session {
+func rexSessionsByID(items []sessionmodel.Session) map[string]sessionmodel.Session {
 	workspaces := make(map[string]sessionmodel.Session, len(items))
 	for _, item := range items {
-		if item.Source == "rex" && item.WorkspaceID != "" {
-			workspaces[item.WorkspaceID] = item
+		if item.Source == "rex" && item.SessionID != "" {
+			workspaces[item.SessionID] = item
 		}
 	}
 	return workspaces
@@ -1229,11 +1229,11 @@ func (m teaModel) countText() string {
 
 func (m teaModel) lastWorkspaceStatus() (label, path string) {
 	label = "None recorded"
-	if m.lastWorkspaceUnknown {
+	if m.lastSessionUnknown {
 		label = "Unavailable"
-	} else if m.lastWorkspaceID != "" {
-		label = m.lastWorkspaceID
-		if item, ok := m.herdrWorkspaces[m.lastWorkspaceID]; ok {
+	} else if m.lastSessionID != "" {
+		label = m.lastSessionID
+		if item, ok := m.rexSessions[m.lastSessionID]; ok {
 			if item.Name != "" {
 				label = item.Name
 			} else if item.Path != "" {
@@ -1252,7 +1252,7 @@ func (m teaModel) lastWorkspaceText() string {
 	label, path := m.lastWorkspaceStatus()
 	line := sectionStyle.Render("LAST SESSION") + countStyle.Render(" · ") + rowLabelStyle.Render(label)
 	shownPath := compactHome(path)
-	if item, ok := m.herdrWorkspaces[m.lastWorkspaceID]; ok && item.Machine != "" {
+	if item, ok := m.rexSessions[m.lastSessionID]; ok && item.Machine != "" {
 		shownPath = path
 	}
 	if !m.hideLastWorkspacePath && shownPath != "" && shownPath != label {
@@ -1336,7 +1336,7 @@ func (m teaModel) receivePreview(preview previewMsg) (teaModel, tea.Cmd) {
 		m.cancelPreview()
 		m.cancelPreview = nil
 	}
-	if current, ok := m.list.Current(); ok && m.panePreview && !m.hidePreview && current.Source == "rex" && current.WorkspaceID != "" {
+	if current, ok := m.list.Current(); ok && m.panePreview && !m.hidePreview && current.Source == "rex" && current.SessionID != "" {
 		return m, tea.Batch(fadeIn, tea.Tick(panePreviewRefreshInterval, func(time.Time) tea.Msg {
 			return panePreviewTickMsg{requestID: preview.requestID}
 		}))
@@ -1736,13 +1736,13 @@ func worktreeTreePrefix(items []sessionmodel.Session, index int) string {
 		return ""
 	}
 	child := items[index]
-	parentID := child.Worktree.ParentWorkspaceID
+	parentID := child.Worktree.ParentSessionID
 	if !child.Worktree.Linked || parentID == "" {
 		return ""
 	}
 	parentIndex := -1
 	for i, item := range items {
-		if item.Source == "rex" && item.WorkspaceID == parentID {
+		if item.Source == "rex" && item.SessionID == parentID {
 			parentIndex = i
 			break
 		}
@@ -1751,11 +1751,11 @@ func worktreeTreePrefix(items []sessionmodel.Session, index int) string {
 		return ""
 	}
 	for i := parentIndex + 1; i < index; i++ {
-		if !items[i].Worktree.Linked || items[i].Worktree.ParentWorkspaceID != parentID {
+		if !items[i].Worktree.Linked || items[i].Worktree.ParentSessionID != parentID {
 			return ""
 		}
 	}
-	if index+1 < len(items) && items[index+1].Worktree.Linked && items[index+1].Worktree.ParentWorkspaceID == parentID {
+	if index+1 < len(items) && items[index+1].Worktree.Linked && items[index+1].Worktree.ParentSessionID == parentID {
 		return "├─ "
 	}
 	return "└─ "
@@ -1773,8 +1773,8 @@ func worktreeDescription(s sessionmodel.Session) string {
 	if !s.Worktree.Linked {
 		return ""
 	}
-	if s.Worktree.ParentWorkspaceName != "" {
-		return "worktree of " + s.Worktree.ParentWorkspaceName
+	if s.Worktree.ParentSessionName != "" {
+		return "worktree of " + s.Worktree.ParentSessionName
 	}
 	return "linked worktree"
 }

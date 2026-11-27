@@ -46,7 +46,7 @@ func TestListPutsRexSessionsFirst(t *testing.T) {
 	cfgPath := writeConfig(t, "version = 1\n[[workspace]]\nname = \"web\"\npath = \"/src/web\"\n")
 	sessions := runListJSON(t, cfgPath, "")
 	require.Len(t, sessions, 2)
-	assert.Equal(t, model.Session{Source: "rex", Name: "api", Path: "/src/api", WorkspaceID: "session:1"}, sessions[0])
+	assert.Equal(t, model.Session{Source: "rex", Name: "api", Path: "/src/api", SessionID: "session:1"}, sessions[0])
 	assert.Equal(t, "web", sessions[1].Name)
 }
 
@@ -97,8 +97,8 @@ func TestPickerListsOnlyRexSessionsAndMarksCurrent(t *testing.T) {
 	cfgPath := writeConfig(t, "version = 1\n[[workspace]]\nname = \"cfg\"\npath = \"/src/cfg\"\n")
 	sessions := runPickerJSON(t, cfgPath)
 	assert.Equal(t, []model.Session{
-		{Source: "rex", Name: "api", Path: "/src/api", WorkspaceID: "session:1"},
-		{Source: "rex", Name: "web", WorkspaceID: "session:2", Attached: true},
+		{Source: "rex", Name: "api", Path: "/src/api", SessionID: "session:1"},
+		{Source: "rex", Name: "web", SessionID: "session:2", Attached: true},
 	}, sessions)
 	//nolint:gosec // log is in this test's temporary directory.
 	calls, err := os.ReadFile(log)

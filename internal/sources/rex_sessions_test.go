@@ -33,8 +33,8 @@ func TestRexSessionsListsOpenSessions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "block:7", block)
 	assert.Equal(t, []model.Session{
-		{Source: "rex", Name: "api", Path: "/src/api", WorkspaceID: "session:1", BlockID: "block:9", AgentStatus: "working"},
-		{Source: "rex", Name: "scratch", WorkspaceID: "session:2", Attached: true},
+		{Source: "rex", Name: "api", Path: "/src/api", SessionID: "session:1", BlockID: "block:9", AgentStatus: "working"},
+		{Source: "rex", Name: "scratch", SessionID: "session:2", Attached: true},
 	}, got.Ordered())
 }
 
@@ -56,9 +56,9 @@ func TestMergeKeepsOpenSessionsThatShareALabel(t *testing.T) {
 	require.NoError(t, err)
 	items := got.Ordered()
 	require.Len(t, items, 2)
-	assert.Equal(t, "session:1", items[0].WorkspaceID)
+	assert.Equal(t, "session:1", items[0].SessionID)
 	assert.True(t, items[0].Configured)
 	assert.Equal(t, "ls", items[0].PreviewCommand)
-	assert.Equal(t, "session:2", items[1].WorkspaceID)
+	assert.Equal(t, "session:2", items[1].SessionID)
 	assert.False(t, items[1].Configured)
 }

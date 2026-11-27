@@ -8,18 +8,18 @@ import (
 )
 
 type WorktreeRelation struct {
-	Linked              bool
-	ParentWorkspaceID   string
-	ParentWorkspaceName string
+	Linked            bool
+	ParentSessionID   string
+	ParentSessionName string
 }
 
 type Session struct {
-	Machine     string `json:"machine,omitempty"`
-	Source      string `json:"source"`
-	Name        string `json:"name"`
-	Path        string `json:"path,omitempty"`
-	WorkspaceID string `json:"workspace_id,omitempty"`
-	TabID       string `json:"tab_id,omitempty"`
+	Machine   string `json:"machine,omitempty"`
+	Source    string `json:"source"`
+	Name      string `json:"name"`
+	Path      string `json:"path,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	TabID     string `json:"tab_id,omitempty"`
 	// BlockID is the Rex block a pane preview shows.
 	BlockID               string           `json:"block_id,omitempty"`
 	StartupCommand        string           `json:"startup_command,omitempty"`
@@ -90,7 +90,7 @@ func NewSessions() Sessions {
 }
 
 func Key(s Session) string {
-	base := fmt.Sprintf("%s\x00%s\x00%s\x00%s", s.Source, s.Name, s.Path, s.WorkspaceID)
+	base := fmt.Sprintf("%s\x00%s\x00%s\x00%s", s.Source, s.Name, s.Path, s.SessionID)
 	if s.Machine != "" {
 		base += "\x00" + s.Machine
 	}

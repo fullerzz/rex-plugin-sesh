@@ -14,7 +14,7 @@ type SessionLister interface {
 }
 
 // RexSessions lists open Rex sessions. Each one carries its session ID in
-// WorkspaceID, which marks it as open. With BlockID set, the session holding
+// SessionID, which marks it as open. With BlockID set, the session holding
 // that block is Attached.
 type RexSessions struct {
 	Client  SessionLister
@@ -31,7 +31,7 @@ func (s RexSessions) List(ctx context.Context) (model.Sessions, error) {
 	}
 	for _, rs := range sessions {
 		out.Add(model.Session{
-			Source: "rex", Name: rs.Label, Path: rs.Path, WorkspaceID: rs.ID, BlockID: rs.BlockID,
+			Source: "rex", Name: rs.Label, Path: rs.Path, SessionID: rs.ID, BlockID: rs.BlockID,
 			AgentStatus: rs.AgentStatus, Attached: rs.Current,
 		})
 	}
