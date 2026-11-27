@@ -1034,7 +1034,11 @@ func (m teaModel) footerText() string {
 		return helpStyle.Render("Loading settings…")
 	}
 	if m.switchingKey != "" {
-		return helpStyle.Render("Switching to " + m.pendingChoice.DisplayName() + "…")
+		verb := "Switching to "
+		if m.pendingChoice.Source != "rex" {
+			verb = "Opening "
+		}
+		return helpStyle.Render(verb + m.pendingChoice.DisplayName() + "…")
 	}
 	help := fmt.Sprintf("enter select · ctrl+j/k · ctrl+r %s · ctrl+x close · esc exit", sortLabel(m.workspaceSort))
 	if m.disableClose {
@@ -1286,14 +1290,15 @@ func (m teaModel) footerLine(footer string, width int) string {
 }
 
 func (m teaModel) previewTitle() string {
+	current, ok := m.list.Current()
 	title := sectionStyle.Render("PREVIEW")
-	if m.panePreview {
+	// A directory has no screen, so pane mode keeps its preview.
+	if m.panePreview && (!ok || current.Source == "rex") {
 		title = sectionStyle.Render("PANE")
 	}
 	if m.cyclePreviewModeKey != "" {
 		title += countStyle.Render(" [" + m.cyclePreviewModeKey + "]")
 	}
-	current, ok := m.list.Current()
 	if !ok {
 		return title
 	}
@@ -1629,7 +1634,8 @@ func previewCommand(ctx context.Context, key string, requestID uint64, s session
 	return func() tea.Msg {
 		var text string
 		var err error
-		if pane {
+		// Only a Rex session has a screen; a directory keeps its preview.
+		if pane && s.Source == "rex" {
 			text, err = renderPanePreview(ctx, s)
 		} else {
 			text, err = renderPreview(ctx, s, defaultPreviewCommand)

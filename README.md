@@ -1,8 +1,9 @@
 # rex-sesh
 
 A [Sesh](https://github.com/joshmedeski/sesh)-style session picker for the Rex
-terminal. Press a key, choose one of your Rex sessions, and the Rex app switches
-to it.
+terminal. Press a key, choose one of your Rex sessions or a
+[zoxide](https://github.com/ajeetdsouza/zoxide) directory, and the Rex app
+switches to it.
 
 rex-sesh started as a fork of herdr-plugin-sesh, and work is in progress. See
 [`PLAN.md`](PLAN.md) for what works today and what comes next. The pages in
@@ -14,8 +15,8 @@ rex-sesh started as a fork of herdr-plugin-sesh, and work is in progress. See
   switches sessions through the app's `session.select` action, and the app
   accepts actions from other programs only while Remote Control is on.
 - [mise](https://mise.jdx.dev) to install the pinned Go toolchain and tools.
-- Optional: `eza` and `bat` for directory and README previews, and `fzf` for
-  the `--fzf` picker.
+- Optional: `zoxide` to list your frequent directories, `eza` and `bat` for
+  directory and README previews, and `fzf` for the `--fzf` picker.
 
 ## Build
 
@@ -66,11 +67,15 @@ then run `rex config reload`.
 | Key | Action |
 | --- | --- |
 | Type | Filter sessions by name or path. |
-| `enter` | Switch the Rex app to the selected session and close the picker. |
+| `enter` | Switch the Rex app to the selected session and close the picker. On a directory, open a new Rex session there first. |
 | `ctrl+j` / `ctrl+k`, arrows | Move the selection. |
-| `ctrl+o` | Switch the preview between command output and the session's live screen. |
+| `ctrl+o` | Switch the preview between command output and the session's live screen. Directories keep their command preview. |
 | `f2` | Open the settings editor. |
 | `esc` | Close the picker. |
+
+The picker lists your open Rex sessions first, then your zoxide directories.
+A directory named like an open session is left out. Choosing a directory
+creates a Rex session named after it, starting in it, and adds it to zoxide.
 
 `◆` marks the session the picker was opened from. Beside each session, a glyph
 shows the most urgent status its programs report through Rex: a spinner while
@@ -114,7 +119,7 @@ native format. `rex-sesh config migrate` converts a legacy file.
 
 | Command | Purpose |
 | --- | --- |
-| `rex-sesh picker` | Open the picker over Rex sessions and switch to the chosen one. |
+| `rex-sesh picker` | Open the picker over Rex sessions and zoxide directories, and switch to the chosen one. |
 | `rex-sesh picker --client ID` | Switch a particular Rex app, by client ID or label. |
 | `rex-sesh picker --wait-on-error` | After an error, wait for Enter before exiting. |
 | `rex-sesh picker --fzf` | Use the fzf picker. |

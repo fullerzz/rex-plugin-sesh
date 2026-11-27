@@ -37,6 +37,14 @@ func press(m teaModel, key tea.KeyPressMsg) (teaModel, tea.Cmd) {
 	return updated.(teaModel), cmd
 }
 
+func TestEnterOnADirectorySaysOpening(t *testing.T) {
+	backend := &switchingBackend{}
+	m := newTeaModel([]model.Session{{Source: "zoxide", Name: "src", Path: "/src"}}, Options{Backend: backend})
+	m, cmd := press(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	require.NotNil(t, cmd)
+	assert.Contains(t, ansi.Strip(m.footerText()), "Opening src…")
+}
+
 func TestEnterQuitsOnlyAfterTheSwitch(t *testing.T) {
 	backend := &switchingBackend{}
 	m := newSwitchingModel(backend)

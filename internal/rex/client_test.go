@@ -126,6 +126,29 @@ func TestSelectSessionReportsRefusal(t *testing.T) {
 	require.EqualError(t, err, "rex session.select: Remote Control is off")
 }
 
+func TestNewSessionCreatesInTheDirectory(t *testing.T) {
+	runner := &fakeRunner{stdout: `{"session_id":"session:9","initial_windows":[]}`}
+	got, err := (&Client{Bin: "rex", Runner: runner}).NewSession(t.Context(), "api", "/src/my api")
+	require.NoError(t, err)
+	assert.Equal(t, "session:9", got)
+	assert.Equal(t, []string{"--autostart=false", "new", "--cwd", "/src/my api", "--json", "api"}, runner.args)
+}
+
+func TestNewSessionLeavesOutALabelThatReadsAsAFlag(t *testing.T) {
+	runner := &fakeRunner{stdout: `{"session_id":"session:9"}`}
+	_, err := (&Client{Bin: "rex", Runner: runner}).NewSession(t.Context(), "-rf", "/src/-rf")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"--autostart=false", "new", "--cwd", "/src/-rf", "--json"}, runner.args)
+}
+
+func TestNewSessionRejectsAReplyWithoutAnID(t *testing.T) {
+	_, err := (&Client{Bin: "rex", Runner: &fakeRunner{stdout: `{"sessions":{}}`}}).NewSession(t.Context(), "api", "/src")
+	require.EqualError(t, err, "rex new: no session ID in the reply")
+	runner := &fakeRunner{stderr: "Error: no such directory\n", err: errors.New("exit status 1")}
+	_, err = (&Client{Bin: "rex", Runner: runner}).NewSession(t.Context(), "api", "/gone")
+	require.EqualError(t, err, "rex new: no such directory")
+}
+
 func TestScreenKeepsTheVisibleLines(t *testing.T) {
 	runner := &fakeRunner{stdout: `{"rows":2,"content":"old\r\n\u001b[32mtwo\u001b[0m\r\nthree\r\n\u001b[0m   \r\n\r\n"}`}
 	got, err := (&Client{Bin: "rex", Runner: runner}).Screen(t.Context(), "session:1", "block:9")

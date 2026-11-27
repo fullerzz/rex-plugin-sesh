@@ -213,6 +213,30 @@ func (c *Client) AppClients(ctx context.Context, sessionID string) ([]string, er
 	return ids, nil
 }
 
+// NewSession creates a session whose first terminal starts in cwd, and returns
+// its ID. Rex allows several sessions with one label. A label that starts with
+// "-" would read as a flag, so Rex names that session itself.
+func (c *Client) NewSession(ctx context.Context, label, cwd string) (string, error) {
+	args := []string{"new", "--cwd", cwd, "--json"}
+	if label != "" && !strings.HasPrefix(label, "-") {
+		args = append(args, label)
+	}
+	out, err := c.run(ctx, requestTimeout, nil, "new", args...)
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		ID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return "", fmt.Errorf("decode rex new: %w", err)
+	}
+	if result.ID == "" {
+		return "", errors.New("rex new: no session ID in the reply")
+	}
+	return result.ID, nil
+}
+
 // SelectSession asks the Rex app clientID to show sessionID. The app accepts
 // it only while Remote Control is on in its settings.
 func (c *Client) SelectSession(ctx context.Context, clientID, sessionID string) error {

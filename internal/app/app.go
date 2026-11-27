@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fullerzz/rex-plugin-sesh/internal/config"
@@ -32,6 +33,12 @@ type App struct {
 	Err io.Writer
 	// Rex lists Rex sessions; nil uses the rex CLI.
 	Rex sources.SessionLister
+
+	// opened maps a directory to the Rex session a switch created for it, so
+	// a retry after a refused switch selects that session instead of creating
+	// another.
+	openedMu sync.Mutex
+	opened   map[string]string
 }
 
 func New() *App { return &App{In: os.Stdin, Out: os.Stdout, Err: os.Stderr} }
@@ -145,11 +152,12 @@ func (a *App) collect(ctx context.Context, cfg config.Config, target string, loc
 	return collection{Sessions: merged.Ordered(), RexErr: rexSrc.err}, nil
 }
 
-// collectPicker lists the picker's rows: the open Rex sessions only, with the
-// one that holds this terminal's block marked current.
+// collectPicker lists the picker's rows: the open Rex sessions, with the one
+// that holds this terminal's block marked current, and zoxide directories, in
+// source_order. A directory named like an open session is left out.
 func (a *App) collectPicker(ctx context.Context, cfg config.Config) (collection, error) {
 	rexSrc := a.rexSource(os.Getenv("REX_BLOCK"))
-	merged, err := sources.Merge(ctx, []sources.Source{rexSrc}, nil, cfg.Blacklist, false, true)
+	merged, err := sources.Merge(ctx, []sources.Source{rexSrc, sources.Zoxide{}}, config.MergeOrder(cfg.SortOrder), cfg.Blacklist, false, true)
 	if err != nil {
 		return collection{}, err
 	}
@@ -340,17 +348,60 @@ func currentSessionID(sessions []model.Session) string {
 	return ""
 }
 
-// switchTo asks the Rex app to show s.
+// switchTo asks the Rex app to show s. A directory row, such as a zoxide
+// entry, first gets a new Rex session that starts there, and the directory is
+// added to zoxide once the app shows it.
 func (a *App) switchTo(ctx context.Context, target switchTarget, s model.Session) error {
-	if s.Source != "rex" || s.SessionID == "" {
-		return fmt.Errorf("%q is not an open Rex session", s.DisplayName())
+	sessionID := s.SessionID
+	if s.Source == "rex" {
+		if sessionID == "" {
+			return fmt.Errorf("%q is not an open Rex session", s.DisplayName())
+		}
+	} else if s.Path == "" || s.Machine != "" {
+		return fmt.Errorf("%q is not a Rex session or a directory on this machine", s.DisplayName())
 	}
 	client := rex.NewClient()
+	// Find the app before creating anything, so a failure leaves no session.
 	clientID, err := resolveClient(ctx, client, target)
 	if err != nil {
 		return err
 	}
-	return client.SelectSession(ctx, clientID, s.SessionID)
+	if s.Source != "rex" {
+		if sessionID, err = a.openDirectory(ctx, client, s); err != nil {
+			return err
+		}
+	}
+	if err := client.SelectSession(ctx, clientID, sessionID); err != nil {
+		return err
+	}
+	if s.Source != "rex" {
+		sources.AddPath(ctx, s.Path)
+	}
+	return nil
+}
+
+// openDirectory returns the Rex session for the directory row s, creating it
+// on first use. The session takes the row's name, so the next listing shows
+// the session in place of the row.
+func (a *App) openDirectory(ctx context.Context, client *rex.Client, s model.Session) (string, error) {
+	a.openedMu.Lock()
+	defer a.openedMu.Unlock()
+	if id, ok := a.opened[s.Path]; ok {
+		return id, nil
+	}
+	//nolint:gosec // the path comes from the user's own zoxide database.
+	if st, err := os.Stat(s.Path); err != nil || !st.IsDir() {
+		return "", fmt.Errorf("%s is not a directory on this machine", s.Path)
+	}
+	id, err := client.NewSession(ctx, s.Name, s.Path)
+	if err != nil {
+		return "", err
+	}
+	if a.opened == nil {
+		a.opened = map[string]string{}
+	}
+	a.opened[s.Path] = id
+	return id, nil
 }
 
 // appLister lists connected Rex apps; *rex.Client implements it.

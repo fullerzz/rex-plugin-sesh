@@ -9,9 +9,9 @@ import (
 // fakeRexLog records each call to the fake rex that TestMain installs.
 var fakeRexLog string
 
-// TestMain points the session cache at a temporary directory and rex at a
-// fake with no sessions, so no test reads the user's rex-sesh state or reaches
-// the live Rex server. The fake uses only shell builtins: some tests empty
+// TestMain points the session cache at a temporary directory, rex at a fake
+// with no sessions, and zoxide at an empty database, so no test reads the
+// user's rex-sesh state or zoxide history or reaches the live Rex server. The fake uses only shell builtins: some tests empty
 // PATH. It also clears the Rex terminal's own variables, which tests set.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "rex-sesh-app-test-")
@@ -25,7 +25,9 @@ func TestMain(m *testing.M) {
 	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
 		panic(err)
 	}
-	for name, value := range map[string]string{"REX_SESH_STATE_DIR": filepath.Join(dir, "state"), "REX_SESH_REX_BIN": bin} {
+	// _ZO_DATA_DIR gives zoxide, where installed, an empty database of its own.
+	env := map[string]string{"REX_SESH_STATE_DIR": filepath.Join(dir, "state"), "REX_SESH_REX_BIN": bin, "_ZO_DATA_DIR": filepath.Join(dir, "zoxide")}
+	for name, value := range env {
 		if err := os.Setenv(name, value); err != nil {
 			panic(err)
 		}

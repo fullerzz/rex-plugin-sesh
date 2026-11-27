@@ -86,19 +86,21 @@ func runPickerJSON(t *testing.T, cfgPath string) []model.Session {
 	return sessions
 }
 
-// The picker shows open Rex sessions only, and marks the one that holds this
-// terminal's block.
-func TestPickerListsOnlyRexSessionsAndMarksCurrent(t *testing.T) {
+// The picker shows open Rex sessions, marking the one that holds this
+// terminal's block, then zoxide directories. Config entries stay out.
+func TestPickerListsRexSessionsThenZoxideAndMarksCurrent(t *testing.T) {
 	log := filepath.Join(t.TempDir(), "rex.log")
 	t.Setenv("FAKE_REX_LOG", log)
 	useFakeRex(t, twoRexSessions)
-	configureFakeSources(t, "1 /src/zoxide-dir\n")
+	configureFakeSources(t, "1 /src/zoxide-dir\n2 /other/api\n")
 	t.Setenv("REX_BLOCK", "block:42")
 	cfgPath := writeConfig(t, "version = 1\n[[workspace]]\nname = \"cfg\"\npath = \"/src/cfg\"\n")
 	sessions := runPickerJSON(t, cfgPath)
+	// /other/api is named like the open session api, so it is left out.
 	assert.Equal(t, []model.Session{
 		{Source: "rex", Name: "api", Path: "/src/api", SessionID: "session:1"},
 		{Source: "rex", Name: "web", SessionID: "session:2", Attached: true},
+		{Source: "zoxide", Name: "zoxide-dir", Path: "/src/zoxide-dir", Score: 1},
 	}, sessions)
 	//nolint:gosec // log is in this test's temporary directory.
 	calls, err := os.ReadFile(log)
@@ -130,9 +132,10 @@ func TestPickerFailsBeforeOpeningWithoutRex(t *testing.T) {
 	}
 }
 
-// Reloads happen while the picker owns the screen: they stay Rex-only and
-// return Rex errors for the picker to show, writing nothing to stderr.
-func TestPickerReloadsStayRexOnly(t *testing.T) {
+// Reloads happen while the picker owns the screen: they list the same rows as
+// the first listing and return Rex errors for the picker to show, writing
+// nothing to stderr.
+func TestPickerReloadsListTheSameRows(t *testing.T) {
 	t.Setenv("FAKE_REX_LOG", filepath.Join(t.TempDir(), "rex.log"))
 	useFakeRex(t, twoRexSessions)
 	configureFakeSources(t, "1 /src/zoxide-dir\n")
@@ -144,10 +147,10 @@ func TestPickerReloadsStayRexOnly(t *testing.T) {
 
 	reloaded, err := backend.ReloadPicker(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"api", "web"}, sessionNames(reloaded.Sessions))
+	assert.Equal(t, []string{"api", "web", "zoxide-dir"}, sessionNames(reloaded.Sessions))
 	_, afterSettings, err := backend.ReloadSettings(t.Context(), settings.Result{Path: cfgPath, Saved: true})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"api", "web"}, sessionNames(afterSettings.Sessions))
+	assert.Equal(t, []string{"api", "web", "zoxide-dir"}, sessionNames(afterSettings.Sessions))
 }
 
 func TestPickerReloadReportsRexError(t *testing.T) {

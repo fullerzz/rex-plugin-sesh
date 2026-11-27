@@ -67,6 +67,26 @@ func TestPanePreviewToggleRefreshAndSelection(t *testing.T) {
 	m = m.cancelActivePreview()
 }
 
+// A directory row has no screen, so pane mode shows its usual preview.
+func TestPanePreviewKeepsTheDirectoryPreview(t *testing.T) {
+	oldPane, oldPreview := renderPanePreview, renderPreview
+	t.Cleanup(func() { renderPanePreview, renderPreview = oldPane, oldPreview })
+	var rendered string
+	renderPanePreview = func(context.Context, model.Session) (string, error) {
+		rendered += "pane"
+		return rendered, nil
+	}
+	renderPreview = func(context.Context, model.Session, string) (string, error) {
+		rendered += "command"
+		return rendered, nil
+	}
+	m := newTeaModel([]model.Session{{Source: "zoxide", Name: "src", Path: "/src"}}, Options{DisplayOptions: DisplayOptions{PreviewMode: "pane"}})
+	executeTeaCommand(m.Init())
+	assert.Equal(t, "command", rendered)
+	assert.NotContains(t, ansi.Strip(m.previewTitle()), "PANE")
+	_ = m.cancelActivePreview()
+}
+
 func TestPanePreviewHiddenAndEmptyPicker(t *testing.T) {
 	for _, opts := range []Options{{DisplayOptions: DisplayOptions{HidePreview: true}}, {}} {
 		m := newTeaModel(nil, opts)

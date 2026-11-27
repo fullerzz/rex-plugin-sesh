@@ -295,3 +295,35 @@ Done on branch `session-id`, then committed to `main` under the standing approva
 - The config keys `picker.workspace_sort`, `picker.show_last_workspace` and `picker.show_last_workspace_path`, the `[[workspace]]` config entries, and the Go names that mirror them (`WorkspaceSort`, `HideLastWorkspace`, `ShowLastWorkspace`). They keep herdr-sesh configs loading.
 - The close machinery (`CloseWorkspace`, `workspaceCloseMsg`, `workspaceCloseContext`). Closing is refused until it is implemented.
 - `state/history.go`, which nothing uses.
+
+## Order of the remaining work (decided 2026-11-27)
+
+1. Rename `WorkspaceID` to `SessionID` (milestone 7, done).
+2. zoxide support (milestone 8).
+3. Sessions on other hosts.
+4. Rewrite the docs site and release tooling for Rex, once the port is in good shape.
+
+## Milestone 8 status (2026-11-27)
+
+Done on branch `zoxide`, then committed to `main` under the standing approval.
+
+- The picker lists zoxide directories after the open Rex sessions, in `source_order` (default `rex, config, zoxide, dir`). Config entries stay out of the picker for now. `picker --json` and the reloads list the same rows.
+- A zoxide directory is named after its last path element, as before. A directory named like an open Rex session is left out, so a directory you have opened shows once, as its session. Matching is by name, not path, because a session's path follows its terminal's directory.
+- Enter on a directory finds the Rex app first, then runs `rex new NAME --cwd DIR --json` and selects the new session. Once the app shows it, `zoxide add DIR` raises the directory's rank. The footer reads `Opening NAME…`.
+- Rex allows several sessions with one label, so a retry after a refused switch would create another session. The picker remembers the session it created for each directory and selects it again instead.
+- Without an app to switch, or with a directory that no longer exists, nothing is created. A name that starts with `-` would read as a flag, so Rex names that session itself.
+- In `ctrl+o` pane mode, a directory has no screen, so it keeps its directory preview, and the title says PREVIEW.
+- App tests give zoxide an empty database through `_ZO_DATA_DIR`, so they never read or write the user's zoxide history.
+- `just check` passes with 813 tests.
+- Checked live: `picker --json` listed 4 Rex sessions and 241 zoxide directories. With a session named `borgboi` created by `rex new`, the picker showed one `borgboi` row, the Rex one. The probe session was then killed.
+
+### Not checked yet
+
+- Enter on a zoxide row in the real picker. I did not switch the app myself.
+- Whether `rex new` alone moves the app to the new session. No Rex API reports what the app shows.
+
+### Notes
+
+- If a switch is refused and the picker is then closed, the created session stays open in Rex.
+- If the remembered session is killed before a retry, the retry fails until the picker is reopened.
+- zoxide rows are local to this Mac, and new sessions start on this Mac's server.
