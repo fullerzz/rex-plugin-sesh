@@ -230,3 +230,20 @@ Done on branch `select-session`, then committed to `main` under the standing app
 
 - A refusal with Remote Control off is untested, so the refusal text is unknown.
 - Several connected apps are covered by tests only.
+
+## Milestone 5 status (2026-11-27)
+
+Done on branch `rex-action`, then committed to `main` under the standing approval.
+
+- `rex-sesh lua [--key KEY]` prints the Rex config module, from the template `internal/app/sesh.lua.tmpl`. It points at the binary that printed it. Paths and keys are quoted for Lua 5.1, which has no `\x` or `\u` escapes.
+- The `sesh_picker` action ("Sesh: Pick Session") opens `rex-sesh picker --wait-on-error` in a focused floating layer over the current tab. It passes `--client ctx.client_id` only for the `key` and `palette` origins. From the CLI, `ctx.client_id` is the `rex` command itself, so the picker finds the app instead. `focus=false` opens it without moving focus.
+- `--wait-on-error` prints the error and waits for Enter, so the floating layer doesn't close before the error can be read. It doesn't wait after Esc or a successful switch.
+- The README is rewritten for Rex: build, setup in Rex, keys, config lookup order, environment variables, and the CLI.
+- Checked: `rex config check` accepts the generated module, with and without `--key`, and with a path containing a space, quotes and a backslash.
+
+### Notes
+
+- In this user's config, `f2` is bound to `client.tab.rename`, so the app takes it before the picker sees it. The picker's settings key is unreachable there; `rex-sesh config edit` still works.
+- Pressing the key again while a picker is open probably opens a second picker.
+- The binding points at `bin/rex-sesh`. `just clean` deletes it, so rebuild after cleaning.
+- The fzf picker's failed switch waits through the same path, but no test covers it, because the tests have no fzf.

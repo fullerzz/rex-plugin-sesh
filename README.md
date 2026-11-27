@@ -1,247 +1,131 @@
-# Sesh for Herdr
+# rex-sesh
 
-[![Latest release](https://img.shields.io/github/v/release/fullerzz/herdr-plugin-sesh)](https://github.com/fullerzz/herdr-plugin-sesh/releases/latest)
-[![Go version](https://img.shields.io/github/go-mod/go-version/fullerzz/herdr-plugin-sesh)](go.mod)
-[![License: MIT](https://img.shields.io/github/license/fullerzz/herdr-plugin-sesh)](LICENSE)
-[![Test](https://github.com/fullerzz/herdr-plugin-sesh/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/fullerzz/herdr-plugin-sesh/actions/workflows/test.yml)
-[![Lint](https://github.com/fullerzz/herdr-plugin-sesh/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/fullerzz/herdr-plugin-sesh/actions/workflows/lint.yml)
+A [Sesh](https://github.com/joshmedeski/sesh)-style session picker for the Rex
+terminal. Press a key, choose one of your Rex sessions, and the Rex app switches
+to it.
 
-A [Sesh](https://github.com/joshmedeski/sesh)-inspired workspace picker and
-session manager for [Herdr](https://herdr.dev/).
-
-This README describes `main`, including unreleased changes. Use the
-[documentation version selector](https://fullerzz.github.io/herdr-plugin-sesh/)
-for the documentation matching your installed release.
-
-`herdr-plugin-sesh` combines running Herdr workspaces, configured sessions, and
-zoxide history in one searchable overlay. Selecting an item focuses its
-existing workspace or creates a new one with the configured startup command and
-tabs.
-
-In the Herdr desktop app, the `sesh` mod opens the picker over your current
-space. Search local and remote spaces by name, inspect a live terminal preview,
-and press **Enter** to switch. The companion `sesh-last` mod takes you back to
-your previous space. The [desktop mod package](https://github.com/fullerzz/herdr-plugin-sesh/blob/main/herdr-app/RECIPE.md) includes
-both launchers and their suggested shortcuts.
-
-![Filtering spaces, widening the live preview, and switching to atlas-api in the Herdr desktop app](docs/assets/picker-demo-app.gif)
-
-## Choose your Herdr integration
-
-This repository provides a **herdr-tui plugin** for Herdr's terminal UI and
-**herdr-app mods** for the desktop app. Both use the same `herdr-sesh` binary
-and native TOML configuration.
-
-[Watch the Herdr TUI picker demo](docs/assets/picker-demo.gif) or
-[re-record either integration](demo/picker/README.md).
-
-| Capability | Herdr TUI plugin | Herdr app mods |
-| --- | --- | --- |
-| Installation | `herdr plugin install fullerzz/herdr-plugin-sesh` | [App setup](docs/herdr-app.md#install), including `just install-app-mod` |
-| Open the picker | `fullerzz.sesh.open-picker` plugin action | `mod.open:sesh` |
-| Remote workspaces | Unavailable | Select existing remote spaces; create configured ones |
-| Track navigation outside Sesh | Automatic through plugin hooks | Requires a [`sesh-last` layout block](docs/herdr-app.md#switch-to-the-last-space) |
-| Pane split ratios | Supported | Splits evenly; ignores `ratio` |
-
-Remote workspace support is available only through the Herdr app integration,
-including direct CLI commands targeting the app. Configured sessions and
-directory entries create local workspaces in both integrations. With the app,
-a configured workspace that names a `machine` creates its space on that machine.
-
-## Features
-
-- Search active Herdr workspaces, Sesh-style TOML sessions, and zoxide history
-  from a native terminal picker, with name matches ahead of path-only matches
-  and configurable home-directory priority.
-- Inherit colors from Herdr TUI's theme configuration in both integrations,
-  with a toggle to retain the picker's built-in colors.
-- Group linked Git worktree workspaces beneath their open parent workspace,
-  replace the Herdr sheep icon with a configurable purple `↳ herdr` type, and
-  draw tree branches in the native picker.
-- Focus an existing workspace or create one from a configured session or
-  directory.
-- Apply startup commands, previews, named Herdr tabs, and
-  [pane layouts](docs/config/layouts.md#tabpane) to new workspaces.
-- Toggle between command previews and live active-pane previews with `Ctrl+O`,
-  and drag the divider to resize side-by-side previews.
-- Filter, deduplicate, and optionally cache session results, with native
-  [workspace, recent, and agent-priority sorting](docs/config/picker.md#picker).
-- Jump directly to the previously focused workspace. Track navigation outside
-  Sesh through TUI plugin hooks or the app's `sesh-last` layout block.
-- Clone a Git repository and connect to it in one command.
-- Use the built-in picker by default or opt into the experimental fzf picker.
-
-Sesh concepts map onto Herdr as follows:
-
-| Sesh | Herdr TUI | Herdr app |
-| --- | --- | --- |
-| Session | Workspace | Space |
-| Window | Tab | Tab |
-| Picker | Overlay pane | Mod dialog |
-
-## Settings TUI
-
-Press **F2** in the native picker (**Ctrl+,** when preview cycling uses F2).
-In Herdr TUI, you can also invoke
-`herdr plugin action invoke fullerzz.sesh.open-settings`. The editor uses the
-same colors and Herdr theme inheritance as the picker.
-
-From this checkout, run `just settings-demo` to try it with a disposable config,
-or `just settings-demo /absolute/path/to/config.toml` to edit a real file.
-The standalone command is `herdr-sesh config edit [--config PATH]` and does not
-require a running Herdr instance.
-
-**Enter** edits a setting; **Ctrl+S** applies text/list edits to the draft, then
-opens the save review from the main form. Only **Y** in the review saves.
-**Esc** cancels an edit or returns, with confirmation before discarding a draft.
-Changes apply when returning to the picker. Workspaces, tabs, and rules remain
-file-only. See [the settings editor guide](docs/config.md#settings-editor) for
-migration, file preservation, and conflict handling.
+rex-sesh started as a fork of herdr-plugin-sesh, and work is in progress. See
+[`PLAN.md`](PLAN.md) for what works today and what comes next. The pages in
+`docs/` still describe the Herdr plugin and are being rewritten.
 
 ## Requirements
 
-These requirements apply to the Herdr TUI plugin. For the desktop app, follow
-the [Herdr app setup](docs/herdr-app.md#install).
+- The Rex app, with **Remote Control** turned on in its settings. rex-sesh
+  switches sessions through the app's `session.select` action, and the app
+  accepts actions from other programs only while Remote Control is on.
+- [mise](https://mise.jdx.dev) to install the pinned Go toolchain and tools.
+- Optional: `eza` and `bat` for directory and README previews, and `fzf` for
+  the `--fzf` picker.
 
-- [Herdr](https://herdr.dev/docs/installation/) 0.8.2 or newer
-- Linux or macOS
-- Git and Go 1.27.3 or newer for Herdr's source-based plugin installation
-- Optional: `zoxide` for directory history and `eza` for the default preview
-- Optional: `fzf` and `bat` for the experimental fzf picker
-
-## Installation
-
-### Herdr app
-
-From this checkout, build `herdr-sesh` and link both mods into the app:
+## Build
 
 ```bash
-just install-app-mod
+mise install
+just build
 ```
 
-The mods find `herdr-sesh` on your login shell's `PATH`. If
-`~/.local/bin` is on that path, you can link the binary there:
+The binary is `bin/rex-sesh`. `just clean` deletes it, so rebuild before you
+use the picker again.
 
-```bash
-mkdir -p ~/.local/bin
-ln -s "$PWD/bin/herdr-sesh" ~/.local/bin/herdr-sesh
-```
+## Set up the picker in Rex
 
-### Herdr TUI
+1. Write the Rex config module. It points at the binary that prints it, and
+   `--key` binds a key to open the picker:
 
-For Herdr TUI, install the plugin directly from GitHub:
+   ```bash
+   ./bin/rex-sesh lua --key 'ctrl+a>s' > ~/.config/rex/sesh.lua
+   ```
 
-```bash
-herdr plugin install fullerzz/herdr-plugin-sesh
-```
+2. Load it from `~/.config/rex/init.lua` by adding this line:
 
-Herdr previews the plugin manifest and build command before installation. To
-skip the confirmation in a non-interactive environment, add `--yes`. To pin a
-release, add `--ref <release-tag>` using a tag from the
-[GitHub releases](https://github.com/fullerzz/herdr-plugin-sesh/releases) page.
+   ```lua
+   require("sesh")
+   ```
 
-This repository is also discoverable through the
-[Herdr plugin marketplace](https://herdr.dev/plugins/) via the `herdr-plugin`
-GitHub topic. Marketplace listings are automatic and are not endorsements or
-security reviews.
+3. Check the config, then reload it:
 
-## Quick start
+   ```bash
+   rex config check && rex config reload
+   ```
 
-**Herdr app.** Add these bindings to the `global` object in
-`~/.config/herdr-app/keys.json`. Press **Cmd+K** to open the picker or
-**Cmd+;** to switch back. To include spaces you select in the sidebar in
-that history, add the [`sesh-last` layout block](docs/herdr-app.md#switch-to-the-last-space).
+4. Turn on Remote Control in the Rex app's settings.
 
-```json
-{ "global": { "cmd-k": "mod.open:sesh", "cmd-;": "mod.open:sesh-last" } }
-```
+Press the key, or run **Sesh: Pick Session** from the command palette. The
+picker opens in a floating layer over the current tab.
 
-In Herdr TUI, open the picker through the installed plugin action:
+To remove it, delete the `require("sesh")` line and `~/.config/rex/sesh.lua`,
+then run `rex config reload`.
 
-```bash
-herdr plugin action invoke fullerzz.sesh.open-picker
-```
+## Use the picker
 
-You can also open its overlay pane directly:
+| Key | Action |
+| --- | --- |
+| Type | Filter sessions by name or path. |
+| `enter` | Switch the Rex app to the selected session and close the picker. |
+| `ctrl+j` / `ctrl+k`, arrows | Move the selection. |
+| `ctrl+o` | Cycle the preview between command output and pane mode. |
+| `f2` | Open the settings editor. |
+| `esc` | Close the picker. |
 
-```bash
-herdr plugin pane open \
-  --plugin fullerzz.sesh \
-  --entrypoint picker \
-  --placement overlay
-```
+`●` marks the session the picker was opened from. If the Rex app refuses a
+switch, for example because Remote Control is off, the picker stays open and
+shows the app's message.
 
-See [Keybindings](docs/keybindings.md) to bind the picker and previous-workspace
-actions in your Herdr configuration.
+If your Rex config binds a key the picker uses, the app takes the key first.
+For example, binding `f2` in `init.lua` hides the settings editor; run
+`rex-sesh config edit` instead.
 
 ## Configuration
 
-Configuration is optional. Without a config file, the picker still includes
-running Herdr workspaces and zoxide results when zoxide is available.
-
-`herdr-sesh` reads its versioned native TOML config from the first available
-location:
+Configuration is optional. rex-sesh reads its versioned TOML config from the
+first location that exists:
 
 1. `--config PATH`
-2. `HERDR_SESH_CONFIG`
-3. `${HERDR_PLUGIN_CONFIG_DIR}/config.toml`
-4. `${HERDR_PLUGIN_CONFIG_DIR}/sesh.toml` as a legacy fallback
-5. `~/.config/herdr-sesh/config.toml`
-6. `~/.config/herdr-sesh/sesh.toml` as a legacy fallback
-7. `~/.config/sesh/sesh.toml` as a legacy fallback
+2. `REX_SESH_CONFIG`
+3. `${REX_SESH_CONFIG_DIR}/config.toml`
+4. `${REX_SESH_CONFIG_DIR}/sesh.toml`, a legacy fallback
+5. `~/.config/rex-sesh/config.toml`
+6. `~/.config/rex-sesh/sesh.toml`, a legacy fallback
+7. `~/.config/sesh/sesh.toml`, a legacy fallback
 
-Legacy Sesh-compatible files still load during the migration period and print a
-deprecation warning on stderr. Explicit paths may hold either schema; a
-top-level `version` key selects native decoding.
+Legacy Sesh-compatible files still load, with a deprecation warning on stderr.
+An explicit path may hold either schema; a top-level `version` key selects the
+native format. `rex-sesh config migrate` converts a legacy file.
 
-For the TUI plugin, ask Herdr for the managed configuration directory:
+### Environment variables
 
-```bash
-herdr plugin config-dir fullerzz.sesh
-```
-
-For the app mods, use `~/.config/herdr-sesh/config.toml` or set
-`HERDR_SESH_CONFIG` to an explicit path.
-
-See the [configuration reference](docs/config.md) for supported settings and a
-complete example.
+| Variable | Effect |
+| --- | --- |
+| `REX_SESH_CONFIG` | Config file to load. |
+| `REX_SESH_CONFIG_DIR` | Directory searched for `config.toml` and `sesh.toml`. |
+| `REX_SESH_STATE_DIR` | Directory for the session cache. Defaults to `$XDG_STATE_HOME/rex-sesh` or `~/.local/state/rex-sesh`. |
+| `REX_SESH_REX_BIN` | The `rex` binary to run. Defaults to the Rex server's own copy, then `rex` on `PATH`. |
+| `REX_SESH_PICKER` | Set to `fzf` to use the fzf picker. |
+| `REX_SESH_REDUCE_MOTION` | Turn off picker animations. |
 
 ## CLI
 
-The shared binary also exposes its underlying operations directly. Commands
-target either the TUI server or the app, according to the
-[backend selection rules](docs/commands.md#choose-the-herdr-backend).
-
 | Command | Purpose |
 | --- | --- |
-| `herdr-sesh picker` | Open the native workspace picker. |
-| `herdr-sesh picker --fzf` | Open the experimental fzf picker. |
-| `herdr-sesh list --json` | List merged session sources as JSON. |
-| `herdr-sesh connect TARGET` | Focus or create a workspace for a name, path, or ID. |
-| `herdr-sesh last` | Switch to the previous workspace using the selected integration's history. |
-| `herdr-sesh preview TARGET` | Render the configured preview for a session. |
-| `herdr-sesh clone REPOSITORY` | Clone a repository and connect to its workspace. |
-| `herdr-sesh root --connect` | Connect to the current Git repository root. |
-| `herdr-sesh window [PATH]` | List tabs or create one for a path. |
-| `herdr-sesh config path` | Print the resolved plugin config path. |
-| `herdr-sesh config init` | Create a starter config if one does not exist. |
-| `herdr-sesh config edit [--config PATH]` | Edit global settings with a review before saving. |
-| `herdr-sesh config validate [PATH]` | Validate the active or specified config and print its resolved path. |
-| `herdr-sesh config migrate` | Convert a legacy Sesh-style config to the native format. |
+| `rex-sesh picker` | Open the picker over Rex sessions and switch to the chosen one. |
+| `rex-sesh picker --client ID` | Switch a particular Rex app, by client ID or label. |
+| `rex-sesh picker --wait-on-error` | After an error, wait for Enter before exiting. |
+| `rex-sesh picker --fzf` | Use the fzf picker. |
+| `rex-sesh picker --json` | Print the picker's sessions as JSON. |
+| `rex-sesh list --json` | List Rex, config, and zoxide sessions as JSON. |
+| `rex-sesh preview TARGET` | Render the configured preview for a session. |
+| `rex-sesh root` | Print the current Git repository root. |
+| `rex-sesh lua [--key KEY]` | Print the Rex config module for the picker. |
+| `rex-sesh config path` | Print the resolved config path. |
+| `rex-sesh config init` | Create a starter config if none exists. |
+| `rex-sesh config edit [--config PATH]` | Edit settings, with a review before saving. |
+| `rex-sesh config validate [PATH]` | Validate a config and print its resolved path. |
+| `rex-sesh config migrate` | Convert a legacy Sesh-style config to the native format. |
 
-For the TUI plugin, the binary lives inside Herdr's managed plugin checkout
-after installation; plugin actions are the normal entry points for day-to-day use.
-The app mods require `herdr-sesh` on your login shell's `PATH`.
+Without `--client`, the picker switches the app named by `REX_CLIENT`, or the
+only connected Rex app. With several apps connected, pass `--client`.
 
-TUI previous-workspace history depends on plugin-managed state and the active
-Herdr session. Use `herdr plugin action invoke fullerzz.sesh.last` unless that
-environment is already established. The app uses separate history and the
-[`sesh-last` mod](docs/herdr-app.md#switch-to-the-last-space).
-
-## Local development
-
-See the [contributor guide](docs/development/index.md) for setup, the code map,
-verification, and the documentation workflow.
+## Development
 
 Tool versions are pinned in [`mise.toml`](mise.toml), and common tasks live in
 the [`justfile`](justfile).
@@ -249,37 +133,12 @@ the [`justfile`](justfile).
 ```bash
 mise install
 just check
-just install-plugin
+just build
 ```
 
-`just install-plugin` builds the binary and links the current checkout into
-Herdr. Local builds (`just build` and `just install-plugin`) embed a Git-derived
-version, for example `v0.10.1-5-g0686c01`: the nearest reachable version tag,
-commits since that tag, and the commit hash. Uncommitted tracked changes append
-`-dirty`; an exact clean tag uses the tag alone. Without a reachable version tag,
-the commit hash is used; without Git metadata, the version falls back to `dev`.
-Release builds continue to use the release version.
-
-Verify the local plugin with:
-
-```bash
-herdr plugin action list --plugin fullerzz.sesh
-herdr plugin log list --plugin fullerzz.sesh
-```
-
-## Release
-
-Release tags must begin with `v` and match `version` in
-[`herdr-plugin.toml`](herdr-plugin.toml). Create and publish a release with:
-
-```bash
-just release vX.Y.Z
-```
-
-The recipe must run from `main` with a clean working tree. It validates the tag
-against the manifest version, runs the repository checks and CLI smoke tests,
-generates `CHANGELOG.md`, tags the release source commit, commits the changelog
-as a follow-up, and atomically pushes `main` and the tag.
+Local builds embed a Git-derived version: the nearest `v*` tag, commits since
+it, and the commit hash, or the commit hash alone before the first tag.
+Uncommitted changes append `-dirty`.
 
 ## License
 

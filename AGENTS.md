@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is `rex-sesh`, a Go CLI that brings a Sesh-style session picker to the Rex terminal. It is forked from herdr-plugin-sesh. The Herdr client, plugin manifest, and history watcher have been removed. The README, the docs site, and the release tooling still describe Herdr until they are rewritten.
+This repository is `rex-sesh`, a Go CLI that brings a Sesh-style session picker to the Rex terminal. It is forked from herdr-plugin-sesh. The Herdr client, plugin manifest, and history watcher have been removed. The docs site and the release tooling still describe Herdr until they are rewritten.
 
 - `cmd/rex-sesh/` contains the executable entry point.
 - `internal/app/` owns CLI routing and command behavior.
@@ -10,7 +10,7 @@ This repository is `rex-sesh`, a Go CLI that brings a Sesh-style session picker 
 - `docs/` contains the Markdown and assets for the Zensical documentation site.
 - `zensical.toml` defines the documentation navigation and theme; `pyproject.toml` and `uv.lock` pin its Python toolchain.
 - `testdata/` stores fixture TOML used by tests and smoke checks.
-- No plugin manifest exists yet. Rex integration will ship as a Lua snippet for `init.lua`.
+- Rex integration is a Lua config module: `rex-sesh lua` prints it from `internal/app/sesh.lua.tmpl`, and users load it from `init.lua`. There is no plugin manifest.
 - `bin/` and `site/` are generated build output; do not treat them as source.
 
 ## Build, Test, and Development Commands

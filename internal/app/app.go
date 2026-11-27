@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,13 +27,14 @@ import (
 var Version = "dev"
 
 type App struct {
+	In  io.Reader
 	Out io.Writer
 	Err io.Writer
 	// Rex lists Rex sessions; nil uses the rex CLI.
 	Rex sources.SessionLister
 }
 
-func New() *App { return &App{Out: os.Stdout, Err: os.Stderr} }
+func New() *App { return &App{In: os.Stdin, Out: os.Stdout, Err: os.Stderr} }
 func (a *App) Run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return a.usage()
@@ -51,12 +53,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.config(ctx, args[1:])
 	case "picker":
 		return a.picker(ctx, args[1:])
+	case "lua":
+		return a.lua(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
 }
 func (a *App) usage() error {
-	_, err := fmt.Fprintln(a.Out, "rex-sesh list|preview|root|picker|config|--version")
+	_, err := fmt.Fprintln(a.Out, "rex-sesh list|preview|root|picker|lua|config|--version")
 	return err
 }
 
@@ -261,10 +265,29 @@ func (a *App) picker(ctx context.Context, args []string) error {
 	cfgPath := fs.String("config", "", "")
 	fzfPicker := fs.Bool("fzf", false, "")
 	clientID := fs.String("client", "", "the Rex app to switch, as a client ID or label")
+	waitOnError := fs.Bool("wait-on-error", false, "after an error, wait for Enter before exiting")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	cfg, activeConfigPath, err := config.Load(config.LoadOptions{Path: *cfgPath, Warn: a.Err})
+	err := a.runPicker(ctx, *cfgPath, *jsonOut, *fzfPicker, *clientID)
+	if err != nil && *waitOnError {
+		a.waitForEnter(err)
+	}
+	return err
+}
+
+// waitForEnter shows err until Enter. A picker in a Rex floating layer would
+// otherwise exit, and the layer would close before the error could be read.
+func (a *App) waitForEnter(err error) {
+	if a.In == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(a.Err, "rex-sesh: %v\n\nPress Enter to close.\n", err)
+	_, _ = bufio.NewReader(a.In).ReadString('\n')
+}
+
+func (a *App) runPicker(ctx context.Context, cfgPath string, jsonOut, fzfPicker bool, clientID string) error {
+	cfg, activeConfigPath, err := config.Load(config.LoadOptions{Path: cfgPath, Warn: a.Err})
 	if err != nil {
 		return err
 	}
@@ -276,15 +299,15 @@ func (a *App) picker(ctx context.Context, args []string) error {
 	if col.RexErr != nil {
 		return fmt.Errorf("list Rex sessions: %w", col.RexErr)
 	}
-	if *jsonOut {
+	if jsonOut {
 		return a.printSessions(col.Sessions, true)
 	}
 	opts := pickerOptionsFromConfig(ctx, a.Out, cfg)
-	target := switchTarget{client: *clientID, currentSessionID: currentSessionID(col.Sessions)}
+	target := switchTarget{client: clientID, currentSessionID: currentSessionID(col.Sessions)}
 	backend := &pickerBackend{app: a, ctx: ctx, cfg: cfg, activeConfigPath: activeConfigPath, target: target}
 	var selected model.Session
 	var ok bool
-	if *fzfPicker || strings.EqualFold(os.Getenv("REX_SESH_PICKER"), "fzf") {
+	if fzfPicker || strings.EqualFold(os.Getenv("REX_SESH_PICKER"), "fzf") {
 		selected, ok, err = pickerpkg.RunFZF(ctx, col.Sessions, pickerpkg.Options{DisplayOptions: opts})
 		if err == nil && ok {
 			err = a.switchTo(ctx, target, selected)
