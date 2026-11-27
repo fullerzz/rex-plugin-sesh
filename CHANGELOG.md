@@ -1,4 +1,4 @@
-## Unreleased
+## v0.1.0 (2026-11-27)
 
 ### 🚀 Features
 
@@ -26,6 +26,10 @@
 
 - List every zoxide directory, naming clashes by their parents by @fullerzz ([d0e29f5](https://github.com/fullerzz/rex-plugin-sesh/commit/d0e29f55c7e621c049100f95fcc338a38db1cee1))
 
+- Drop the last Herdr wording from the picker and config by @fullerzz ([e9e72b6](https://github.com/fullerzz/rex-plugin-sesh/commit/e9e72b626c58ce7815f76144290a6b85c0f548e8))
+
+- Let an open session replace a directory listed before it by @fullerzz ([14b1691](https://github.com/fullerzz/rex-plugin-sesh/commit/14b16917e1659db64fe4bb9433215a013d1e5cff))
+
 
 
 ### 🚜 Refactor
@@ -44,6 +48,10 @@
 
 - Record the host picker check and the rex-homelab skip by @fullerzz ([3de047e](https://github.com/fullerzz/rex-plugin-sesh/commit/3de047e401580151b29845593d086fa087ed95bd))
 
+- Rewrite the docs site for Rex by @fullerzz ([ef9b00c](https://github.com/fullerzz/rex-plugin-sesh/commit/ef9b00cc08f4010080df13b2f26e109a59e0e411))
+
+- Record the docs and release tooling milestone by @fullerzz ([14c66ae](https://github.com/fullerzz/rex-plugin-sesh/commit/14c66ae3ec8dc5b2ba358e95d0bb8a2fb962edf3))
+
 
 
 ### 🎡 Continuous Integration
@@ -51,6 +59,8 @@
 - Skip the release-ref test until release tooling is rewritten by @fullerzz ([7bee6a1](https://github.com/fullerzz/rex-plugin-sesh/commit/7bee6a175b8d14daedac5258fea033d917c5c92f))
 
 - Build the docs on each push without publishing them by @fullerzz ([f92b858](https://github.com/fullerzz/rex-plugin-sesh/commit/f92b8584e70bb8dca039d806d699ba0c36bb6036))
+
+- Make the release tooling ship rex-sesh from git tags by @fullerzz ([875b4a6](https://github.com/fullerzz/rex-plugin-sesh/commit/875b4a6f82bce88b06ab3c00a2abdcb79eceb637))
 
 
 
