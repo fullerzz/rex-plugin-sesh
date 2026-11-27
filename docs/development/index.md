@@ -247,7 +247,7 @@ instructions visible.
 
 The versioned builder takes `latest` from the current checkout. It adds a
 snapshot for each `v*` release tag that contains `docs/` and `zensical.toml`,
-built from that tag. Until the first release tag, the site has only `latest`.
+built from that tag. The first release with docs is `v0.1.0`.
 
 To build and test every version:
 
@@ -262,8 +262,8 @@ The builder writes into `site/` and pushes nothing. It redirects unversioned
 links to `latest`. Keep `site_url` unversioned.
 
 The Docs workflow builds the versioned site for pull requests, pushes to
-`main`, `v*` tags, and manual runs. Publishing to GitHub Pages is turned off for
-now, so a passing build does not mean the site is live.
+`main`, `v*` tags, and manual runs. Except for pull requests, it then deploys
+the site to GitHub Pages at <https://fullerzz.github.io/rex-plugin-sesh/>.
 
 ## Pull requests and releases
 

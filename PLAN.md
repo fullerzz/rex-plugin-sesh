@@ -435,3 +435,7 @@ Done on branch `docs-rex`, then committed to `main` under the standing approval.
 ## v0.1.0 (2026-11-27)
 
 Released with the user's approval through `just release v0.1.0`: changelog commit `ca74d82`, tag `v0.1.0`. The Release, Changelog, Docs and Gitleaks workflows passed on their first run. The GitHub release has `rex-sesh_0.1.0_{darwin,linux}_{amd64,arm64}.tar.gz`, `checksums.txt`, `CHANGELOG.md` and `RELEASE_NOTES.md`. The downloaded darwin/arm64 asset matched its checksum and printed `rex-sesh 0.1.0`. The release notes list only fork commits.
+
+## Docs published (2026-11-27)
+
+The user turned on GitHub Pages (source: GitHub Actions) and asked to publish the docs. The Docs workflow's deploy job runs again for every event except pull requests, and the site is at https://fullerzz.github.io/rex-plugin-sesh/. The repo is still private, and the Pages site is public.

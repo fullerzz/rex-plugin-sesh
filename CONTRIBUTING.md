@@ -33,8 +33,8 @@ Run `just` to see the other available development commands.
 
 ## Documentation
 
-The Zensical site is built from the Markdown and assets in `docs/`. It is built
-on every push but not published yet.
+The Zensical site is built from the Markdown and assets in `docs/`, and
+published at <https://fullerzz.github.io/rex-plugin-sesh/>.
 Navigation and theme settings live in `zensical.toml`, while `pyproject.toml` and
 `uv.lock` pin the documentation toolchain.
 
@@ -59,10 +59,10 @@ The wiki's version selector offers `latest` (the `main` branch) and release tags
 that contain `docs/` and `zensical.toml`. The site root redirects to `latest`.
 Unversioned page URLs redirect to the corresponding `latest` page, preserving
 query strings and section anchors when JavaScript is enabled.
-rex-sesh has no release tags yet, so the selector offers only `latest`.
+The first rex-sesh release is `v0.1.0`; earlier tags belong to Herdr and were deleted.
 
 The docs workflow rebuilds all versions on pushes to `main`, `v*` tag pushes,
-and manual runs. Its deploy job is off until the repository is public. Each release uses the Markdown, assets, navigation, and theme
+and manual runs, and deploys the site to GitHub Pages. Each release uses the Markdown, assets, navigation, and theme
 from that exact tag, built with the current pinned documentation toolchain.
 Release pages disable editing links; `latest` links to edits on `main`.
 The [Zensical-compatible mike fork](https://zensical.org/docs/compatibility/mkdocs/mike/)

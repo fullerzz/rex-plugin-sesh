@@ -6,8 +6,8 @@ terminal. Press a key, choose one of your Rex sessions or a
 switches to it.
 
 rex-sesh started as a fork of herdr-plugin-sesh, and work is in progress. See
-[`PLAN.md`](PLAN.md) for what works today and what comes next. The pages in
-`docs/` describe rex-sesh for Rex.
+[`PLAN.md`](PLAN.md) for what works today and what comes next. The
+documentation is at <https://fullerzz.github.io/rex-plugin-sesh/>.
 
 ## Requirements
 
