@@ -355,10 +355,35 @@ Done on branch `hosts`, then committed to `main` under the standing approval.
 
 - Opened unfocused, the picker showed 5 Mac sessions with `◆` on this one, then `[rex-buntu26] lunar-dune` and `[rex-buntu26] sunlit-delta`, then zoxide. On `lunar-dune`, pane mode showed its screen from `rex-buntu26`, and command mode showed its summary. Esc closed the layer.
 
-### Not checked yet
+### Checked by the user (2026-11-27)
 
-- Enter on a host row. A switch moves the user's app, so the user checks it.
+- Enter on `[rex-buntu26] lunar-dune` in the Mac picker switched the app to it.
 
 ### Decision: the picker opened inside a host's session (2026-11-27)
 
-Decide after the user tries the Mac picker with host sessions. Until then it shows "Sesh cannot start". A copy of `rex-sesh` on a host would list that host's server as its own. Whether it could reach this Mac's sessions is untested.
+The user tried the Mac picker with host sessions, then chose to install `rex-sesh` on each host.
+
+## Milestone 10 status (2026-11-27): the picker on other hosts
+
+Done in `0bad985`, then committed to `main` under the standing approval.
+
+- The layer's start script is the Go constant `pickerStart`, rendered into `sesh.lua` and tested by running it with `/bin/sh`. On a host, the Mac's path is missing, so it runs `~/.local/bin/rex-sesh` or `rex-sesh` on `PATH`, as `rex-sesh picker` without `--client`, because the action's client ID belongs to this Mac's server. Without a copy it says "Sesh cannot start: rex-sesh is not installed on this machine." and how to install it.
+- `just install-host HOST...` reads each host's `uname -sm` over SSH, cross-builds with `CGO_ENABLED=0`, uploads to `~/.local/bin/.rex-sesh.new`, and renames it to `~/.local/bin/rex-sesh`, so a running picker keeps its binary. It prints the installed version.
+- Installed `0bad985` on `buntu26` (`rex-buntu26`) and `ser8` (`rex-ser8`), both linux/amd64. `rex-homelab` has no SSH alias here, so it is not installed yet.
+- Regenerated `~/.config/rex/sesh.lua` with `rex-sesh lua --key 'ctrl+a>s'`; `rex config check` passed and `rex config reload` applied it.
+- `just check` passes with 828 tests.
+
+### Checked live
+
+- In a throwaway session on `rex-buntu26`, an unfocused layer with the same command as the action ran the host's copy. It listed that host's 3 sessions with `◆` on the throwaway one, then the host's zoxide directories. Esc closed it, and the session was killed.
+
+### Facts found
+
+- `rex-buntu26` has no hosts of its own (`rex hosts` prints "No hosts."), so a picker there lists only that host's sessions and directories, not this Mac's.
+- `ser8` runs its Rex server from `~/.local/bin/rex` with `--tailscale`; `rex` is not on the SSH session's `PATH`, but Rex terminals set `REX_BIN_DIR`.
+- A `rex -S HOST do` script must call `session.attach` and pass `session_id` before `rex.session.new_layer` on that host.
+
+### Not checked yet
+
+- Enter in a picker opened inside a host's session. That switch moves the user's app, so the user checks it.
+- After `just install-host`, copies on hosts fall behind until it runs again.

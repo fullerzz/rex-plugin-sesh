@@ -57,9 +57,19 @@ picker opens in a floating layer over the current tab.
 The picker runs on the machine that holds the current session. It lists that
 machine's Rex sessions, then the sessions on each host that `rex hosts` lists,
 marked with the host's name, such as `[devbox] api`. A host that doesn't answer
-within 3 seconds is left out. Opened from a session on another host, where
-`rex-sesh` isn't installed, the picker shows "Sesh cannot start" instead. Close
-that layer with its × button.
+within 3 seconds is left out.
+
+Opened from a session on another host, the picker runs that host's own copy of
+`rex-sesh`, from `~/.local/bin/rex-sesh` or `PATH`. It lists that host's
+sessions, its hosts' sessions and its zoxide directories. Install or update the
+copy from this machine over SSH, building for each host's OS and CPU:
+
+```bash
+just install-host devbox lab
+```
+
+Without a copy, the layer shows "Sesh cannot start". Close it with its ×
+button.
 
 To remove it, delete the `require("sesh")` line and `~/.config/rex/sesh.lua`,
 then run `rex config reload`.
