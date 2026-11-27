@@ -431,3 +431,7 @@ Done on branch `docs-rex`, then committed to `main` under the standing approval.
 ### Fix after the docs review (2026-11-27)
 
 - With `zoxide` before `rex` in `source_order`, a directory row hid the open session with the same name, and Enter on it created a second session. `Merge` now lets an open session replace a directory row of its name, in the row's place, whichever source comes first.
+
+## v0.1.0 (2026-11-27)
+
+Released with the user's approval through `just release v0.1.0`: changelog commit `ca74d82`, tag `v0.1.0`. The Release, Changelog, Docs and Gitleaks workflows passed on their first run. The GitHub release has `rex-sesh_0.1.0_{darwin,linux}_{amd64,arm64}.tar.gz`, `checksums.txt`, `CHANGELOG.md` and `RELEASE_NOTES.md`. The downloaded darwin/arm64 asset matched its checksum and printed `rex-sesh 0.1.0`. The release notes list only fork commits.
