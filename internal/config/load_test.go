@@ -263,3 +263,9 @@ func mustWrite(t *testing.T, p, s string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(p, []byte(s), 0600))
 }
+
+func TestMergeOrderMapsHerdrToRex(t *testing.T) {
+	assert.Equal(t, []string{"rex", "config", "zoxide", "dir"}, MergeOrder([]string{"herdr", "config", "zoxide", "dir"}))
+	assert.Equal(t, []string{"config", "rex"}, MergeOrder([]string{"config", "herdr", "rex"}))
+	assert.Empty(t, MergeOrder(nil))
+}

@@ -186,7 +186,9 @@ func decodeNative(path string, data []byte) (Config, error) {
 	return cfg, nil
 }
 
-var knownSources = map[string]bool{"herdr": true, "config": true, "zoxide": true, "dir": true}
+// knownSources lists the source_order names. herdr is accepted from
+// herdr-sesh configs and means rex; see MergeOrder.
+var knownSources = map[string]bool{"rex": true, "herdr": true, "config": true, "zoxide": true, "dir": true}
 
 func (n nativeConfig) validate(path string) error {
 	fail := func(key, format string, args ...any) error {

@@ -53,7 +53,8 @@ func TestCollectForRemoteTargetRunsNoLocalGit(t *testing.T) {
 	cfg := config.Default()
 	cfg.SessionConfigs = []config.SessionConfig{{Name: "api", Machine: "buntu26", Path: "/remote-only/api"}}
 	for _, target := range []string{"api", "/remote-only/api"} {
-		sessions, err := (&App{}).collect(context.Background(), cfg, target, false)
+		col, err := (&App{}).collect(context.Background(), cfg, target, false)
+		sessions := col.Sessions
 		require.NoError(t, err)
 		require.Len(t, sessions, 1)
 		assert.Equal(t, "buntu26", sessions[0].Machine)

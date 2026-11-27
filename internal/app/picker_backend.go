@@ -12,14 +12,30 @@ import (
 // errCloseUnsupported reports that the picker cannot close sessions yet.
 var errCloseUnsupported = errors.New("closing sessions is not supported yet")
 
-// pickerBackend serves the native picker from config and zoxide sessions. It
-// has no running sessions, so it neither closes them nor reports their status.
+// pickerBackend serves the native picker. It cannot close Rex sessions or
+// report their status yet.
 type pickerBackend struct {
 	app *App
 	// ctx outlives each reload; display options keep it for later previews.
 	ctx              context.Context
 	cfg              config.Config
 	activeConfigPath string
+	// warnings wait for the picker to leave the screen; see flushWarnings.
+	warnings []string
+}
+
+func (b *pickerBackend) noteRexErr(err error) {
+	if warning := rexWarning(err); warning != "" {
+		b.warnings = append(b.warnings, warning)
+	}
+}
+
+// flushWarnings prints the warnings once the picker no longer owns the screen.
+func (b *pickerBackend) flushWarnings() {
+	for _, warning := range b.warnings {
+		b.app.warnf("%s", warning)
+	}
+	b.warnings = nil
 }
 
 func (b *pickerBackend) CloseWorkspace(context.Context, string) error {
@@ -27,8 +43,12 @@ func (b *pickerBackend) CloseWorkspace(context.Context, string) error {
 }
 
 func (b *pickerBackend) ReloadPicker(ctx context.Context) (pickerpkg.ReloadResult, error) {
-	sessions, err := b.app.collect(ctx, b.cfg, "", true)
-	return pickerpkg.ReloadResult{Sessions: sessions}, err
+	col, err := b.app.collect(ctx, b.cfg, "", true)
+	if err != nil {
+		return pickerpkg.ReloadResult{}, err
+	}
+	b.noteRexErr(col.RexErr)
+	return pickerpkg.ReloadResult{Sessions: col.Sessions}, nil
 }
 
 func (b *pickerBackend) RefreshAgentStatuses() (map[string]string, error) {
@@ -46,12 +66,13 @@ func (b *pickerBackend) ReloadSettings(ctx context.Context, saved settings.Resul
 	if err != nil {
 		return pickerpkg.DisplayOptions{}, pickerpkg.ReloadResult{}, err
 	}
-	sessions, err := b.app.collect(ctx, cfg, "", true)
+	col, err := b.app.collect(ctx, cfg, "", true)
 	if err != nil {
 		return pickerpkg.DisplayOptions{}, pickerpkg.ReloadResult{}, err
 	}
+	b.noteRexErr(col.RexErr)
 	b.cfg = cfg
-	return b.displayOptions(cfg), pickerpkg.ReloadResult{Sessions: sessions}, nil
+	return b.displayOptions(cfg), pickerpkg.ReloadResult{Sessions: col.Sessions}, nil
 }
 
 // displayOptions binds the picker's long-lived context, not a reload's.

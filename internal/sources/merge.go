@@ -60,6 +60,12 @@ func Merge(ctx context.Context, srcs []Source, order []string, blacklist []strin
 				}
 				identity := [2]string{sess.Machine, key}
 				if kept, ok := seenName[identity]; ok {
+					// Two open sessions can share a label; each stays
+					// pickable, and a configured entry merges into the first.
+					if keptID := out.Directory[kept].WorkspaceID; sess.WorkspaceID != "" && keptID != "" && sess.WorkspaceID != keptID {
+						out.Add(sess)
+						continue
+					}
 					// The open space stands in for its configured entry,
 					// whichever source comes first. Keep its configured root
 					// and preview; startup and tabs apply only at creation.

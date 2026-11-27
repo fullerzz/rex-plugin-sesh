@@ -10,6 +10,8 @@ Fork herdr-plugin-sesh and strip it. Keep the Bubble Tea/bloom picker, the sessi
 
 - Reuse: fork and strip. Create a new repo, copy the code, and delete the Herdr parts. Extract a shared core later only if real duplication appears.
 - Switching: require Remote Control in v1. On refusal, the picker stays open and shows the app's message. The README tells users to turn on Remote Control. The `rex.ui.pick` palette fallback waits for a server with control API revision 17.
+- History: keep the Herdr commit history, and delete the Herdr release tags. Versions start at the first Rex tag.
+- Milestone 1 landed as one commit, and `main` was moved to it.
 
 ## What Rex provides (verified on this machine)
 
@@ -144,7 +146,7 @@ return out
 
 ## Milestone 1 status (2026-11-27)
 
-Done on branch `strip-herdr`. The work is staged, not committed.
+Done in commit `e5d8aeb`, which is now `main`. The `strip-herdr` branch and the 24 Herdr tags were deleted.
 
 - The module is `github.com/fullerzz/rex-plugin-sesh` and the binary is `rex-sesh`. Commands: `list`, `preview`, `root`, `picker`, `config`, `--version`.
 - Removed: `internal/herdr`, `connect`, `startup`, `clone`, the Herdr workspace source, remote previews, the history watcher, `last`, `window`, `plugin`, `app`, `herdr-plugin.toml`, `herdr-app/`, `demo/`, and the Herdr verify skill.
@@ -166,3 +168,24 @@ Done on branch `strip-herdr`. The work is staged, not committed.
 - `uitheme` reads `HERDR_CONFIG_PATH` to inherit Herdr's theme.
 - `state/history.go`, which nothing uses now.
 - The README, the docs site, `zensical.toml`, the release and changelog workflows, `cliff.toml`, and `.agents/setup` and `.agents/resume`.
+
+## Milestone 2 status (2026-11-27)
+
+Done on branch `rex-client`. The work is staged, not committed.
+
+- `internal/rex` runs `rex --autostart=false do - --json` with the embedded `sessions.lua`. A missing server is an error, and no new server starts. The binary comes from `REX_SESH_REX_BIN`, then `$REX_BIN_DIR/rex`, then `rex` on PATH.
+- `sources.RexSessions` (source name `rex`) lists each open session. Its label becomes the name, the focused terminal's directory becomes the path, and the session ID goes in `WorkspaceID`.
+- `list`, `picker` and `preview` include Rex sessions first. The default `source_order` is `rex, config, zoxide, dir`. A `herdr` entry from a herdr-sesh config is treated as `rex`.
+- When Rex is unavailable, `list` and `picker --json` print one warning and continue, and `list` skips writing its cache. The TUI and fzf pickers hold warnings until they exit. `preview` ignores the error.
+- `Merge` keeps two open sessions that share a label. A configured entry with that label merges into the first.
+- Checked against the real server: `rex-sesh list --json` shows the same sessions as `rex ls --json`, with decoded paths.
+- `just check` passes with 771 tests. App tests use a fake `rex` installed by `TestMain`, and one test checks that the fake was the one called.
+
+### Findings
+
+- With `REX_SERVER` set to an unreachable socket, `rex` still connected to the local server: `rex whoami --json` showed the default endpoint. Remote hosts should pass an explicit `-S`.
+- Known limit: `PathFromFileURL` drops the URL's host. A session on another host would show its remote directory as if it were local.
+- Each listing attaches the script's connection to every session for a moment, to read its view.
+- A missing `rex` binary gives the same single warning and exit 0, so CI without Rex still passes the smoke checks.
+- An empty Lua table encodes as `{}`, so the client treats `{}` and `null` as an empty session list.
+- The picker shows Rex rows with a plain `[rex]` badge. Milestone 3 adds the icon, colour and wording.

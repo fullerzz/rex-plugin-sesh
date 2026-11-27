@@ -18,6 +18,7 @@ import (
 	"github.com/fullerzz/rex-plugin-sesh/internal/namer"
 	pickerpkg "github.com/fullerzz/rex-plugin-sesh/internal/picker"
 	"github.com/fullerzz/rex-plugin-sesh/internal/preview"
+	"github.com/fullerzz/rex-plugin-sesh/internal/rex"
 	"github.com/fullerzz/rex-plugin-sesh/internal/sources"
 	"github.com/fullerzz/rex-plugin-sesh/internal/state"
 )
@@ -27,6 +28,8 @@ var Version = "dev"
 type App struct {
 	Out io.Writer
 	Err io.Writer
+	// Rex lists Rex sessions; nil uses the rex CLI.
+	Rex sources.SessionLister
 }
 
 func New() *App { return &App{Out: os.Stdout, Err: os.Stderr} }
@@ -80,10 +83,44 @@ func (a *App) loadConfig(path string) (config.Config, error) {
 	return cfg, err
 }
 
-// collect merges config and zoxide sessions. localOnly drops [[workspace]]
-// entries on another machine: list and the picker cannot open them yet.
-func (a *App) collect(ctx context.Context, cfg config.Config, target string, localOnly bool) ([]model.Session, error) {
-	srcs := []sources.Source{sources.ConfigSessions{Config: cfg, LocalOnly: localOnly}, sources.Zoxide{}}
+// capturingSource records a source's error and lists nothing in its place,
+// so one unavailable source does not fail the merge.
+type capturingSource struct {
+	sources.Source
+
+	err error
+}
+
+func (s *capturingSource) List(ctx context.Context) (model.Sessions, error) {
+	ss, err := s.Source.List(ctx)
+	if err != nil {
+		s.err = err
+		return model.NewSessions(), nil
+	}
+	return ss, nil
+}
+
+func (a *App) rexSource() *capturingSource {
+	client := a.Rex
+	if client == nil {
+		client = rex.NewClient()
+	}
+	return &capturingSource{Source: sources.RexSessions{Client: client}}
+}
+
+// collection is a merged session list. RexErr says why Rex sessions are
+// missing from it; callers report it.
+type collection struct {
+	Sessions []model.Session
+	RexErr   error
+}
+
+// collect merges Rex, config, and zoxide sessions. localOnly drops
+// [[workspace]] entries on another machine: list and the picker cannot open
+// them yet.
+func (a *App) collect(ctx context.Context, cfg config.Config, target string, localOnly bool) (collection, error) {
+	rexSrc := a.rexSource()
+	srcs := []sources.Source{rexSrc, sources.ConfigSessions{Config: cfg, LocalOnly: localOnly}, sources.Zoxide{}}
 	if target != "" {
 		direct := sources.DirectPath{Path: target}
 		// Naming runs git in the target, so only a local directory is named:
@@ -93,12 +130,21 @@ func (a *App) collect(ctx context.Context, cfg config.Config, target string, loc
 		}
 		srcs = append(srcs, direct)
 	}
-	merged, err := sources.Merge(ctx, srcs, cfg.SortOrder, cfg.Blacklist, false, true)
+	merged, err := sources.Merge(ctx, srcs, config.MergeOrder(cfg.SortOrder), cfg.Blacklist, false, true)
 	if err != nil {
-		return nil, err
+		return collection{}, err
 	}
 	sources.ApplyConfig(&merged, cfg, "")
-	return merged.Ordered(), nil
+	return collection{Sessions: merged.Ordered(), RexErr: rexSrc.err}, nil
+}
+
+// rexWarning words an unavailable Rex server for the user, or "" when Rex
+// answered.
+func rexWarning(err error) string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf("rex sessions unavailable: %v", err)
 }
 
 func (a *App) list(ctx context.Context, args []string) error {
@@ -123,12 +169,18 @@ func (a *App) list(ctx context.Context, args []string) error {
 			return a.printSessions(cached, *jsonOut)
 		}
 	}
-	ss, err := sources.Merge(ctx, []sources.Source{sources.ConfigSessions{Config: cfg, LocalOnly: true}, sources.Zoxide{}}, cfg.SortOrder, cfg.Blacklist, *blacklisted, *hideDup)
+	rexSrc := a.rexSource()
+	ss, err := sources.Merge(ctx, []sources.Source{rexSrc, sources.ConfigSessions{Config: cfg, LocalOnly: true}, sources.Zoxide{}}, config.MergeOrder(cfg.SortOrder), cfg.Blacklist, *blacklisted, *hideDup)
 	if err != nil {
 		return err
 	}
 	sources.ApplyConfig(&ss, cfg, "")
 	sessions := ss.Ordered()
+	if warning := rexWarning(rexSrc.err); warning != "" {
+		a.warnf("%s", warning)
+		// A cache without Rex sessions would hide them after the server returns.
+		cacheable = false
+	}
 	if cacheable {
 		if err := state.SaveSessionCache(stateDir(), resolvedConfigPath, sessions, time.Now()); err != nil {
 			a.warnf("could not save session cache: %v", err)
@@ -198,22 +250,28 @@ func (a *App) picker(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	sessions, err := a.collect(ctx, cfg, "", true)
+	col, err := a.collect(ctx, cfg, "", true)
 	if err != nil {
 		return err
 	}
 	if *jsonOut {
-		return a.printSessions(sessions, true)
+		if warning := rexWarning(col.RexErr); warning != "" {
+			a.warnf("%s", warning)
+		}
+		return a.printSessions(col.Sessions, true)
 	}
 	opts := pickerOptionsFromConfig(ctx, a.Out, cfg)
+	// The picker takes over the screen, so its warnings print after it exits.
+	backend := &pickerBackend{app: a, ctx: ctx, cfg: cfg, activeConfigPath: activeConfigPath}
+	backend.noteRexErr(col.RexErr)
 	var selected model.Session
 	var ok bool
 	if *fzfPicker || strings.EqualFold(os.Getenv("REX_SESH_PICKER"), "fzf") {
-		selected, ok, err = pickerpkg.RunFZF(ctx, sessions, pickerpkg.Options{DisplayOptions: opts})
+		selected, ok, err = pickerpkg.RunFZF(ctx, col.Sessions, pickerpkg.Options{DisplayOptions: opts})
 	} else {
-		backend := &pickerBackend{app: a, ctx: ctx, cfg: cfg, activeConfigPath: activeConfigPath}
-		selected, ok, err = pickerpkg.Run(sessions, pickerpkg.Options{DisplayOptions: opts, Backend: backend})
+		selected, ok, err = pickerpkg.Run(col.Sessions, pickerpkg.Options{DisplayOptions: opts, Backend: backend})
 	}
+	backend.flushWarnings()
 	if err != nil || !ok {
 		return err
 	}
@@ -236,11 +294,12 @@ func (a *App) preview(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	sessions, err := a.collect(ctx, cfg, target, false)
+	// A preview without Rex sessions still previews config and directories.
+	col, err := a.collect(ctx, cfg, target, false)
 	if err != nil {
 		return err
 	}
-	s, dir, ok := resolveTarget(sessions, target)
+	s, dir, ok := resolveTarget(col.Sessions, target)
 	if dir || !ok {
 		s = model.Session{Name: filepath.Base(target), Path: target}
 	}

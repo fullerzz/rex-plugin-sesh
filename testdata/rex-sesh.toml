@@ -2,7 +2,7 @@ version = 1
 
 [list]
 cache = false
-source_order = ["herdr", "config", "zoxide", "dir"]
+source_order = ["rex", "config", "zoxide", "dir"]
 blacklist = ["^scratch$"]
 
 [naming]

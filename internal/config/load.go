@@ -307,7 +307,7 @@ func attachDefaults(cfg *Config) {
 		cfg.DirLength = 1
 	}
 	if len(cfg.SortOrder) == 0 {
-		cfg.SortOrder = []string{"herdr", "config", "zoxide", "dir"}
+		cfg.SortOrder = []string{"rex", "config", "zoxide", "dir"}
 	}
 	if cfg.DefaultSessionConfig.PreviewCommand == "" {
 		cfg.DefaultSessionConfig.PreviewCommand = DefaultPreviewCommand

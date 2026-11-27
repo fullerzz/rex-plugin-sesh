@@ -536,7 +536,8 @@ func TestCollectDirectPathUsesConfiguredDirLength(t *testing.T) {
 	cfg := config.Default()
 	cfg.DirLength = 2
 
-	sessions, err := (&App{}).collect(context.Background(), cfg, target, false)
+	col, err := (&App{}).collect(context.Background(), cfg, target, false)
+	sessions := col.Sessions
 	require.NoError(t, err)
 	require.Len(t, sessions, 1)
 	assert.Equal(t, filepath.Join("parent", "child"), sessions[0].Name)

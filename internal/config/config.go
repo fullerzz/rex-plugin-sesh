@@ -1,6 +1,10 @@
 package config
 
-import "github.com/fullerzz/rex-plugin-sesh/internal/model"
+import (
+	"slices"
+
+	"github.com/fullerzz/rex-plugin-sesh/internal/model"
+)
 
 const (
 	// Preview output is captured through sh rather than a TTY, so eza's
@@ -81,7 +85,7 @@ func Default() Config {
 		Keys:                 KeyConfig{CyclePreviewMode: "ctrl+o"},
 		History:              HistoryConfig{LastWorkspaceLabel: DefaultLastWorkspaceLabel},
 		DirLength:            1,
-		SortOrder:            []string{"herdr", "config", "zoxide", "dir"},
+		SortOrder:            []string{"rex", "config", "zoxide", "dir"},
 		DefaultSessionConfig: DefaultSessionConfig{PreviewCommand: DefaultPreviewCommand},
 		TUI: TUIConfig{
 			DefaultSort:           DefaultWorkspaceSort,
@@ -95,4 +99,19 @@ func Default() Config {
 			ShowLastWorkspacePath: true,
 		},
 	}
+}
+
+// MergeOrder returns the source order to merge sessions in. A herdr entry,
+// from a config written for herdr-sesh, stands for the open Rex sessions.
+func MergeOrder(order []string) []string {
+	out := make([]string, 0, len(order))
+	for _, name := range order {
+		if name == "herdr" {
+			name = "rex"
+		}
+		if !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
