@@ -258,7 +258,9 @@ first. So the history keeps the order in which the app took the switches.
 
 Each Rex app has its own history, keyed by its client ID on the machine
 running the picker. Two connected apps can have the same device label and
-keep independent visit orders. If the picker can't identify the local app,
+keep independent visit orders. If the app reconnects with a new client ID,
+for example after a server restart, its recent order starts over. Earlier
+visits stay on disk under the old ID. If the picker can't identify the local app,
 it shows no history for it.
 
 For a remote switch, Rex assigns the app a different ID on the host. The

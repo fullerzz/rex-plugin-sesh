@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/fullerzz/rex-plugin-sesh/internal/model"
@@ -49,7 +50,7 @@ func namedApp(ctx context.Context, apps appLister, name string) (rex.AppClient, 
 func uniqueLabel(apps []rex.AppClient, label string) (rex.AppClient, bool) {
 	var match rex.AppClient
 	for _, app := range apps {
-		if label != "" && app.Label == label {
+		if label != "" && strings.EqualFold(app.Label, label) {
 			if match.ID != "" {
 				return rex.AppClient{}, false
 			}

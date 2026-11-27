@@ -536,3 +536,29 @@ func TestSameLabelClientsKeepIndependentVisits(t *testing.T) {
 	assert.Equal(t, []state.Visit{localVisit("session:b"), localVisit("session:a")}, historyOf(t, "id:client:mac"))
 	assert.Equal(t, []state.Visit{localVisit("session:c"), localVisit("session:a")}, historyOf(t, "id:client:other"))
 }
+
+func TestSwitchPreservesAmbiguousSelectorAndVerifiedOpener(t *testing.T) {
+	useHistoryDir(t)
+	log := filepath.Join(t.TempDir(), "rex.log")
+	t.Setenv("FAKE_REX_LOG", log)
+	useFakeRex(t, `printf '%s\n' "$*" >> "$FAKE_REX_LOG"
+case "$*" in
+  *"client ls"*) [ -z "$FAIL_LIST" ] || exit 1
+    printf '%s' '{"clients":[{"client_id":"client:a","info":{"kind":"app","label":"Mac"}},{"client_id":"client:b","info":{"kind":"app","label":"mac"}}]}' ;;
+  *"-C Mac "*) echo "ambiguous" >&2; exit 3 ;;
+esac`)
+	a := &App{}
+	row := model.Session{Source: "rex", SessionID: "session:b"}
+	target := switchTarget{client: "Mac"}
+	_, err := historyApp(t.Context(), rex.NewClient(), target)
+	require.Error(t, err)
+	require.ErrorContains(t, a.switchTo(t.Context(), target, row), "ambiguous")
+
+	target = switchTarget{opener: "client:a", currentSessionID: "session:a"}
+	target.app, err = historyApp(t.Context(), rex.NewClient(), target)
+	require.NoError(t, err)
+	t.Setenv("FAIL_LIST", "1")
+	require.NoError(t, a.switchTo(t.Context(), target, row))
+	assert.Equal(t, []state.Visit{localVisit("session:b"), localVisit("session:a")}, historyOf(t, "id:client:a"))
+	assert.Empty(t, historyOf(t, "id:client:b"))
+}

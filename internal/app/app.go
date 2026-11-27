@@ -443,15 +443,16 @@ func (a *App) switchTo(ctx context.Context, target switchTarget, s model.Session
 		// Find the app before creating anything, so a failure leaves no session.
 		var listed bool
 		app, listed, err = resolveApp(ctx, client, target)
-		if listed {
+		switch {
+		case listed:
 			localApp = app
-		} else if err == nil {
-			// Switch by the resolved ID when possible. Rex can still accept
-			// an explicit selector when listing clients is unavailable.
+		case app.ID != "" && app.ID == target.app.ID:
+			// The picker already verified this exact ID when it opened.
+			localApp = target.app
+		case err == nil:
+			// Use a fresh lookup for history. Pass the original selector to
+			// Rex so it applies its own matching and ambiguity checks.
 			localApp, _ = namedApp(ctx, client, app.ID)
-			if localApp.ID != "" {
-				app = localApp
-			}
 		}
 	}
 	if err != nil {
