@@ -308,7 +308,8 @@ Done on branch `session-id`, then committed to `main` under the standing approva
 Done on branch `zoxide`, then committed to `main` under the standing approval.
 
 - The picker lists zoxide directories after the open Rex sessions, in `source_order` (default `rex, config, zoxide, dir`). Config entries stay out of the picker for now. `picker --json` and the reloads list the same rows.
-- A zoxide directory is named after its last path element, as before. A directory named like an open Rex session is left out, so a directory you have opened shows once, as its session. Matching is by name, not path, because a session's path follows its terminal's directory.
+- A zoxide directory is named after its last path element. Directories that share one get parent elements added until each name is unique, so `/src/a/docs` and `/src/b/docs` show as `a/docs` and `b/docs`. A directory named like an open Rex session is left out, so a directory you have opened shows once, as its session. Matching is by name, not path, because a session's path follows its terminal's directory.
+- Fix (2026-11-27): the first version named every directory after its last element only, and the merge then kept one directory per name. It showed 241 of the 306 directories in this Mac's zoxide database. It now shows 304; the other 2 are named like open sessions.
 - Enter on a directory finds the Rex app first, then runs `rex new NAME --cwd DIR --json` and selects the new session. Once the app shows it, `zoxide add DIR` raises the directory's rank. The footer reads `Opening NAME…`.
 - Rex allows several sessions with one label, so a retry after a refused switch would create another session. The picker remembers the session it created for each directory and selects it again instead.
 - Without an app to switch, or with a directory that no longer exists, nothing is created. A name that starts with `-` would read as a flag, so Rex names that session itself.

@@ -74,7 +74,9 @@ then run `rex config reload`.
 | `esc` | Close the picker. |
 
 The picker lists your open Rex sessions first, then your zoxide directories.
-A directory named like an open session is left out. Choosing a directory
+Directories are named after their last path element, with parent elements added
+where two would share a name, such as `a/docs` and `b/docs`. A directory named
+like an open session is left out. Choosing a directory
 creates a Rex session named after it, starting in it, and adds it to zoxide.
 
 `◆` marks the session the picker was opened from. Beside each session, a glyph
