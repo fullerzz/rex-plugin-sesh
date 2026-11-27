@@ -4,293 +4,65 @@ icon: lucide/panels-top-left
 
 # Layouts
 
-Named tabs and split panes are created when a workspace is new. Reconnecting to
-an open workspace keeps its running terminals. Select tab names through a
-`[[workspace]].tabs` list, or through a matching `[[rule]].tabs` list for a
-discovered project. See [Configuration](../config.md) for file setup and lookup.
-For one named tab without pane splits, start with the
-[small workspace example](../config.md#add-a-workspace-with-a-tab).
+!!! warning "Layout settings have no effect in rex-sesh"
 
-!!! note "Herdr TUI and Herdr app layouts"
+    rex-sesh accepts the startup commands, tabs and pane layouts that
+    herdr-sesh used, so an older config still loads. It never runs or builds
+    them. Choosing a directory creates a Rex session with one terminal that
+    starts in that directory, and nothing else. Choosing an open session only
+    switches to it.
 
-    Both integrations use these definitions to create workspaces.
-    The walkthrough's proportions and focus behavior describe Herdr TUI.
-    The app splits evenly, ignores `ratio`, and has different focus behavior
-    during creation. See [app layout differences](../herdr-app.md#differences-from-the-herdr-plugin).
-    With the app, a workspace that names a
-    [`machine`](../herdr-app.md#create-a-remote-space-from-a-configured-workspace)
-    builds its layout on that machine.
+These settings came from herdr-sesh:
 
-## Pane layout walkthrough
+- `startup` in `[workspace_defaults]`, `[[workspace]]` and `[[rule]]`
+- `disable_startup` in `[[workspace]]` and `[[rule]]`
+- `tabs` in `[[workspace]]` and `[[rule]]`
+- the `[[tab]]` and `[[tab.pane]]` tables
 
-The following complete native configuration creates an editor on the left,
-with a server above logs on the right. Replace the workspace path with your
-project directory. This example assumes `nvim` is installed, `web/` contains
-an npm project with a `dev` script, and `development.log` exists in the project
-root; replace the commands to suit your project.
+Two things about them still matter:
 
-Edit your [plugin config](../config.md#create-your-configuration); pane definitions
-are file-only. When adding this example to an existing
-native config, keep its single top-level `version = 1` line and use unique tab
-and workspace names. [Migrate legacy configs](../config.md#legacy-migration) first.
+- **They are still checked.** A mistake in one of these tables, such as a pane
+  that splits from an unknown pane, stops the config from loading, and the
+  picker with it. Run `rex-sesh config validate` after you edit them, or
+  remove the tables.
+- **Some show up in `rex-sesh list --json`.** Rows carry `startup_command`,
+  `disable_startup_command` and `window_names` (the tab names), so scripts that
+  read that output can still use them.
 
-```toml
-version = 1
-
-[[tab]]
-name = "development"
-
-[[tab.pane]]
-name = "editor"
-startup = "nvim"
-
-[[tab.pane]]
-name = "server"
-split_from = "editor"
-split = "right"
-ratio = 0.35
-path = "./web"
-env = { NODE_ENV = "development" }
-startup = "npm run dev"
-
-[[tab.pane]]
-name = "logs"
-split_from = "server"
-split = "down"
-ratio = 0.3
-startup = "tail -f development.log"
-
-[[workspace]]
-name = "my-project"
-path = "~/projects/my-project"
-tabs = ["development"]
-```
-
-The `tabs` list activates the layout; defining a tab alone does not create it.
-Open the picker from the intended Herdr TUI session:
-
-```bash
-herdr plugin action invoke fullerzz.sesh.open-picker
-```
-
-In the Herdr app, open the [`sesh` mod](../herdr-app.md#install) instead.
-
-Select `my-project`, which must not already be open. The new workspace opens on
-Herdr's initial tab; select `development` to see the layout with the editor
-focused. See [Initial tab behavior](#initial-tab-behavior) for why it stays separate.
-For optional validation before opening, follow the [CLI setup](../commands.md#run-the-binary-directly)
-and run `"$sesh_bin" config validate`.
-
-```text
-my-project workspace
-Tabs: [Herdr initial tab (selected)] [development]
-
-development tab — approximate proportions
-┌──────────────────────────────────────┬────────────────────┐
-│ editor (focused)                     │ server             │
-│ nvim                                 │ npm run dev        │
-│                                      │                    │
-│                                      │                    │
-│                                      │                    │
-│                                      │                    │
-│                                      ├────────────────────┤
-│                                      │ logs               │
-│                                      │ tail -f            │
-│                                      │ development.log    │
-└──────────────────────────────────────┴────────────────────┘
-              65% width                       35% width
-```
-
-`ratio` is the **new pane's share of the pane being split**: the right column
-gets 35% of the tab width, then logs take 30% of that column's height.
-
-| Pane | Working directory | Pane-specific environment | Startup command |
-| --- | --- | --- | --- |
-| `editor` | `~/projects/my-project` | None added | `nvim` |
-| `server` | `~/projects/my-project/web` | `NODE_ENV=development` | `npm run dev` |
-| `logs` | `~/projects/my-project` | None added | `tail -f development.log` |
-
-A pane inherits the **tab directory**, not the pane it splits. Here the tab
-uses the workspace directory, so logs stay at the project root. Relative pane
-paths resolve against the tab directory: a tab `path = "frontend"` would make
-`./web` resolve to `~/projects/my-project/frontend/web`.
+The rest of this page lists what each table accepts, so you can keep an older
+config valid. See [Configuration](../config.md) for the settings that work.
 
 ## `[[tab]]`
 
-| Field | Runtime effect |
+| Field | Accepted value |
 | --- | --- |
-| `name` | Name referenced by a workspace or rule `tabs` list and used as the Herdr tab label. Must be non-empty and unique. |
-| `path` | Optional tab working directory. Without it, the workspace path is used; relative paths resolve against it, `~/` expands, and absolute paths are used directly. |
-| `startup` | Command run in the new tab. `{}` is replaced with that tab's working directory. Cannot be combined with `[[tab.pane]]` entries; set `startup` on each pane instead. |
-| `pane` | Optional `[[tab.pane]]` layout. See below. |
+| `name` | Required. Must be unique. `tabs` lists refer to it. |
+| `path` | Optional directory. |
+| `startup` | Optional command. Can't be combined with `[[tab.pane]]` entries. |
+| `pane` | Optional `[[tab.pane]]` entries. See below. |
+
+Every name in a `[[workspace]]` or `[[rule]]` `tabs` list must match a
+`[[tab]]`.
 
 ## `[[tab.pane]]`
 
-Herdr TUI layouts require Herdr 0.8.2 or newer, as enforced by the plugin manifest.
-Direct CLI use has no version preflight: check `herdr --version`. An older binary
-may leave a partial workspace; upgrade, then follow [recovery](#reconnecting-and-recovering-a-partial-layout).
-
-### Pane fields
-
-| Field | Runtime effect |
+| Field | Accepted value |
 | --- | --- |
-| `name` | Pane name referenced by later `split_from` values. Must be non-empty and unique within the tab. |
-| `split_from` | Earlier pane to split. Required for every pane after the first; forward and self references are rejected. |
+| `name` | Required. Must be unique within its tab. |
+| `split_from` | The name of an earlier pane in the same tab. Required for every pane after the first. |
 | `split` | `"right"` or `"down"`. Required for every pane after the first. |
-| `ratio` | Optional share of the split given to the new pane, from `0.1` to `0.9` in Herdr TUI. Without it, the TUI splits evenly. The app always splits evenly and ignores this field. |
-| `path` | Optional working directory. Without it, the tab path is used; relative paths resolve against the tab path and `~/` is expanded. |
-| `env` | Optional environment variables for the pane's shell. Names must match `[A-Za-z_][A-Za-z0-9_]*`; values cannot contain NUL bytes. Both integrations pass values as process arguments; see the [app differences](../herdr-app.md#differences-from-the-herdr-plugin). Shell startup files can override them. |
-| `startup` | Command run in the pane. `{}` is replaced with the pane's shell-quoted working directory. |
-| `wait_for` | Optional readiness check: `{ match = "...", timeout_ms = 15000 }`. Requires `startup`. See [Waiting for a pane to become ready](#waiting-for-a-pane-to-become-ready). |
-| `focus` | Optional `true` to focus this pane once a new workspace's layout is built. See [Choosing the focused pane](#choosing-the-focused-pane). |
+| `ratio` | Optional number from `0.1` to `0.9`. |
+| `path` | Optional directory. |
+| `env` | Optional table of variables. Names must match `[A-Za-z_][A-Za-z0-9_]*`, and values must not contain NUL bytes. |
+| `startup` | Optional command. |
+| `wait_for` | Optional `{ match = "...", timeout_ms = 30000 }`. Needs `startup`. `match` must be one non-empty line that doesn't appear in `startup`. `timeout_ms` runs from `1` to `600000`. |
+| `focus` | Optional `true`. A tab can focus only one pane, and a `tabs` list can reach only one focused pane. |
 
-!!! warning "Do not put secrets in pane environment values"
+The first pane can't set `split_from`, `split` or `ratio`.
 
-    In Herdr TUI, values are passed as `--env KEY=VALUE` arguments. The Herdr
-    app receives them as `KEY=VALUE` arguments to the pane's start command,
-    which `hc get` shows. Values in either integration may be visible to local
-    users through process inspection, subject to OS permissions. Error
-    redaction does not prevent these exposures. Load secrets through shell
-    credential tooling instead.
+## Legacy names
 
-`split_from` copies neither `path` nor `env`; configure each pane separately.
-The first pane is the root and cannot set `split_from`, `split`, or `ratio`.
-Its `path` and `env` apply at tab creation (or workspace creation when reusing
-the initial tab). In Herdr TUI, later panes split in declaration order without
-taking focus.
-
-## Initial tab behavior
-
-Herdr creates an initial tab. In Herdr TUI, reuse and focus follow this table
-when tabs are configured. Picker selection uses the normal column, while
-`connect --no-focus` creates the workspace in the background:
-
-| Workspace startup | First tab's root pane | Reuse initial tab? | Active tab: normal / `--no-focus` |
-| --- | --- | --- | --- |
-| None | Workspace directory, no startup | Yes | First configured / first configured |
-| None | Workspace directory, with startup | No | Initial / initial |
-| Runs | Workspace directory, with or without startup | No | First configured / initial |
-| Either | Another directory | No | Initial / initial |
-
-A [focus marker](#choosing-the-focused-pane) replaces the normal column's result
-when the target's configured directory matches the workspace directory.
-
-Workspace startup includes rule/default fallbacks unless `disable_startup = true`.
-The root uses the tab's `path`, overridden by the first pane's `path`. Later
-panes/tabs do not affect reuse. Without configured tabs, the initial tab remains.
-A reused tab receives the configured label and root `env`.
-
-To reuse the initial tab, leave the first root at a shell in the workspace
-directory, with no workspace startup; put commands in other panes. Any root
-startup, even `git status`, keeps a separate tab because commands can change
-directories. Herdr reports the active pane's directory as the workspace path;
-reconnect by name or ID if a command or pane selection changes it.
-
-Workspace startup runs in the initial pane, separately from tab/pane commands.
-Its exports and directory changes do not carry into configured tabs; use their
-`path` and pane `env` settings.
-
-### Startup commands and focus
-
-Commands are sent separately, without `eval` or shell composition. Layouts do
-not wait for workspace startup to finish. Use pane [`wait_for`](#waiting-for-a-pane-to-become-ready)
-for dependencies. Commands use the pane shell's syntax; `{}` uses POSIX shell
-quoting, so avoid it with incompatible shells.
-
-`disable_startup = true` suppresses only workspace startup, including rule/default
-fallbacks. Tabs and panes still run their commands; omit a pane's `startup` to
-leave it at a shell.
-
-### Choosing the focused pane
-
-Set `focus = true` on one pane to focus it, and its tab, after the new
-workspace's layout is built. The target can be in a later tab, but its resolved
-configured directory must match the workspace directory. Markers on panes in
-other directories are skipped, preserving the normal focus behavior and
-path-based reconnects. Both the pane's `path` and an inherited tab `path` count.
-For example, this selects a server pane that runs from the workspace directory:
-
-```toml
-[[tab.pane]]
-name = "server"
-split_from = "editor"
-split = "right"
-startup = "npm run dev"
-focus = true
-```
-
-Without a marker, focus follows the table above. Each workspace or rule `tabs`
-list may reach only one marked pane: config load rejects two markers in one
-tab, two marked tabs in one list, or a marked tab listed twice. Several lists
-can share the same marked tab.
-
-`connect --no-focus` ignores the marker. It keeps your current focus in Herdr
-TUI; the app restores the previously shown tab after creation. The marker
-applies only when the layout completes; reconnecting to an open workspace
-never reapplies the marker. Startup commands can still change a pane's
-directory after creation; reconnect by name or ID if that happens.
-
-In Herdr TUI, focus uses the `pane.focus` socket API through
-`HERDR_SOCKET_PATH`, which Herdr sets for the picker, plugin actions, and its
-panes. Run direct CLI commands from a Herdr TUI pane to use explicit focus.
-
-In the Herdr app, focus uses the app's `pane.focus` command and does not require
-`HERDR_SOCKET_PATH`. For direct CLI use, select the app backend with
-`HERDR_SESH_BACKEND=app`; see [backend selection](../commands.md#choose-the-herdr-backend).
-
-If focus fails, the command reports a warning and keeps the completed layout.
-Connect still succeeds and records the workspace switch in history.
-
-## Waiting for a pane to become ready
-
-To wait for a server before starting tests, add `wait_for` to the server pane.
-Without it, commands run in declaration order without waiting for completion.
-Add this tab to a native config and reference `"development"` in a workspace's
-`tabs` list; replace any existing tab with that name:
-
-```toml
-[[tab]]
-name = "development"
-
-[[tab.pane]]
-name = "server"
-startup = "npm run dev"
-wait_for = { match = "Local: http://localhost:3000", timeout_ms = 15000 }
-
-[[tab.pane]]
-name = "tests"
-split_from = "server"
-split = "right"
-startup = "npm run test:integration"
-```
-
-After sending startup, herdr-sesh waits for matching output before creating
-later panes or tabs. Output printed before the wait starts is also searched.
-
-| Field | Meaning |
-| --- | --- |
-| `match` | Literal text to find on a single output line. A line that wraps at the pane's edge still counts as one line. Required and non-empty. It must not appear in `startup`, because the pane echoes the typed command. ANSI styling is ignored. |
-| `timeout_ms` | Optional wait limit in milliseconds, from `1` to `600000` (10 minutes). Defaults to `30000`. |
-
-Matches are checked against `startup` when loading and again after `{}` expands
-to the final path. A match in the expanded command stops the layout before that
-command runs, to avoid accepting echoed input as readiness.
-
-Timeout, wait failure, or interruption stops later panes, commands, and tabs;
-errors identify the workspace, tab, pane, and failed check. Running processes
-are kept; use [recovery](#reconnecting-and-recovering-a-partial-layout).
-`wait_for` is a one-time startup barrier, not health monitoring or automatic
-restart. In Herdr TUI, it uses `herdr pane wait-output`, supported since
-Herdr 0.8.2. The Herdr app instead polls the terminal's screen and recent
-history through `hc read TERMINAL --lines 1000`.
-
-## Reconnecting and recovering a partial layout
-
-Configuration is validated before workspace creation. If a Herdr operation
-fails during layout creation, the error identifies the workspace, tab, pane,
-and operation; the workspace and running processes are kept.
-
-If creation failed, correct the reported error first. To apply edits or rebuild
-a partial layout, save your work, stop processes as
-needed, close the workspace, and select it again. Reconnecting to an open
-workspace never rearranges panes, reruns commands, or retries readiness checks.
+A legacy Sesh-style file uses `[[window]]` for `[[tab]]`, with
+`startup_script` for `startup`, and `windows` for `tabs`. These load the same
+way and have no effect either. The legacy format has no pane layouts. See the
+[key reference](../config.md#legacy-migration) for every renamed key.

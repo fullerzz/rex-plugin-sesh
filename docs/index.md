@@ -2,121 +2,129 @@
 icon: lucide/panels-top-left
 ---
 
-# herdr-sesh
+# rex-sesh
 
-A [Sesh](https://github.com/joshmedeski/sesh)-inspired workspace picker and session manager for
-[Herdr](https://herdr.dev/).
+A [Sesh](https://github.com/joshmedeski/sesh)-style session picker for the Rex
+terminal.
 
-![Filtering workspaces and inspecting a live pane in the Herdr TUI picker](assets/picker-demo.gif){ loading=lazy width=700 }
+Press a key in Rex, and the picker opens in a floating layer over the current
+tab. Type to filter, press ++enter++, and the Rex app switches to the session
+you chose.
 
-`herdr-sesh` combines running Herdr workspaces, configured sessions, and
-zoxide history in one searchable overlay. Selecting an item focuses its
-existing workspace or creates a new one with the configured startup command,
-tabs, and pane layouts.
+The picker lists, in this order:
 
-## Choose your Herdr integration
+1. The open Rex sessions on this machine.
+2. The sessions on each of your hosts, the other Rex servers that `rex hosts`
+   lists. They show the host's name first, such as `[devbox] api`.
+3. Your [zoxide](https://github.com/ajeetdsouza/zoxide) directories.
 
-This repository provides a **herdr-tui plugin** for Herdr's terminal UI and
-**herdr-app mods** for the desktop app. Both use the same `herdr-sesh` binary
-and native TOML configuration.
-
-[Watch the desktop mod demo](herdr-app.md#desktop-picker-demo).
-
-| Capability | Herdr TUI plugin | Herdr app mods |
-| --- | --- | --- |
-| Installation | [Plugin installation](#install) | [App mod setup](herdr-app.md#install) |
-| Open the picker | `fullerzz.sesh.open-picker` plugin action | `mod.open:sesh` |
-| Remote workspaces | Unavailable | Select existing remote spaces; create configured ones |
-| Track navigation outside Sesh | Automatic through plugin hooks | Requires a [`sesh-last` layout block](herdr-app.md#switch-to-the-last-space) |
-| Pane split ratios | Supported | Splits evenly; ignores `ratio` |
-
-Remote workspace support is available only through the Herdr app integration,
-including direct CLI commands targeting the app. Configured sessions and
-directory entries create local workspaces in both integrations. With the app,
-a configured workspace that names a `machine` creates its space on that machine.
-
-| Sesh term | Herdr TUI term | Herdr app term |
-| --- | --- | --- |
-| Session | Workspace | Space |
-| Window | Tab | Tab |
-| Picker | Overlay pane | Mod dialog |
-
-The picker focuses a workspace that is already running. Selecting a configured
-workspace or zoxide directory creates one if it is not open. Startup commands,
-tabs, and pane layouts run only when a workspace is created.
-
-!!! tip "Open a complete project layout from one picker entry"
-
-    Define reusable tabs with panes split right or down, custom split ratios,
-    and a working directory, environment, and startup command for each pane.
-    Open your editor, development server, and logs together; reconnecting keeps
-    the running layout intact. See the
-    [pane layout walkthrough and diagram](config/layouts.md#pane-layout-walkthrough)
-    for a complete configuration.
+Choosing a session switches the Rex app to it. Choosing a directory creates a
+Rex session named after it, starting in it, and then switches to it.
 
 ## Requirements
 
-These requirements apply to the Herdr TUI plugin. For the desktop app, follow
-the [Herdr app setup](herdr-app.md#install).
+- macOS or Linux.
+- The Rex app, with **Remote Control** turned on in its settings. rex-sesh
+  switches sessions through the app's `session.select` action, and the app
+  accepts actions from other programs only while Remote Control is on.
+- Git, to get the source, and [mise](https://mise.jdx.dev), to install the
+  pinned Go toolchain, `just` and the other tools.
+- Optional: `zoxide`, to list your frequent directories.
+- Optional: `eza`, for the default directory preview.
+- Optional: `fzf` and `bat`, for the fzf picker and its preview.
 
-- Herdr 0.8.2 or newer
-- Linux or macOS
-- Git and Go 1.27.3 or newer for Herdr's source-based plugin installation
-- Optional: `zoxide` for directory history and `eza` for the default preview
-- Optional: `fzf` and `bat` for the experimental fzf picker
-
-## Install
-
-For Herdr TUI, install the plugin:
+## Build
 
 ```bash
-herdr plugin install fullerzz/herdr-plugin-sesh
+git clone https://github.com/fullerzz/rex-plugin-sesh.git
+cd rex-plugin-sesh
+mise install
+just build
 ```
+
+The binary is `bin/rex-sesh`. Check it with:
+
+```bash
+./bin/rex-sesh --version
+./bin/rex-sesh picker --json
+```
+
+`picker --json` prints the picker's rows as JSON and switches nothing.
+
+## Set up in Rex
+
+1. Write the Rex config module, and bind a key to the picker:
+
+    ```bash
+    ./bin/rex-sesh lua --key 'ctrl+a>s' > ~/.config/rex/sesh.lua
+    ```
+
+2. Add this line to `~/.config/rex/init.lua`:
+
+    ```lua
+    require("sesh")
+    ```
+
+3. Check the config, then reload it:
+
+    ```bash
+    rex config check && rex config reload
+    ```
+
+4. Turn on Remote Control in the Rex app's settings.
+
+The module points at `bin/rex-sesh` in this checkout. `just clean` deletes that
+binary, so run `just build` again before you use the picker.
+
+[Rex setup](rex-app.md) explains what the module does, other ways to bind a
+key, sessions on other hosts, and how to remove the picker.
 
 ## First use
 
-From a running Herdr TUI session, open the picker through the installed plugin action:
+Press ++ctrl+a++, then ++s++. You can also run **Sesh: Pick Session** from the
+Rex command palette.
 
-```bash
-herdr plugin action invoke fullerzz.sesh.open-picker
-```
+You see your Rex sessions, with `◆` on the session you opened the picker from.
+Then come your hosts' sessions and your zoxide directories. Beside each
+session, a glyph shows the most urgent status that its programs report through
+Rex:
 
-In the Herdr app, open the [`sesh` mod](herdr-app.md#install) instead.
+| Glyph | Status |
+| --- | --- |
+| Spinner | Working |
+| `◉` | Blocked |
+| `●` | Done |
+| `✓` | Idle |
 
-You should see your running Herdr workspaces. If zoxide has recorded directories,
-those appear too. Type part of a name or path, then press ++enter++ to focus an
-existing workspace or create one from a directory. No config file is needed.
+Type part of a name or path to filter the list. Press ++enter++ to switch to the
+selected session. On a directory, ++enter++ opens a new Rex session there,
+switches to it, and adds the directory to zoxide. Press ++esc++ to close the
+picker without switching.
 
-To add your own named project, follow [Create your configuration](config.md#create-your-configuration).
-That walkthrough shows a complete, small config file and ends by opening the
-new workspace from the picker.
+If the Rex app refuses the switch, for example because Remote Control is off,
+the picker stays open and shows "Could not switch:" with the app's message.
+
+No config file is needed. To change how the picker looks, what its previews
+run, or which entries it hides, see [Configuration](config.md). The picker
+doesn't list `[[workspace]]` entries from your config; `rex-sesh list` does.
 
 ### Everyday tasks
 
-- [Bind the picker and previous-workspace actions to keys](keybindings.md#herdr-actions).
-- [Switch previews or change their shortcut](keybindings.md#native-picker-previews).
-- [Open a project with named tabs and split panes](config/layouts.md#pane-layout-walkthrough).
-- [Use direct CLI commands](commands.md#command-reference).
-- [Diagnose a missing workspace or unexpected result](troubleshooting.md).
-
-## Documentation versions
-
-Use the version selector in the header to choose a release's documentation.
-`latest` follows the `main` branch and may describe changes not yet released.
-Release snapshots are available starting with `v0.10.0`, when the wiki was added.
-
-For changes in each release, see the
-[release notes](https://github.com/fullerzz/herdr-plugin-sesh/releases).
+- [Bind another key to the picker](rex-app.md#bind-a-key).
+- [Use the picker with sessions on other hosts](rex-app.md#sessions-on-other-hosts).
+- [Learn the picker's keys and switch previews](keybindings.md).
+- [Change the picker's appearance and previews](config/picker.md).
+- [Run rex-sesh commands directly](commands.md).
+- [Diagnose a missing session or an unexpected result](troubleshooting.md).
 
 ### Reference
 
-- [Configuration](config.md) explains config discovery, workspaces, and legacy
-  Sesh migration. [Picker](config/picker.md) covers appearance, sorting, and
-  shortcuts. [Layouts](config/layouts.md) covers named tabs and split panes.
-- [Keybindings](keybindings.md) shows how to invoke the picker and related
-  actions from Herdr.
-- [Commands](commands.md) covers direct CLI use and installed-binary setup.
-- [Contributing](development/index.md) covers local development, tests, docs,
-  and releases.
-- [GitHub releases](https://github.com/fullerzz/herdr-plugin-sesh/releases)
-  contains versioned source and release notes.
+- [Rex setup](rex-app.md) covers the `sesh_picker` action, Remote Control,
+  hosts, updates and removal.
+- [Configuration](config.md) explains config lookup, settings and legacy Sesh
+  migration. [Picker](config/picker.md) covers the picker's settings.
+- [Commands](commands.md) lists every rex-sesh command and flag.
+- [Keybindings](keybindings.md) lists the keys of the picker and the settings
+  editor.
+- [Contributing](development/index.md) covers local development, tests and
+  docs.

@@ -4,12 +4,11 @@ icon: lucide/search
 
 # Picker configuration
 
-The native picker runs in both the Herdr TUI plugin and the Herdr app's `sesh`
-mod. Picker controls and settings are shared; host-specific behavior is noted below.
-
-Use the [Settings editor](../config.md#settings-editor) or edit `config.toml`.
-For example, add these settings to a native file with `version = 1`; if `[picker]`
-already exists, edit its values instead of adding another table:
+The picker reads the `[picker]` and `[keys]` tables each time it opens. Change
+them in the [Settings editor](../config.md#settings-editor), or in
+`config.toml`. For example, add this to a native file that starts with
+`version = 1`. If the file already has a `[picker]` table, edit its values
+instead of adding another:
 
 ```toml
 [picker]
@@ -20,196 +19,208 @@ preview_mode = "pane"
 
 ## `[picker]`
 
-These settings affect the native picker, except `separator_aware`, which also
-applies to fzf. Picker sorting does not change JSON output.
+Picker settings change only what the picker shows. They don't change the JSON
+that `rex-sesh list --json` or `rex-sesh picker --json` prints.
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| `show_icons` | `false` | Show Nerd Font source icons; source labels remain when hidden. |
-| `show_path` | `true` | Show the path column when space permits. Does not affect path matching or the history footer. |
-| `show_preview` | `true` | Show previews. `false` gives the list all available space and stops preview commands. |
-| `preview_mode` | `"command"` | Initial preview: `command` or `pane`. See [Preview controls](#preview-controls). |
-| `prioritize_home` | `true` | Put the actual home directory first for an exact `home` search; see [Search ranking](#search-ranking). |
-| `herdr_theme_inherit` | `true` | Use [Herdr colors](#picker-colors); `false` keeps built-in picker colors. |
-| `replace_worktree_icon` | `true` | Use `↳` for linked worktrees; `false` keeps the sheep icon or plain `[herdr]` label. Other worktree cues remain. |
-| `prompt` | `"Sesh> "` | Prompt text; empty uses the default. |
-| `placeholder` | `"Filter workspaces"` | Placeholder text; empty uses the default. |
-| `separator_aware` | `false` | Treat `-`, `_`, `/`, and `.` as spaces in native and fzf searches. |
-| `workspace_sort` | `"workspace"` | Herdr order (`workspace`), most recently visited first (`recent`), or status priority (`agent`). Press ++ctrl+r++ to cycle `workspace` → `recent` → `agent`. |
-| `show_last_workspace` | `true` | Show the previous-workspace footer. Hiding it does not disable history or `last`. |
-| `show_last_workspace_path` | `true` | Include the previous workspace's working directory in the footer. |
+| `show_icons` | `false` | Show Nerd Font icons in the source column. When off, the column shows `[rex]` or `[zoxide]`. |
+| `show_path` | `true` | Show the path column when there is room. Paths still match your filter when the column is hidden. |
+| `show_preview` | `true` | Show the preview. `false` gives the list the whole width, runs no preview commands, and turns off the preview key. |
+| `preview_mode` | `"command"` | The preview the picker opens with: `command` or `pane`. See [Preview controls](#preview-controls). |
+| `prioritize_home` | `true` | Put your home directory first when the filter is exactly `home`. See [Search ranking](#search-ranking). |
+| `separator_aware` | `false` | Treat `-`, `_`, `/` and `.` as spaces when matching your filter. |
+| `prompt` | `"Sesh> "` | The filter prompt. Empty uses the default. |
+| `placeholder` | `"Filter sessions"` | The hint shown in an empty filter. Empty uses the default. |
+| `workspace_sort` | `"workspace"` | How Rex sessions are ordered when the picker opens: `workspace`, `recent`, or `agent`. See [Sort modes](#sort-modes). |
+| `herdr_theme_inherit` | `true` | Take the picker's colors from Herdr's theme file. `false` uses the built-in colors. See [Picker colors](#picker-colors). |
+| `replace_worktree_icon` | `true` | Accepted, but has no effect. rex-sesh doesn't detect Git worktrees. |
+| `show_last_workspace` | `true` | Accepted, but has no effect. rex-sesh records no session history, and the footer never shows a last session. |
+| `show_last_workspace_path` | `true` | Accepted, but has no effect, for the same reason. |
+
+The keys keep their herdr-sesh names, such as `workspace_sort`, so older
+configs still load.
+
+### Sort modes
+
+Press ++ctrl+r++ in the picker to cycle through the modes: `workspace`, then
+`recent`, then `agent`. The footer names the current mode.
+
+| Mode | Footer | Order |
+| --- | --- | --- |
+| `workspace` | `rex order` | The order Rex lists sessions in: this machine's, then each host's. |
+| `recent` | `recent` | Accepted, but rex-sesh records no history, so this is the same as `rex order`. |
+| `agent` | `agent` | By the most urgent status in each session: blocked, then done, then working, then idle, then sessions with no status. Sessions with the same status keep Rex order. |
+
+In `agent` mode, the picker sorts again each second as statuses change, and
+keeps your selection on the same row. Sorting moves only Rex sessions.
+Directories stay where [`list.source_order`](../config.md#sources) puts them.
 
 ### Search ranking
 
-Names and paths match case-insensitively; name matches precede path-only matches.
-Each group retains its existing order, including `workspace_sort` for Herdr rows.
-An exact `home` query also finds the actual home directory regardless of its
-name: `prioritize_home = true` puts it first; `false` keeps it among path matches.
-The fzf picker uses its own ranking.
+The filter matches names and paths, ignoring case, wherever the text appears.
+Name matches come first, then rows that match only by path. Each group keeps
+its order.
 
-Agent sorting uses blocked → done → working → idle → unknown/no agent, retaining
-Herdr order for ties and unrecognized states. Live updates preserve the selected
-workspace. Sorting rearranges only Herdr rows within their `list.source_order`
-slots; it cannot move them ahead of sources ordered first. Linked worktrees
-[sort as families](#linked-worktrees).
+A host's session also matches its host's name: `devbox api` finds
+`[devbox] api`.
+
+The filter `home`, exactly, also finds your home directory, whatever its row is
+called. With `prioritize_home = true` that row comes first; with `false` it
+stays among the path matches. Rows from other hosts never match this way.
+
+The fzf picker (`rex-sesh picker --fzf`) does its own fuzzy matching. It uses
+`prompt` and `placeholder`, but `separator_aware` and `prioritize_home` have no
+effect there.
 
 ### Preview controls
 
-`command` uses the configured preview command or built-in fallback. `pane` shows
-the selected running workspace's active pane, refreshing once per second without
-changing focus or running preview commands. Configured sessions and directories
-without running panes show an unavailable message.
+`command` mode runs a preview command for the selected row. The command comes
+from a [`[[rule]]`](../config.md#rule), from
+[`workspace_defaults.preview`](../config.md#workspace_defaults), or from the
+built-in default, `eza --icons=always --color=always -la {}`. For a Rex
+session, `{}` is the directory its focused terminal last reported. A session
+with no directory shows its name and ID instead. A session on another host
+shows its name, host, ID and path, because its directory isn't on this
+machine.
 
-`show_preview = false` disables both modes and cycling. `preview_mode` does not
-change the `herdr-sesh preview` command. With `show_path = false`, side-by-side
-previews initially take 50% of the width; narrow terminals keep stacked previews.
-See [Keybindings](../keybindings.md#native-picker-previews) for toggling modes and
-resizing the divider; these adjustments last only until the picker closes.
+`pane` mode shows the selected session's live screen: the focused terminal of
+its active tab. It refreshes once a second, and shows only what is on screen,
+not the scrollback. For a host's session, the
+picker reads the screen through that host. A directory has no screen, so it
+keeps its command preview, and the preview title says PREVIEW instead of PANE.
+
+Press ++ctrl+o++ to switch between the two modes while the picker is open. The
+preview title shows the key. See [`[keys]`](#keys) to change it.
+
+- `show_preview = false` turns off both modes and the key.
+- A preview command that runs longer than five seconds is stopped. Moving to
+  another row cancels the old preview.
+- `preview_mode` doesn't change `rex-sesh preview`, which always runs the
+  preview command.
+- With `show_path = false`, a side-by-side preview takes half the width. In a
+  narrow layer, the preview goes below the list.
+- The fzf picker shows its own preview, a README through `bat` or a file list,
+  and ignores preview commands.
+
+Drag the divider between the list and the preview to resize it. The new width
+lasts until the picker closes. See [Keybindings](../keybindings.md) for the
+picker's other keys.
 
 ## `[keys]`
 
 ```toml
 [keys]
-cycle_preview_mode = "alt+p" # default: "ctrl+o"; "" disables cycling
+cycle_preview_mode = "alt+p" # default: "ctrl+o"; "" turns the key off
 ```
 
-Add this table to your native config, or edit the existing `[keys]` table.
-The shortcut overrides other native picker bindings, so choose an unused key.
-An empty value hides the shortcut hint, leaves `preview_mode` in effect, and
-returns keys to normal handling. This does not configure fzf or Herdr shortcuts.
+`cycle_preview_mode` is the key that switches between command and pane
+previews. It takes precedence over the picker's other keys, so choose one the
+picker doesn't use. An empty value turns the key off and hides its hint;
+`preview_mode` still sets the preview the picker opens with.
+
+If you set it to `"f2"`, the settings editor moves to `ctrl+,`. The Rex app
+takes any key your Rex config binds before the picker sees it, so check
+`rex keymap` before you choose one. This table doesn't configure fzf.
 
 ??? info "Key syntax"
 
-    Names use Bubble Tea's exact, case-sensitive spelling: a printable character
-    or named key such as `f2`. Join modifiers in `ctrl`, `alt`, `shift`, `meta`,
-    `hyper`, `super` order. Unsupported names, repeated modifiers, and incorrect
-    order are rejected.
+    Names use Bubble Tea's exact, case-sensitive spelling: a printable
+    character, or a named key such as `f2`, `tab` or `pgdown`. Join modifiers
+    in `ctrl`, `alt`, `shift`, `meta`, `hyper`, `super` order. Unsupported
+    names, repeated modifiers and the wrong order are rejected when the config
+    loads.
 
-    For shifted printable keys alone, use `P` or `?`, not `shift+p` or `shift+/`.
-    With other modifiers, use the unshifted base: `ctrl+shift+p` and `alt+shift+/`,
-    not `ctrl+shift+P` or `alt+shift+?`. Named keys such as `shift+f2` are valid.
+    For a shifted printable key alone, use the character it types: `P` or
+    `?`, not `shift+p` or `shift+/`. With other modifiers, use the unshifted
+    key: `ctrl+shift+p` and `alt+shift+/`, not `ctrl+shift+P` or
+    `alt+shift+?`. Named keys such as `shift+f2` are valid.
 
 ## Picker colors
 
-With `herdr_theme_inherit = true`, the picker reads Herdr's config from
-`HERDR_CONFIG_PATH`, then `$XDG_CONFIG_HOME/herdr/config.toml`, then
-`~/.config/herdr/config.toml`. Set `[theme] name` and optional `[theme.custom]`
-colors in **Herdr's config**, not the plugin config.
+rex-sesh doesn't read the Rex app's theme. With `herdr_theme_inherit = true`,
+the default, it reads the theme from Herdr's config file, the first of:
 
-Both integrations read this Herdr TUI theme configuration. The app mod does
-not read the Herdr app's theme settings.
+1. `HERDR_CONFIG_PATH`
+2. `$XDG_CONFIG_HOME/herdr/config.toml`
+3. `~/.config/herdr/config.toml`
 
-With Herdr's `[theme] auto_switch = true`, the picker checks the terminal
-background when it opens and uses `light_name` or `dark_name`, plus
-`[theme.custom.light]` or `[theme.custom.dark]`, like Herdr does. When the
-background can't be read, it uses the dark theme.
-Omitted mode names are derived from `name`: for example, `tokyo-night` uses
-`tokyo-night` in dark terminals and `tokyo-night-day` in light terminals.
-Themes without a sibling, such as `nord`, use the same theme in both modes.
-Explicit empty or unknown mode names use the default for that mode:
-`catppuccin` for dark and `catppuccin-latte` for light.
-The startup appearance is captured even when inheritance is disabled, so
-enabling it in settings uses that appearance without querying the terminal again.
+Without that file, the picker uses the `catppuccin` theme. With
+`herdr_theme_inherit = false`, it uses its built-in colors. The settings
+editor uses the same colors.
 
-??? info "Supported themes and custom colors"
+To pick a theme without Herdr, create the file, for example
+`~/.config/herdr/config.toml`:
 
-    `catppuccin` (default), `catppuccin-latte`, `tokyo-night`, `tokyo-night-day`,
-    `dracula`, `nord`, `gruvbox`, `gruvbox-light`, `one-dark`, `one-light`,
-    `solarized`, `solarized-light`, `kanagawa`, `kanagawa-lotus`, `rose-pine`,
-    `rose-pine-dawn`, and `vesper`. Common aliases (`catppuccin-mocha`,
-    `tokyonight`, `onedark`, …) are accepted, as are `[theme.custom]` overrides on
-    top of any base theme.
+```toml
+[theme]
+name = "tokyo-night"
 
-    | Herdr token | Picker role |
+[theme.custom]
+accent = "#7dcfff"
+```
+
+??? info "Light and dark themes"
+
+    With `[theme] auto_switch = true`, the picker checks the terminal's
+    background when it opens, and uses `light_name` or `dark_name`, with
+    `[theme.custom.light]` or `[theme.custom.dark]`. If the background can't
+    be read, it uses the dark theme.
+
+    An omitted mode name comes from `name`: `tokyo-night` uses `tokyo-night`
+    on a dark background and `tokyo-night-day` on a light one. A theme
+    without a pair, such as `nord`, is used for both. An empty or unknown mode
+    name uses `catppuccin` for dark and `catppuccin-latte` for light.
+
+??? info "Themes and color tokens"
+
+    Themes: `catppuccin` (the default), `catppuccin-latte`, `tokyo-night`,
+    `tokyo-night-day`, `dracula`, `nord`, `gruvbox`, `gruvbox-light`,
+    `one-dark`, `one-light`, `solarized`, `solarized-light`, `kanagawa`,
+    `kanagawa-lotus`, `rose-pine`, `rose-pine-dawn`, and `vesper`. Common
+    aliases such as `catppuccin-mocha`, `tokyonight` and `onedark` work too.
+
+    | Token | Picker role |
     | --- | --- |
-    | `accent` | Prompt, cursor, selection rail, and the focused box's border |
-    | `mauve` | Title, section headers, search matches, smear trail |
-    | `text` | Row labels |
-    | `subtext0` | Paths, counts, help text, and unfocused box borders |
-    | `green` | Idle agents (`✓`) |
-    | `yellow` | Working agents (spinner) and the empty-state message |
-    | `red` | Blocked agents (`◉`) and the border of a closing workspace's box |
-    | `overlay1` | Ghost cursor trail |
+    | `accent` | Prompt, cursor, selection rail, the `◆` current-session mark, done (`●`), and the focused box's border |
+    | `mauve` | Title, section headings, filter matches, and the cursor trail |
+    | `text` | Row names |
+    | `subtext0` | Paths, counts, help text, and other borders |
+    | `green` | Idle (`✓`) |
+    | `yellow` | Working (spinner), the empty-list message, and error messages |
+    | `red` | Blocked (`◉`) |
+    | `overlay1` | The `ghost` cursor trail |
 
-    Custom tokens that are unknown or not a `#RGB`/`#RRGGBB` hex value leave that
-    role's built-in color in place, so partial `[theme.custom]` tables only affect
-    the roles they define. The ANSI-based `terminal` theme has no fixed palette to
-    inherit; the picker keeps its built-in colors there unless you add explicit
-    overrides.
+    A `[theme.custom]` value must be a `#RGB` or `#RRGGBB` color. Other values
+    are skipped, so a partial table changes only the roles it sets. The
+    `terminal` theme has no fixed colors, so the picker keeps its built-in
+    colors there unless you add overrides.
 
 ## Cursor and status indicators
 
-Set these environment variables in the environment inherited by Herdr.
-`HERDR_SESH_SMEAR_PRESET` selects the cursor animation:
+The picker reads these environment variables when it starts.
+`REX_SESH_SMEAR_PRESET` picks the cursor animation:
 
 | Preset | Effect |
 | --- | --- |
-| `crisp` (default) | Fast cyan rail with a short violet line trail. |
-| `gooey` | Slower block cursor with a long shaded trail and eased movement. |
-| `ghost` | Soft diamond cursor with a dotted, low-contrast trail. |
+| `crisp` (default) | A fast rail with a short line trail. |
+| `gooey` | A slower block cursor with a long shaded trail and eased movement. |
+| `ghost` | A soft diamond cursor with a dotted, low-contrast trail. |
 
-Set `HERDR_SESH_REDUCE_MOTION=1` (or `true`) for instantaneous movement without trails. Error toasts then appear without sliding in, the loading placeholder does not shimmer, preview text appears without fading in, the workspace count changes without rolling, refused keys do not shake the list, and working agents show a still spinner.
+Set `REX_SESH_REDUCE_MOTION=1` (or `true`) to turn off the cursor trail and the
+picker's other animations. The working spinner then stands still.
 
-Herdr agent indicators are amber animated spinner (working), red `◉` (blocked),
-green `✓` (idle), and teal `●` (done). Unknown states have no indicator.
+Each session row shows the most urgent status that programs in the session
+report to Rex. The picker refreshes statuses once a second.
 
-## Workspace history
+| Glyph | Status |
+| --- | --- |
+| Spinner | Working |
+| `◉` | Blocked |
+| `●` | Done |
+| `✓` | Idle |
+| None | No program reports a status |
 
-The installed Herdr TUI plugin automatically tracks switches through the picker,
-Herdr controls, and CLI for `last`, recent sorting, and the footer. History is
-separate per Herdr session; closed workspaces are removed. No extra setup is required.
-See [Workspace history tracking](../development/workspace-history.md) for storage,
-migration, lifecycle hooks, and reconnect limitations.
-
-The app mods keep separate history and record Sesh switches by default.
-Recording sidebar navigation and other app switches requires a
-[`sesh-last` layout block](../herdr-app.md#switch-to-the-last-space).
-The app does not run the TUI plugin's lifecycle hooks.
-
-!!! warning "Herdr TUI 0.9.0 sidebar navigation"
-
-    Sidebar switches can leave history stale. Upgrade the running Herdr server
-    to 0.9.1 or newer; see [Previous workspace is unexpected](../troubleshooting.md#previous-workspace-is-unexpected).
-
-### Sidebar marker
-
-This marker is available only in Herdr TUI. The app mods do not add a sidebar marker.
-
-The plugin reports a `sesh_last` workspace metadata token with the default value `last`
-on the workspace that `last` would switch to. Add `$sesh_last` to Herdr's
-[Space rows](https://herdr.dev/docs/configuration/#sidebar-row-layouts) in
-`~/.config/herdr/config.toml` to show it:
-
-```toml
-[ui.sidebar.spaces]
-rows = [
-  ["state_icon", "workspace", { token = "$sesh_last", fg = "#f9e2af", bold = true }],
-  ["branch", "git_status"],
-]
-```
-
-The marker moves with workspace history, including switches made outside the
-picker.
-
-To change its text, add this to the **herdr-sesh** `config.toml`:
-
-```toml
-[history]
-last_workspace_label = "previous"
-```
-
-The default is `"last"`. An empty string hides the marker. Text may include
-Unicode, up to 80 characters, but must not contain control characters or start
-or end with whitespace; Herdr would otherwise alter the stored value. Changes
-apply on the next workspace focus or close event without restarting the plugin.
-
-## Linked worktrees
-
-Linked worktrees appear beneath their open parent in every sort mode, with a
-purple type label and `├─`/`└─` branches. The default label is `↳ herdr`
-(`[↳ herdr]` without icons). Paths appear when space permits; narrow layouts keep
-the type label. Grouping is automatic, independent of `show_icons` and
-`replace_worktree_icon`. Without a single resolvable open parent, a row stays ungrouped.
-
-In agent mode, the family's highest-priority status ranks the whole family.
-The parent remains first; children follow in agent-priority order.
+A program that reports an error counts as idle. `◆` marks the session the
+picker was opened from; on the selected row, the selection rail takes its
+place.

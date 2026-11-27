@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve `herdr-plugin-sesh`.
+Thanks for helping improve `rex-sesh`, the Sesh-style session picker for Rex.
 
 ## Before you start
 
@@ -21,17 +21,20 @@ just check
 just build
 ```
 
-To build and link your checkout as a local Herdr plugin:
+To try your build in Rex, write the Rex config module from it, then reload
+Rex's config. See the [Rex setup page](docs/rex-app.md):
 
 ```bash
-just install-plugin
+./bin/rex-sesh lua --key 'ctrl+a>s' > ~/.config/rex/sesh.lua
+rex config check && rex config reload
 ```
 
 Run `just` to see the other available development commands.
 
 ## Documentation
 
-The published Zensical site is built from the Markdown and assets in `docs/`.
+The Zensical site is built from the Markdown and assets in `docs/`. It is built
+on every push but not published yet.
 Navigation and theme settings live in `zensical.toml`, while `pyproject.toml` and
 `uv.lock` pin the documentation toolchain.
 
@@ -42,7 +45,7 @@ just serve-docs
 ```
 
 Before submitting documentation changes, run the same strict build used by the
-GitHub Pages workflow:
+docs workflow:
 
 ```bash
 just build-docs
@@ -56,10 +59,10 @@ The wiki's version selector offers `latest` (the `main` branch) and release tags
 that contain `docs/` and `zensical.toml`. The site root redirects to `latest`.
 Unversioned page URLs redirect to the corresponding `latest` page, preserving
 query strings and section anchors when JavaScript is enabled.
-Tags before `v0.10.0` predate the wiki and are omitted.
+rex-sesh has no release tags yet, so the selector offers only `latest`.
 
-The Pages workflow rebuilds all versions on pushes to `main`, `v*` tag pushes,
-and manual runs. Each release uses the Markdown, assets, navigation, and theme
+The docs workflow rebuilds all versions on pushes to `main`, `v*` tag pushes,
+and manual runs. Its deploy job is off until the repository is public. Each release uses the Markdown, assets, navigation, and theme
 from that exact tag, built with the current pinned documentation toolchain.
 Release pages disable editing links; `latest` links to edits on `main`.
 The [Zensical-compatible mike fork](https://zensical.org/docs/compatibility/mkdocs/mike/)

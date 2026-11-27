@@ -72,7 +72,7 @@ def build(source: Path, output: Path) -> None:
             logger.info("Skipping %s: predates the Zensical wiki", tag)
 
     # ponytail: rebuild all tags; cache immutable snapshots if release builds get slow.
-    with tempfile.TemporaryDirectory(prefix="herdr-sesh-docs-") as directory:
+    with tempfile.TemporaryDirectory(prefix="rex-sesh-docs-") as directory:
         work = Path(directory)
         git(work, "init", "--quiet")
         git(work, "config", "user.name", "Docs builder")

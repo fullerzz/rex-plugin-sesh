@@ -4,10 +4,10 @@ icon: lucide/gauge
 
 # Benchmarks
 
-The benchmark suite measures the paths users notice most: loading Herdr
-workspaces, filtering and rendering the picker, and refreshing previews during
-rapid navigation. It uses Go's standard benchmark runner and
-[`benchstat`](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat) for statistical
+The benchmark suite measures the picker paths users notice most: filtering the
+session list, rendering the picker, and refreshing previews while the selection
+moves fast. It uses Go's standard benchmark runner and
+[`benchstat`](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat) for
 before-and-after comparisons.
 
 !!! tip "Measure a change against its own baseline"
@@ -18,7 +18,7 @@ before-and-after comparisons.
 
 ## Run the suite
 
-Install the pinned development tools with `mise install` before running these
+Install the pinned development tools with `mise install` before you run these
 commands.
 
 === "Quick check"
@@ -31,82 +31,78 @@ commands.
 
 === "Before and after"
 
-    Collect multiple samples before and after the change, then compare them:
+    Collect several samples before and after the change, then compare them:
 
     ```bash
-    just bench 10 | tee /tmp/herdr-sesh-base.txt
+    just bench 10 | tee /tmp/rex-sesh-base.txt
     # Make the change.
-    just bench 10 | tee /tmp/herdr-sesh-candidate.txt
-    just bench-compare /tmp/herdr-sesh-base.txt /tmp/herdr-sesh-candidate.txt
+    just bench 10 | tee /tmp/rex-sesh-candidate.txt
+    just bench-compare /tmp/rex-sesh-base.txt /tmp/rex-sesh-candidate.txt
     ```
 
-    `benchstat` reports the distributions, relative delta, and statistical
-    significance. Ten samples are a practical starting point; increase the
+    `benchstat` reports the distributions, the relative change, and its
+    statistical significance. Ten samples are a practical start; raise the
     count when results are noisy.
 
-The `bench` recipe skips unit tests with `-run '^$'`, runs benchmarks in
-`internal/sources` and `internal/picker`, and includes allocation metrics with
-`-benchmem`.
+The `bench` recipe skips unit tests with `-run '^$'` and reports allocations
+with `-benchmem`. It runs the benchmarks in `internal/sources` and
+`internal/picker`; today, all of them are in `internal/picker`. The recipe also
+prints `Unit` lines that tell `benchstat` to treat `canceled/op` and
+`completed/op` as exact values. `bench-compare` runs `benchstat` through
+`go tool`, so it needs no separate install.
 
 ## What is measured
 
+All three benchmarks use generated Rex sessions with paths, session IDs, and a
+mix of agent statuses.
+
 | Benchmark | Workload | Why it exists |
 | --- | --- | --- |
-| `HerdrWorkspacesList` | Decode and combine 100 generated workspaces and panes through an in-memory Herdr runner, with complete paths and with one path requiring pane fallback. | Isolates workspace-list processing from process startup. |
-| `HerdrWorkspacesListProcessBoundary` | Run the same cases through a real helper subprocess. | Captures command-spawn, pipe, JSON, and application overhead at the CLI boundary. |
-| `FilterSessions` | Search 100 and 1,000 sessions for queries that match none or some entries. | Tracks interactive filtering cost as the workspace list grows. |
-| `RenderPicker` | Render 1,000 sessions in a 120x40 picker with the preview shown and hidden. | Measures the full view path and the effect of preview layout. |
-| `PreviewNavigationBurst` | Start eight preview renders while rapidly moving between sessions. | Exposes stale preview work and provides cancellation metrics for future improvements. |
-
-??? info "Why both an in-memory runner and a subprocess?"
-
-    The in-memory benchmark makes changes to decoding and session construction
-    visible without process noise. The process-boundary benchmark represents
-    the cost paid by the real plugin. Keep both: improving one layer can
-    otherwise hide a regression in the other.
+| `FilterSessions` | Filter 100 and 1,000 sessions with a query that matches none and one that matches 100. | Tracks filtering cost as the session list grows. |
+| `RenderPicker` | Render 1,000 sessions, with icons, in a 120x40 picker, with the preview shown and hidden. | Measures the full view path and the cost of the preview layout. |
+| `PreviewNavigationBurst` | Move the selection across eight sessions in a row, so each move starts a preview render. | Checks that a new selection cancels the preview it replaces. |
 
 ## Read the results
 
-Go reports the standard time and allocation columns. The suite also emits
-behavioral metrics that protect the shape of an optimization:
+Go reports the standard time and allocation columns. `PreviewNavigationBurst`
+also reports two behaviour metrics:
 
 | Metric | Target | Meaning |
 | --- | --- | --- |
 | `ns/op` | Lower | Nanoseconds per benchmark operation. |
 | `B/op` | Lower | Bytes allocated per operation. |
 | `allocs/op` | Lower | Allocations per operation. |
-| `commands/op` | Lower | Herdr commands executed by one workspace-list operation; treated as an exact value. |
-| `canceled/op` | Exactly `7` | The seven superseded preview renders are canceled. |
-| `completed/op` | Exactly `1` | The final, active preview render completes. |
+| `canceled/op` | Exactly `7` | The seven replaced preview renders are canceled. |
+| `completed/op` | Exactly `1` | The preview for the final selection completes. |
 
-!!! info "Preview cancellation is implemented"
+!!! info "Preview cancellation"
 
-    Each new selection cancels the superseded preview. The expected result is
-    `7 canceled/op` and `1 completed/op`: seven stale renders stop while the
-    active selection still updates. Any other pair is a behavioral regression,
-    even if one value moved farther in an apparently favorable direction.
+    Each new selection cancels the preview it replaces. The expected result is
+    `7 canceled/op` and `1 completed/op`: seven stale renders stop, and the
+    final selection still gets its preview. Any other pair is a behaviour
+    regression, even if one value moved in a direction that looks better.
 
 ## Benchmark strategy
 
 1. Benchmark user-facing hot paths with representative, generated data.
-2. Check expected results where the workload has a known answer, and retain
+2. Check expected results where the workload has a known answer, and keep
    rendered output so the compiler cannot discard the measured work.
-3. Keep isolated and process-boundary measurements separate.
-4. Compare repeated samples with `benchstat`; do not judge a change from a
-   single run or from results collected on different machines.
-5. Review time, allocations, and behavioral metrics together. A lower `ns/op`
-   does not justify extra commands or missing the exact `7` canceled / `1`
-   completed preview target.
+3. Compare repeated samples with `benchstat`. Do not judge a change from one
+   run, or from results collected on different machines.
+4. Review time, allocations, and behaviour metrics together. A lower `ns/op`
+   does not justify missing the exact `7` canceled and `1` completed preview
+   target.
 
-The `benchstat` flow stays informational rather than a CI threshold. Shared CI
-runners are noisy, and fixed performance limits would fail for machine
-variation instead of meaningful regressions. The
-[`Benchmark` workflow](https://github.com/fullerzz/herdr-plugin-sesh/blob/main/.github/workflows/benchmark.yml)
-runs `just bench 10` against the base and pull request merge revisions on the
-same runner for relevant pull requests to `main`. It reports the `benchstat`
-comparison in the workflow summary and, for branches in this repository, adds
-or updates a `📊 Benchmark results` pull request comment. Confirm notable changes
-locally on one machine with `just bench` and `just bench-compare`.
+The `benchstat` comparison is informational, not a CI threshold. Shared CI
+runners are noisy, and fixed limits would fail on machine variation instead of
+real regressions. The
+[`Benchmark` workflow](https://github.com/fullerzz/rex-plugin-sesh/blob/main/.github/workflows/benchmark.yml)
+runs on pull requests to `main` that change Go code, `go.mod`, `go.sum`,
+`mise.toml`, the `justfile`, or the workflow. It runs `just bench 10` on the
+base and the pull request merge revisions on the same runner. It writes the
+`benchstat` comparison to the workflow summary. For branches in this
+repository, it also adds or updates a "Benchmark results" comment on the pull
+request. Confirm notable changes on one machine with `just bench` and
+`just bench-compare`.
 
-[Picker benchmarks](https://github.com/fullerzz/herdr-plugin-sesh/blob/main/internal/picker/tea_benchmark_test.go){ .md-button }
-[Workspace-source benchmarks](https://github.com/fullerzz/herdr-plugin-sesh/blob/main/internal/sources/herdr_workspaces_benchmark_test.go){ .md-button }
+[Picker benchmarks](https://github.com/fullerzz/rex-plugin-sesh/blob/main/internal/picker/tea_benchmark_test.go){ .md-button }

@@ -7,7 +7,7 @@ switches to it.
 
 rex-sesh started as a fork of herdr-plugin-sesh, and work is in progress. See
 [`PLAN.md`](PLAN.md) for what works today and what comes next. The pages in
-`docs/` still describe the Herdr plugin and are being rewritten.
+`docs/` describe rex-sesh for Rex.
 
 ## Requirements
 
@@ -15,8 +15,8 @@ rex-sesh started as a fork of herdr-plugin-sesh, and work is in progress. See
   switches sessions through the app's `session.select` action, and the app
   accepts actions from other programs only while Remote Control is on.
 - [mise](https://mise.jdx.dev) to install the pinned Go toolchain and tools.
-- Optional: `zoxide` to list your frequent directories, `eza` and `bat` for
-  directory and README previews, and `fzf` for the `--fzf` picker.
+- Optional: `zoxide` to list your frequent directories, `eza` for directory
+  previews, and `fzf` and `bat` for the `--fzf` picker and its preview.
 
 ## Build
 
@@ -62,7 +62,8 @@ within 3 seconds is left out.
 Opened from a session on another host, the picker runs that host's own copy of
 `rex-sesh`, from `~/.local/bin/rex-sesh` or `PATH`. It lists that host's
 sessions, its hosts' sessions and its zoxide directories. Install or update the
-copy from this machine over SSH, building for each host's OS and CPU:
+copy from this machine over SSH, building for each host's OS and CPU. The
+recipe takes SSH destinations, which may differ from the hosts' Rex labels:
 
 ```bash
 just install-host devbox lab
@@ -130,7 +131,8 @@ native format. `rex-sesh config migrate` converts a legacy file.
 | `REX_SESH_STATE_DIR` | Directory for the session cache. Defaults to `$XDG_STATE_HOME/rex-sesh` or `~/.local/state/rex-sesh`. |
 | `REX_SESH_REX_BIN` | The `rex` binary to run. Defaults to the Rex server's own copy, then `rex` on `PATH`. |
 | `REX_SESH_PICKER` | Set to `fzf` to use the fzf picker. |
-| `REX_SESH_REDUCE_MOTION` | Turn off picker animations. |
+| `REX_SESH_REDUCE_MOTION` | Set to `1` or `true` to turn off picker animations. |
+| `REX_SESH_SMEAR_PRESET` | The selection trail: `crisp` (default), `gooey` or `ghost`. |
 
 ## CLI
 
@@ -141,7 +143,7 @@ native format. `rex-sesh config migrate` converts a legacy file.
 | `rex-sesh picker --wait-on-error` | After an error, wait for Enter before exiting. |
 | `rex-sesh picker --fzf` | Use the fzf picker. |
 | `rex-sesh picker --json` | Print the picker's sessions as JSON. |
-| `rex-sesh list --json` | List Rex sessions on this machine and every host, config entries, and zoxide directories as JSON. |
+| `rex-sesh list [--json]` | List Rex sessions on this machine and every host, config entries, and zoxide directories. `--blacklisted` lists only blacklisted rows; `--hide-duplicates=false` keeps duplicates. |
 | `rex-sesh preview TARGET` | Render the configured preview for a session. |
 | `rex-sesh root` | Print the current Git repository root. |
 | `rex-sesh lua [--key KEY]` | Print the Rex config module for the picker. |
@@ -149,7 +151,11 @@ native format. `rex-sesh config migrate` converts a legacy file.
 | `rex-sesh config init` | Create a starter config if none exists. |
 | `rex-sesh config edit [--config PATH]` | Edit settings, with a review before saving. |
 | `rex-sesh config validate [PATH]` | Validate a config and print its resolved path. |
-| `rex-sesh config migrate` | Convert a legacy Sesh-style config to the native format. |
+| `rex-sesh config migrate [PATH] [--force]` | Convert a legacy Sesh-style config to the native format. |
+| `rex-sesh version` | Print the version, like `--version`. |
+
+`picker`, `list`, `preview` and `config edit` also take `--config PATH`. See
+[`docs/commands.md`](docs/commands.md) for every command and flag.
 
 Without `--client`, the picker switches the app named by `REX_CLIENT`, or the
 only connected Rex app. With several apps connected, pass `--client`. On a host,

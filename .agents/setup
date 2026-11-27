@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-echo "Setting up herdr-sesh development tools..."
+echo "Setting up rex-sesh development tools..."
 
 mise_version="2026.8.2"
 mise_archive_sha256="febda574ac4e036bf91e1ef9d33ec5e24dbfad6839eb0defa6abc12125186b74"
@@ -28,11 +28,11 @@ if [[ "$installed_mise_version" != "$mise_version" ]]; then
   trap - EXIT
 fi
 
-profile_marker="# herdr-sesh mise environment"
+profile_marker="# rex-sesh mise environment"
 if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
   cat >> "$HOME/.bash_profile" <<'EOF'
 
-# herdr-sesh mise environment
+# rex-sesh mise environment
 if [[ -x "$HOME/.local/bin/mise" ]]; then
   export PATH="$HOME/.local/bin:$PATH"
   eval "$("$HOME/.local/bin/mise" activate bash)"

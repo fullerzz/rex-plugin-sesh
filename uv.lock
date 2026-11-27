@@ -28,7 +28,7 @@ wheels = [
 ]
 
 [[package]]
-name = "herdr-sesh-docs"
+name = "rex-sesh-docs"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

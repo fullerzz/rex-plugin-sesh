@@ -10,6 +10,3 @@ mise.local.toml
 .venv/
 site/
 
-# Written by herdr-app into every mod folder it loads
-herdr-app/mods/*/gpui-kit.d.ts
-herdr-app/mods/*/jsconfig.json

@@ -1,10 +1,10 @@
 [project]
-site_name = "herdr-sesh"
-site_description = "A Sesh-inspired workspace picker and session manager for Herdr."
+site_name = "rex-sesh"
+site_description = "A Sesh-style session picker for the Rex terminal."
 site_author = "Zach Fuller"
-site_url = "https://fullerzz.github.io/herdr-plugin-sesh/"
-repo_url = "https://github.com/fullerzz/herdr-plugin-sesh"
-repo_name = "fullerzz/herdr-plugin-sesh"
+site_url = "https://fullerzz.github.io/rex-plugin-sesh/"
+repo_url = "https://github.com/fullerzz/rex-plugin-sesh"
+repo_name = "fullerzz/rex-plugin-sesh"
 edit_uri = "edit/main/docs/"
 copyright = "Copyright &copy; 2026 Zach Fuller"
 
@@ -15,20 +15,19 @@ nav = [
     { "Picker" = "config/picker.md" },
     { "Layouts" = "config/layouts.md" },
   ] },
-  { "Herdr app" = "herdr-app.md" },
+  { "Rex setup" = "rex-app.md" },
   { "Commands" = "commands.md" },
   { "Keybindings" = "keybindings.md" },
   { "Troubleshooting" = "troubleshooting.md" },
   { "Development" = [
     { "Contributing" = "development/index.md" },
-    { "Workspace history" = "development/workspace-history.md" },
     { "Benchmarks" = "development/benchmarks.md" },
   ] },
 ]
 
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
-link = "https://github.com/fullerzz/herdr-plugin-sesh"
+link = "https://github.com/fullerzz/rex-plugin-sesh"
 
 [project.extra.version]
 provider = "mike"

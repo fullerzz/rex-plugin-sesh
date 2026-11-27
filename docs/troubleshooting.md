@@ -4,126 +4,250 @@ icon: lucide/wrench
 
 # Troubleshooting
 
-The `herdr plugin` commands on this page apply to the **Herdr TUI plugin**.
-For **Herdr app mods**, check the [app setup](herdr-app.md#install), the binary's
-login-shell `PATH`, and the [backend selection](commands.md#choose-the-herdr-backend).
+## Check the setup
 
-## Check installation and logs
+Run these in a Rex terminal on the machine where the problem happens. Here,
+`rex-sesh` means the binary you built, `bin/rex-sesh` in your checkout, or the
+copy on a host:
 
 ```bash
-herdr plugin action list --plugin fullerzz.sesh
-herdr plugin log list --plugin fullerzz.sesh
-herdr plugin config-dir fullerzz.sesh
+rex actions | grep sesh_picker
+rex keymap | grep sesh_picker
+rex-sesh --version
+rex-sesh config path
+rex-sesh picker --json
 ```
 
-Check that the picker action is listed and inspect recent errors before changing
-configuration. Use the documentation version selector for your installed
-release. For direct binary commands below, first follow the
-[shell setup](commands.md#run-the-binary-directly).
+- `rex actions` should list `sesh_picker`, titled **Sesh: Pick Session**. If
+  it doesn't, check that `init.lua` has `require("sesh")`, then run
+  `rex config check && rex config reload`.
+- `rex keymap` shows the key bound to the picker, if you passed `--key` to
+  `rex-sesh lua`.
+- `rex-sesh picker --json` prints the rows the picker would show, without
+  opening it or switching anything.
 
-## A workspace is missing
+`~/.config/rex/sesh.lua` holds the full path of the binary that printed it.
+If you move the checkout, print the module again with `rex-sesh lua` and reload
+the Rex config. See [Rex app](rex-app.md) for the full setup.
 
-Remote spaces are available only through the Herdr app integration. If you
-expect a remote entry, use the app's `sesh` mod or run commands with
-`HERDR_SESH_BACKEND=app`, and confirm the space appears in `herdr-app ls`.
-Registering a machine alone does not create a space; add `machine` to a
-configured workspace to create one. See
-[remote space selection](herdr-app.md#select-an-existing-remote-space).
+## The picker stays open and says "Could not switch"
 
-- Clear the filter with ++ctrl+u++. Name and path matching can place results
-  in different groups.
-- Confirm you are targeting the intended host. In Herdr TUI, the session's
-  socket determines which running workspaces are visible. The app backend
-  lists the app's spaces.
-- Run `"$sesh_bin" list --json` and check the active config with
-  `"$sesh_bin" config path`.
-- Check `list.blacklist` and deduplication with `list --blacklisted` and
-  `list --hide-duplicates=false`. These options bypass the normal list cache.
-- Directory-history results require `zoxide` to be available and populated.
-  Configured workspaces require a valid `[[workspace]]` entry.
+When a switch fails, the picker stays open and shows `Could not switch: `
+followed by the reason. Fix the cause, then press ++enter++ again.
 
-The list cache lasts five seconds and does not cache the picker. Repeatedly
-clearing state files is not necessary to refresh picker results.
+The most common cause is **Remote Control**. rex-sesh switches sessions
+through the Rex app, and the app accepts that request from other programs only
+while Remote Control is on. While it is off, the app refuses the switch, and
+the picker shows the app's message. Turn on Remote Control in the Rex app's
+settings, then press ++enter++ again.
+
+On a directory row, rex-sesh creates the Rex session before it asks the app to
+switch. If the switch fails, the picker remembers that session, so a retry
+selects it instead of creating another. If you close the picker instead, the
+new session stays open in Rex.
+
+## "Sesh cannot start" in a host's session
+
+Rex runs the picker on the machine that holds the current session. In a
+session on another host, the picker needs a copy of rex-sesh on that host, at
+`~/.local/bin/rex-sesh` or on its `PATH`. Without one, the layer shows:
+
+```text
+Sesh cannot start: rex-sesh is not installed on this machine.
+On this machine, rebuild it with: just build
+On another host, install it from your main machine with: just install-host HOST
+```
+
+Rex keeps the layer open with the message and marks its command as exited.
+Close the layer with its × button.
+
+Install a copy from your checkout. `HOST` is the host's SSH name, which may
+differ from the name `rex hosts` shows:
+
+```bash
+just install-host devbox
+```
+
+The recipe builds rex-sesh for the host's OS and CPU, installs it at
+`~/.local/bin/rex-sesh`, and prints the installed version. Run it again after
+you update rex-sesh, or the host keeps its older copy.
+
+## The picker doesn't open after `just clean`
+
+`just clean` deletes `bin/rex-sesh`, which `sesh.lua` points at. The picker's
+start script then looks for `~/.local/bin/rex-sesh` or `rex-sesh` on `PATH`,
+so an older copy may open instead. With neither, the layer shows the same
+"Sesh cannot start" message as above. Rebuild the binary:
+
+```bash
+just build
+```
+
+## Rex is not running
+
+rex-sesh never starts a Rex server. If this machine's server doesn't answer,
+`rex-sesh picker` stops before it opens, with an error that starts with
+`list Rex sessions:` followed by the message from `rex`. `rex-sesh list`
+prints a warning that starts with `warning: rex sessions unavailable:`, then
+lists your other rows.
+
+Check that the server answers without starting a new one:
+
+```bash
+rex --autostart=false ls
+```
+
+If you set `REX_SESH_REX_BIN`, check that it names a working `rex` binary.
+
+## Several Rex apps are connected
+
+rex-sesh switches one Rex app. When the picker isn't told which, it uses
+`REX_CLIENT`, then the only connected app. With several apps connected, it
+tries the only app attached to the picker's session. If that doesn't settle
+it, the switch fails with:
+
+```text
+N Rex apps are connected; choose one with --client
+```
+
+`N` is the number of apps. In the picker, the message follows
+`Could not switch: `.
+
+A picker opened from your key or the command palette is told which app to
+switch, so this happens only when it isn't:
+
+- You ran `rex-sesh picker` yourself. Pass `--client` with an ID or label from
+  `rex client ls`, or set `REX_CLIENT`.
+- The picker runs in a session on another host. The host's copy can't use this
+  machine's app ID, so it looks for the app itself. Close the other apps, or
+  run `rex-sesh picker --client ID` in a terminal on that host.
+
+Without any app, the message is `no Rex app is connected to switch`.
+
+Switching to a host's session from this machine's picker finds the app on that
+host. It uses the only app connected to the host, or the one with the same
+device name as this machine's app. Otherwise the switch fails with
+`no Rex app is connected to HOST` or
+`N Rex apps are connected to HOST, and none is this machine's app`.
+
+## A host's sessions are missing
+
+The picker asks every host that `rex hosts` lists at the same time, and waits
+up to 3 seconds for them. A host that doesn't answer in time is left out, and
+the picker doesn't say so. To see why, run:
+
+```bash
+rex-sesh list
+```
+
+`list` and `rex-sesh picker --json` print a warning for each host that didn't
+answer, starting with `warning: rex host NAME unavailable:`. If `rex hosts`
+itself fails, the warning starts with `warning: rex hosts unavailable:`.
+
+## `f2` doesn't open the settings editor
+
+The Rex app handles keys that your Rex config binds before the picker sees
+them. Run `rex keymap` and look for `f2`. If your `init.lua` binds it, the
+picker never receives it. Edit settings with:
+
+```bash
+rex-sesh config edit
+```
+
+Or remove the `f2` binding from `init.lua`, then run `rex config reload`. Other
+picker keys work the same way: a key your Rex config binds never reaches the
+picker.
+
+## The list shakes when you press a key
+
+The picker shakes the list when it refuses a key:
+
+- ++ctrl+x++ would close a session. rex-sesh doesn't support closing sessions.
+- ++enter++ while a switch is still running. The footer reads
+  `Switching to NAME…`, or `Opening NAME…` for a directory.
+
+## A directory no longer exists
+
+If a zoxide directory was deleted, choosing it fails with
+`Could not switch: PATH is not a directory on this machine`, and no session is
+created. Remove it from zoxide:
+
+```bash
+zoxide remove PATH
+```
+
+## A session or directory is missing
+
+- Clear the filter with ++ctrl+u++.
+- Run `rex-sesh picker --json` to see every row the picker lists.
+- Check `list.blacklist` with `rex-sesh list --blacklisted`, which shows only
+  the hidden rows.
+- A directory named like an open session on this machine is left out; you see
+  the session. If `list.source_order` puts `zoxide` before `rex`, a directory
+  hides the session instead. See [Sources](config.md#sources).
+- Directories need `zoxide` on `PATH` and entries in its database. Check with
+  `zoxide query -l`.
+- The picker doesn't list `[[workspace]]` entries. Only `rex-sesh list` shows
+  them.
+
+## The legacy config warning
+
+rex-sesh prints this when it loads a Sesh-style file:
+
+```text
+warning: PATH uses the deprecated Sesh-compatible schema; run 'rex-sesh config migrate' to convert it (see docs/config.md)
+```
+
+The file still works. To convert it, run `rex-sesh config migrate`. If the
+conversion fails on a `sort_order` that names `tmux`, replace `tmux` with
+`rex` and run it again. See [Legacy migration](config.md#legacy-migration).
 
 ## Configuration changes have no effect
 
-Run `"$sesh_bin" config path` and `"$sesh_bin" config validate` in the same
-shell context used to invoke the plugin. An explicit `HERDR_SESH_CONFIG` takes
-precedence over the plugin config directory. See the full
-[lookup order](config.md).
+- Run `rex-sesh config path` and `rex-sesh config validate` in a Rex terminal
+  on the same machine. See the [lookup order](config.md#configuration-file-lookup).
+- The picker that Rex opens finds its config through the lookup order. A
+  picker in a host's session reads that host's config.
+- Reopen the picker. It reads its config when it opens.
+- Startup commands, tabs and pane layouts have no effect in rex-sesh. See
+  [Layouts](config/layouts.md).
+- Keys that open the picker belong in your Rex config. Keys inside the picker,
+  such as `keys.cycle_preview_mode`, belong in the rex-sesh config.
 
-Herdr action bindings belong in Herdr's config; picker appearance and
-`keys.cycle_preview_mode` belong in the plugin config. Native plugin files need
-`version = 1` and reject unknown keys. Reopen the picker after changing its
-configuration. Startup commands and tabs apply when creating a workspace, not
-when focusing an existing one.
+## Preview is unavailable or shows an error
 
-## Pane layout changes are not appearing
+- The default command preview runs `eza`. Install it, or set
+  `workspace_defaults.preview` to another command, such as `ls -la {}`. Test a
+  command with `rex-sesh preview TARGET`. Preview commands stop after five
+  seconds.
+- In pane mode, a session with no terminal to show reads
+  `this session has no terminal to preview`. Press ++ctrl+o++, or your
+  `keys.cycle_preview_mode` key, to go back to the command preview.
+- A session on another host shows its name, host, ID and path in command mode,
+  because its directory isn't on this machine.
+- If no preview appears, check `picker.show_preview`. In a narrow layer, the
+  preview goes below the list.
 
-- Confirm the workspace's `tabs` list references the layout's `[[tab]]` name;
-  an unreferenced tab is not created.
-- Run `"$sesh_bin" config validate` after editing `[[tab.pane]]` entries.
-  Pane layouts require the native config format (`version = 1`).
-- Layouts apply only when creating a workspace. Reopening the picker or
-  reconnecting to an existing workspace does not rebuild its panes or rerun
-  commands.
-- An extra initial tab or unexpected active tab depends on workspace startup
-  and the first root pane's path/command. Check the
-  [initial-tab decision table](config/layouts.md#initial-tab-behavior).
+## Icons or animation look wrong
 
-If creation failed, correct the reported error first. To apply changes or
-rebuild the layout, save your work, stop processes
-as needed, close the workspace, and select it again. Running processes are
-preserved after failures; reconnecting does not retry the layout. See
-[layout recovery](config/layouts.md#reconnecting-and-recovering-a-partial-layout).
+Source icons need a Nerd Font in the Rex app. Set `picker.show_icons = false`
+to show `[rex]` and `[zoxide]` labels instead. The default `eza` preview prints
+its own icons; change `workspace_defaults.preview` if they show as boxes.
 
-## Preview is unavailable or reports an error
+Set `REX_SESH_REDUCE_MOTION=1` to turn off the picker's animations. See
+[Cursor and status indicators](config/picker.md#cursor-and-status-indicators).
 
-Pane mode requires a running Herdr workspace. A configured session or directory
-without a running pane cannot provide a pane preview. Switch back to command
-mode with ++ctrl+o++ or your configured shortcut.
+## Report a problem
 
-Command previews use `eza` by default. If it is unavailable, install it or set
-`workspace_defaults.preview` to an available command, for example `ls -la {}`.
-Test the command with `"$sesh_bin" preview TARGET`. Commands time out after
-five seconds; superseded previews are canceled when the selection changes.
-The loading placeholder appears only after a preview has been pending for 500 ms.
+Include:
 
-If no preview panel appears, check `picker.show_preview`. Narrow terminals put
-the preview below the list, and hiding paths does not force a side-by-side
-layout.
+- the output of `rex-sesh --version` and `rex version`, and your OS
+- whether you used the native picker or `--fzf`
+- how you opened it: a key, the command palette, or `rex-sesh picker`
+- whether the session was on this machine or on a host
+- what you expected and what happened, with any message the picker showed
+- a minimal config that shows the problem, with private paths and commands
+  removed
 
-## Icons or cursor animation look wrong
-
-Source icons need a Nerd Font in your terminal. Set `picker.show_icons = false`
-to use source labels. The default `eza` preview has its own icon flag; customize
-the preview command separately if its glyphs are missing.
-
-Set `HERDR_SESH_REDUCE_MOTION=1` in the environment inherited by Herdr to disable
-the cursor trail and the picker's other animations: the error toast, the
-loading placeholder, the preview fade, the rolling count, the refused-key shake, and the working-agent spinner. See [cursor settings](config/picker.md#cursor-and-status-indicators).
-
-## Previous workspace is unexpected
-
-In the Herdr app, switches outside Sesh require a
-[`sesh-last` layout block](herdr-app.md#switch-to-the-last-space). The TUI
-plugin's lifecycle watcher and the server upgrade below do not apply to the app.
-
-In Herdr TUI, history is scoped to the session and automatically removes closed
-workspaces. Use the installed `fullerzz.sesh.last` action to retain Herdr's
-plugin environment. Check logs if lifecycle tracking stops; a subsequent
-lifecycle hook can restart the watcher. Hiding the footer does not disable
-history. If sidebar switches are missing from history on Herdr 0.9.0, upgrade
-the running Herdr server to 0.9.1 or newer; that release restores the focus
-events the plugin needs. Rebuilding the plugin alone cannot restore those
-events. See [history behavior](config/picker.md#workspace-history) and the
-[watcher recovery limits](development/workspace-history.md#failure-model).
-
-## Report a reproducible problem
-
-State whether you use the Herdr TUI plugin or the Herdr app mods. Include the
-host and herdr-sesh versions, OS, native/fzf picker choice, the exact
-action or command, expected and actual behavior, and relevant log errors.
-Share a minimal config that reproduces the issue, removing private paths and
-commands as needed. A screenshot is useful for layout problems; include terminal
-dimensions and whether a Nerd Font is configured.
+A screenshot helps with layout problems. Include the layer's size and whether
+the Rex app uses a Nerd Font.

@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem with herdr-sesh
+description: Report a reproducible problem with rex-sesh
 title: "bug: "
 body:
   - type: markdown
@@ -30,12 +30,13 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Include herdr-sesh and Herdr versions, operating system, and any relevant terminal or shell details.
+      description: Include the rex-sesh and Rex versions, the operating system, whether the session is on another host, and any relevant shell details.
       placeholder: |
-        herdr-sesh version:
-        Herdr version:
+        rex-sesh version (rex-sesh --version):
+        Rex app and server versions:
         OS:
-        Terminal/shell:
+        Session on another host (yes/no):
+        Shell:
     validations:
       required: true
 

@@ -4,145 +4,252 @@ icon: lucide/code
 
 # Contributing
 
-Start here to build and verify a change. The [workspace history](workspace-history.md)
-and [benchmark](benchmarks.md) pages explain those subsystems in more depth.
+Start here to build and test a change. The [benchmarks](benchmarks.md) page
+explains how to measure the picker's performance.
 
 ## Set up a checkout
 
-Install Git, Git LFS, and [mise](https://mise.jdx.dev/) before cloning. Herdr is
-needed for interactive plugin checks; the unit tests use test doubles.
+Install Git, Git LFS, and [mise](https://mise.jdx.dev/) before you clone. You
+need the Rex app only to try the picker by hand; the unit tests use a fake
+`rex`.
 
 ```bash
-git clone https://github.com/fullerzz/herdr-plugin-sesh.git
-cd herdr-plugin-sesh
+git clone https://github.com/fullerzz/rex-plugin-sesh.git
+cd rex-plugin-sesh
 git lfs install
 git lfs pull
 mise install
 just build
 ```
 
-`mise.toml` pins development tools. `go.mod` declares the minimum Go version;
-the development pin can be newer. Use `just` to list repository recipes.
+`mise install` installs the tools that `mise.toml` pins:
 
-### Link and exercise the plugin
+| Tool | Used for |
+| --- | --- |
+| Go | Building and testing. `go.mod` sets the minimum Go version; the pin in `mise.toml` can be newer. |
+| `golangci-lint` | `just lint`, `just fmt`, and `just fmt-check`. |
+| `gotestsum` | `just test`. |
+| `just` | The repository recipes. Run `just` to list them. |
+| `fzf`, `bat`, `eza` | The `--fzf` picker and the directory and README previews. |
+| `git-cliff` | Changelog generation for releases. |
+| `prek` | Running the hooks in `.pre-commit-config.yaml`. |
+| `uv` | The documentation toolchain. |
+| `cargo-binstall` | Installing `eza`, which `mise.toml` pins as a Cargo package. |
 
-From a Herdr session:
+Add or change shared tools in `mise.toml`.
+
+### Recipes
+
+Run `just` to list every recipe. These are the ones for day-to-day work:
+
+| Recipe | What it does |
+| --- | --- |
+| `just build` | Builds `bin/rex-sesh` with the version embedded. |
+| `just clean` | Deletes `bin/rex-sesh` and the host builds in `bin/`. |
+| `just run` | Runs `./cmd/rex-sesh` with `go run`. |
+| `just settings-demo [CONFIG]` | Opens the settings editor on a disposable copy of `testdata/rex-sesh.toml`, or on the config path you pass. |
+| `just install-host HOST...` | Builds rex-sesh for each SSH host and installs it there. |
+| `just lint` | Runs `golangci-lint`. |
+| `just fmt` / `just fmt-check` | Formats the code, or checks the formatting without changing files. |
+| `just test` | Runs the race-enabled tests through `gotestsum`. |
+| `just check` | Runs `lint`, `fmt-check`, and `test`. |
+| `just bench [COUNT]` / `just bench-compare BASE CANDIDATE` | Runs the [benchmarks](benchmarks.md) and compares two saved runs. |
+| `just build-docs` / `just serve-docs` | Builds the docs site strictly, or previews it locally. |
+| `just test-docs-versions` / `just build-docs-versions` | Tests the versioned docs builder, or builds every docs version. |
+
+### Try your build in Rex
+
+Set up the picker as [Rex setup](../rex-app.md) describes, and write the module
+with the binary from your checkout:
 
 ```bash
-just install-plugin
-herdr plugin action list --plugin fullerzz.sesh
-herdr plugin action invoke fullerzz.sesh.open-picker
-herdr plugin log list --plugin fullerzz.sesh
+./bin/rex-sesh lua --key 'ctrl+a>s' > ~/.config/rex/sesh.lua
 ```
 
-`install-plugin` rebuilds and links this checkout. Re-run it after changes, then
-open a fresh picker. Use the [configuration setup](../config.md#create-your-configuration)
-to inspect the config used by the linked plugin.
+The module points at the binary that printed it, and the action starts that
+binary each time the picker opens. After `just build`, open the picker again to
+run the new build. `just clean` deletes `bin/rex-sesh`, so build again before
+you open the picker.
 
-Local builds embed `git describe` output: the nearest reachable version tag,
-commit distance, and hash, with `-dirty` for tracked changes. An exact clean tag
-uses the tag alone; without a version tag the hash is used, and without Git
-metadata the fallback is `dev`. Release builds use the release version.
+To check the rows without opening the picker or switching the Rex app, print
+them as JSON:
+
+```bash
+./bin/rex-sesh picker --json
+```
+
+### Install your build on hosts
+
+The picker in a host's session runs on that host, with the host's own copy of
+`rex-sesh`. Install your build there over SSH:
+
+```bash
+just install-host devbox lab
+```
+
+Each argument is an SSH host. SSH must log in without a password prompt. For
+each host, `install-host` reads its OS and CPU with `uname -sm`, builds
+`bin/rex-sesh-GOOS-GOARCH` for it, such as `bin/rex-sesh-linux-amd64`, and
+installs it at `~/.local/bin/rex-sesh`. It supports Linux and macOS on `amd64`
+and `arm64`. It uploads the binary beside the old copy and then renames it into
+place, so a picker that is running keeps its binary. It prints the installed
+version. A host's copy stays at that version until you run `install-host`
+again.
+
+### Build versions
+
+`just build` and `just install-host` embed `git describe` output: the nearest
+`v*` tag, the commits since it, and the commit hash, with `-dirty` for
+uncommitted changes. Without a version tag, the version is the commit hash
+alone. Without Git metadata, it is `dev`. Check it with
+`./bin/rex-sesh --version`.
 
 ## Find the code
 
 ```mermaid
 flowchart LR
-    CLI[CLI routing] --> Config[Config discovery and validation]
-    Config --> Sources[Herdr / configured workspaces / zoxide / direct path]
-    Sources --> Merge[Merge and apply configuration]
-    Merge --> Picker[Picker selection]
-    Picker --> Connect[Focus or create workspace]
-    Connect --> Startup[Startup commands and tabs]
+    Action[Rex action sesh_picker] --> Start[Start script in a floating layer]
+    Start --> CLI[rex-sesh picker]
+    CLI --> Config[Load and validate config]
+    Config --> Rows[Rex sessions, host sessions, zoxide directories]
+    Rows --> Picker[Native or fzf picker]
+    Picker --> Switch[session.select in the Rex app]
 ```
+
+`rex-sesh list` merges more sources than the picker: Rex sessions,
+`[[workspace]]` config entries, and zoxide directories.
 
 | Area | Entry points |
 | --- | --- |
-| Executable and orchestration | `cmd/herdr-sesh/`, `internal/app/` |
-| Native schema, defaults, legacy migration | `internal/config/` |
-| Session types and collection | `internal/model/`, `internal/sources/` |
-| Native and fzf picker behavior | `internal/picker/` |
-| Target resolution and startup | `internal/connect/`, `internal/startup/` |
-| Herdr CLI/socket integration | `internal/herdr/` |
-| Preview commands and pane reads | `internal/preview/` |
-| Cache, history, atomic writes | `internal/state/` |
-| Shipped actions, hooks, minimum Herdr version | `herdr-plugin.toml` |
+| Executable | `cmd/rex-sesh/` |
+| Commands, the Rex config module, switching | `internal/app/`. `rex-sesh lua` renders `sesh.lua.tmpl`, and the layer's start script is `pickerStart` in `lua.go`. |
+| Rex client | `internal/rex/`. It runs the `rex` CLI with the embedded `sessions.lua` and `screen.lua` scripts. |
+| Session sources and merging | `internal/sources/`: Rex sessions on this machine and each host, config entries, zoxide, and a direct path. |
+| Session types | `internal/model/` |
+| Config schema, defaults, lookup, legacy migration | `internal/config/` |
+| Native and fzf picker | `internal/picker/` |
+| Settings editor | `internal/settings/` |
+| Preview commands and session screens | `internal/preview/` |
+| Session cache | `internal/state/` |
+| Picker colours | `internal/uitheme/` |
+| Naming a directory from Git | `internal/namer/` |
 
-Before changing shared behavior, inspect its callers and focused tests. Keep
-command routing in `internal/app` and reusable behavior in its existing package.
+Before you change shared behaviour, read its callers and focused tests. Keep
+command routing in `internal/app` and reusable behaviour in its existing
+package.
+
+The native picker renders with [bloom](https://bloomfx.dev/). Before you change
+`internal/picker/`, read <https://bloomfx.dev/llms.txt> and the linked pages you
+need. bloom is pre-1.0, and its site documents the latest release. When the
+site and the code disagree, trust `go doc` for the version in `go.mod`.
 
 ## Verify a change
 
-Start with the affected package, for example:
+Start with the package you changed, for example:
 
 ```bash
 go test -race -count=1 ./internal/config
 ```
 
-Then use the checks appropriate to the change:
+Then run the checks for the kind of change:
 
 | Change | Checks |
 | --- | --- |
-| Go behavior | `just check`, `go vet ./...`, `just build`, then the CLI smoke commands below |
-| Documentation | `just build-docs` and inspect the rendered pages with `just serve-docs` |
-| Versioning, navigation, or docs build configuration | `just test-docs-versions`, `just build-docs`, `just build-docs-versions` |
-| Docs Python scripts | `uv run --frozen ruff check .`, `uv run --frozen ruff format --check .`, plus versioning checks |
-| Performance-sensitive behavior | Baseline/candidate comparison from [Benchmarks](benchmarks.md) |
+| Go behaviour | `just check`, `go vet ./...`, `just build`, then the CLI smoke commands below |
+| Picker layout or text | The golden picker frames below, then the picker in Rex |
+| Documentation | `just build-docs`, then inspect the pages with `just serve-docs` |
+| Navigation, versioning, or docs build configuration | `just test-docs-versions`, `just build-docs`, `just build-docs-versions` |
+| Docs Python scripts | `uv run --frozen ruff check .`, `uv run --frozen ruff format --check .`, plus the versioning checks |
+| Performance-sensitive behaviour | A baseline and candidate comparison from [Benchmarks](benchmarks.md) |
 
 ```bash
-./bin/herdr-sesh --version
-./bin/herdr-sesh list --json --config testdata/herdr-sesh.toml
-./bin/herdr-sesh list --json --config testdata/sesh.toml
+./bin/rex-sesh --version
+./bin/rex-sesh list --json --config testdata/rex-sesh.toml
+./bin/rex-sesh list --json --config testdata/sesh.toml
 git diff --check
 ```
 
-Run both fixtures to cover native configuration and legacy Sesh compatibility.
-The legacy fixture's deprecation warning on stderr is expected.
+The two fixtures cover the native config and legacy Sesh compatibility. The
+legacy fixture's deprecation warning on stderr is expected. `list` also asks
+your Rex server and hosts for their sessions. Without a Rex server, it prints
+one warning and still exits 0.
 
 !!! note "What just check includes"
 
-    `just check` runs lint, formatting checks, race-enabled tests, and the release
-    ref regression. It does not build the binary or documentation. Run the build
-    and smoke checks separately before opening a code PR, and the docs checks
-    when documentation changes.
+    `just check` runs `just lint`, `just fmt-check`, `just test`, and
+    `just test-release-ref`. It does
+    not build the binary or the documentation. Before you open a pull request,
+    also run the build and smoke commands, and the docs checks when
+    documentation changes.
+
+### Tests and your machine
+
+The unit tests need neither Rex nor zoxide, and they don't touch your Rex
+sessions, cache, or zoxide history:
+
+- `TestMain` in `internal/app/main_test.go` writes a fake `rex` to a temporary
+  directory and points `REX_SESH_REX_BIN` at it. The fake records each call and
+  answers with no sessions. It uses only shell builtins, because some tests
+  empty `PATH`.
+- The same `TestMain` sets `REX_SESH_STATE_DIR` to a temporary directory and
+  `_ZO_DATA_DIR` to an empty zoxide database. It unsets `REX_BLOCK`,
+  `REX_SESSION`, and `REX_CLIENT`, which Rex terminals set.
+- Tests that need other answers write their own fake `rex` or `zoxide` script
+  to a temporary directory.
+- `internal/rex` tests give the client a fake runner instead of a `rex`
+  process.
+- The start script tests run `pickerStart` with `/bin/sh` against stub
+  binaries.
+
+One picker test runs your installed `fzf`, and it skips when `fzf` is missing.
+
+### Golden picker frames
+
+`TestPickerFramesMatchGolden` in `internal/picker/bloom_test.go` renders the
+native picker at fixed sizes and in fixed states. It compares each screen,
+without colours, with a text file in `internal/picker/testdata/frames/`. When
+you change the picker's layout or text on purpose, write the frames again and
+review the diff:
+
+```bash
+UPDATE_PICKER_FRAMES=1 go test ./internal/picker -run TestPickerFramesMatchGolden
+git diff internal/picker/testdata/frames
+```
 
 ### Test conventions
 
-Place `Test<Behavior>` tests beside the implementation. Use the smallest
-regression that fails for the behavior being changed, reusing existing fake
-Herdr clients/runners rather than requiring a live session in unit tests.
-Keep fixtures in `testdata/`.
+Put `Test<Behavior>` tests beside the code. Write the smallest regression test
+that fails for the behaviour you change. Reuse the existing fakes instead of a
+live Rex server. Keep fixtures in `testdata/`.
 
-Use Testify `require` for prerequisites such as errors, nil values, and lengths
-before indexing; use `assert` for independent expectations. Keep `require` on
-the test goroutine and return worker errors to it. The linter checks assertion
-usage. For interactive changes, also exercise the picker in Herdr, including a
-narrow terminal when layout is affected.
+Use Testify `require` for prerequisites, such as errors, nil values, and lengths
+before indexing. Use `assert` for independent expectations. Keep `require` on
+the test goroutine, and send worker errors back to it. `just lint` checks
+assertion usage. For interactive changes, also try the picker in Rex, including
+a narrow terminal when the layout changes.
 
 ## Work on documentation
 
-Edit `docs/` and add navigation entries in `zensical.toml`. `site/` is generated
-output. Use the pinned Python environment through `uv`; use `xh` for HTTP
-checks and `mise` or `brew` to install tools. Shared tool pins belong in
-`mise.toml`.
+Edit the pages in `docs/`, and add navigation entries in `zensical.toml`.
+`site/` is generated output. Use the pinned Python environment through `uv`,
+and `xh` for HTTP checks.
 
 ```bash
 just serve-docs
 ```
 
-Open the address printed by Zensical. Check links, code copying, configuration
-tabs, diagrams, and narrow-screen navigation. Admonitions suit important
-behavior, tabs separate installed-plugin and checkout commands, and code
-annotations explain non-obvious settings. Keep basic instructions visible.
+Open the address that Zensical prints. Check links, code copying, tabs,
+diagrams, and narrow-screen navigation. Use admonitions for important
+behaviour, and code annotations for settings that need explaining. Keep basic
+instructions visible.
 
 ### Versions and deployment
 
-The versioned builder takes `latest` from the current checkout and each eligible
-release's docs and config from its exact tag. Published `latest` follows `main`;
-snapshots begin at `v0.10.0`. Historical snapshots use the current builder's
-Python environment. Their source is not rewritten by edits to `docs/` today.
+The versioned builder takes `latest` from the current checkout. It adds a
+snapshot for each `v*` release tag that contains `docs/` and `zensical.toml`,
+built from that tag. Until the first release tag, the site has only `latest`.
 
-Before building all versions, fetch tags and historical media:
+To build and test every version:
 
 ```bash
 git fetch --tags
@@ -151,35 +258,37 @@ just test-docs-versions
 just build-docs-versions
 ```
 
-The builder exports into `site/` without pushing a deployment branch. It keeps
-unversioned links working through redirects to `latest`, preserves queries and
-fragments, and supplies a root `404.html`. Keep `site_url` unversioned.
+The builder writes into `site/` and pushes nothing. It redirects unversioned
+links to `latest`. Keep `site_url` unversioned.
 
-The Docs workflow builds and tests PRs; only trusted push/manual runs deploy to
-GitHub Pages. A local build confirms generation, not deployment. Check the Docs
-workflow and the published URL before reporting a release's docs as live.
-
-“Edit this page” targets `main`; release snapshots disable the edit link.
-Use the version selector to return to `latest` before proposing a correction.
+The Docs workflow builds the versioned site for pull requests, pushes to
+`main`, `v*` tags, and manual runs. Publishing to GitHub Pages is turned off for
+now, so a passing build does not mean the site is live.
 
 ## Pull requests and releases
 
-Use Conventional Commit subjects such as `fix: correct picker selection`.
-Explain the user-visible change, link its issue when applicable, and list the
-validation commands actually run. Include screenshots for visual changes when
-they help review.
+Use Conventional Commit subjects, such as
+`fix: list every zoxide directory, naming clashes by their parents`. Keep them
+imperative, with a type such as `feat:`, `fix:`, `ci:`, or `docs:`.
 
-For maintainers, update `version` and the embedded build version in
-`herdr-plugin.toml`, then commit the release preparation to `main`. Set
-`GITHUB_TOKEN` for GitHub changelog metadata. From a clean checkout:
+In the pull request, describe the change, link its issue when there is one, and
+list the exact validation commands you ran. Include CLI output or screenshots
+only when the change alters what users see.
 
-```bash
-just preview-changelog vX.Y.Z
-just release vX.Y.Z
-```
+### Releases
 
-The release recipe asks for confirmation, requires a new `v` tag matching the
-manifest, runs code checks and CLI smokes, generates the changelog, tags the
-release source commit, commits the changelog as a follow-up, and atomically
-pushes `main` and the tag. Run the docs gates beforehand; the recipe does not
-include them. Verify the release and Docs workflow results after publication.
+The git tag is the version. `just release vMAJOR.MINOR.PATCH` (with an
+optional `-prerelease`) checks that you are on a clean `main` and that the tag
+is new, runs `just check`, builds and smoke-tests the binary, writes
+`CHANGELOG.md` for the tag with git-cliff, commits it, tags it and pushes both.
+It needs `GITHUB_TOKEN` for the changelog's GitHub metadata. Preview the
+changelog first with `just preview-changelog vMAJOR.MINOR.PATCH`.
+
+The tag push starts the Release workflow. It tests the tag, builds
+`rex-sesh_VERSION_OS_ARCH.tar.gz` for Linux and macOS on amd64 and arm64, with
+`checksums.txt`, writes the release notes, and publishes the GitHub release.
+
+The changelog starts at the Rex fork. `.github/scripts/changelog-range.sh`
+holds the last Herdr commit and gives every git-cliff call its commit range, so
+Herdr history never appears. `just test-release-ref`, part of `just check`,
+tests the release tooling.

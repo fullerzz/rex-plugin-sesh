@@ -1,10 +1,10 @@
 name: Feature request
-description: Suggest an improvement to herdr-sesh
+description: Suggest an improvement to rex-sesh
 title: "feat: "
 body:
   - type: markdown
     attributes:
-      value: Thanks for helping improve herdr-sesh.
+      value: Thanks for helping improve rex-sesh.
 
   - type: textarea
     id: problem
