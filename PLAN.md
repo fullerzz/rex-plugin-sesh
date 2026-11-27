@@ -255,9 +255,12 @@ The user's first key press was in `sunlit-delta`, a session on the remote host `
 - The action now runs `/bin/sh -c` and checks that `rex-sesh` is executable before starting it. If it isn't, the layer says "Sesh cannot start: <path> is not on this machine. Sesh runs on the machine that holds the current session." This also covers a binary removed by `just clean`.
 - Checked from a scratch copy, unfocused: a bogus path prints the message and exits 127, and the layer stays. The real path opens the picker, and Esc closes it.
 - A command that exits non-zero keeps its layer open with an `Exited` badge, and one that exits 0 closes it. The earlier note that a failing picker's layer vanishes was wrong.
-- Still untested: a key press in a session on this Mac.
+- Verified by the user (2026-11-27): `ctrl+a s` in a session on this Mac opened the picker as the focused layer, and Enter switched the Rex app to the chosen session.
 
-### Open question: sessions on other hosts
+### Decision: sessions on other hosts (2026-11-27)
+
+Mac sessions only for now. The picker lists and switches this Mac's sessions. Opened from a session on another host, it shows "Sesh cannot start". Revisit later, starting from the facts below.
+
 
 - This Mac can list another host's sessions: `rex -S rex-buntu26 ls --json` works.
 - `session.select` takes only a session ID, so whether the Mac app can show another host's session through it is unproven. `client.host.switch` takes no arguments.
