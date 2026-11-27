@@ -116,3 +116,25 @@ func TestFZFSelectionIndexRejectsInvalidOutput(t *testing.T) {
 		assert.Falsef(t, ok, "idx=%d for %q", idx, out)
 	}
 }
+
+func TestRunFZFRecentOrderAndSelection(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "input")
+	t.Setenv("FZF_TEST_INPUT", input)
+	fzf := filepath.Join(dir, "fzf")
+	//nolint:gosec // the fake fzf must be executable.
+	require.NoError(t, os.WriteFile(fzf, []byte("#!/bin/sh\ncat > \"$FZF_TEST_INPUT\"\nsed -n '1p' \"$FZF_TEST_INPUT\"\n"), 0o700))
+	items := []model.Session{
+		{Source: "rex", Name: "A", SessionID: "a"},
+		{Source: "rex", Name: "B", SessionID: "b"},
+		{Source: "rex", Name: "C", SessionID: "c"},
+	}
+	selected, ok, err := RunFZF(t.Context(), items, Options{DisplayOptions: DisplayOptions{FZFCommand: fzf, WorkspaceSort: workspaceSortRecent, RecentSessionIDs: []string{"c", "b"}}})
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "C", selected.Name)
+	//nolint:gosec // this file belongs to the test.
+	rows, err := os.ReadFile(input)
+	require.NoError(t, err)
+	assert.Equal(t, fzfInput([]model.Session{items[2], items[1], items[0]}, false), string(rows))
+}

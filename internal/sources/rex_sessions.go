@@ -40,6 +40,8 @@ type RexSessions struct {
 	// host "" when the host list itself failed. Those sessions are left out;
 	// only a failure on this machine fails List.
 	HostErr func(host string, err error)
+	// HostListed receives each host whose session query succeeded, even if empty.
+	HostListed func(host string)
 }
 
 func (RexSessions) Name() string { return "rex" }
@@ -62,6 +64,9 @@ func (s RexSessions) List(ctx context.Context) (model.Sessions, error) {
 		if h.err != nil {
 			s.hostErr(h.label, h.err)
 			continue
+		}
+		if s.HostListed != nil {
+			s.HostListed(h.label)
 		}
 		addRexSessions(&out, h.label, h.sessions)
 	}

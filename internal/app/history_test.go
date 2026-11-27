@@ -45,11 +45,11 @@ func historyOf(t *testing.T, app string) []state.Visit {
 	return h.Visits(app)
 }
 
-func TestHistoryAppNamesTheAppByItsLabel(t *testing.T) {
+func TestHistoryAppResolvesLabelsToClientIDs(t *testing.T) {
 	apps := &fakeApps{all: []string{"client:mac", "client:ipad", "client:bare"}, labels: map[string]string{"client:mac": "Studio Mac", "client:ipad": "iPad"}}
 	for client, want := range map[string]string{
-		"client:mac":  "label:Studio Mac",
-		"iPad":        "label:iPad",
+		"client:mac":  "id:client:mac",
+		"iPad":        "id:client:ipad",
 		"client:bare": "id:client:bare",
 	} {
 		got, err := historyApp(t.Context(), apps, switchTarget{client: client})
@@ -57,7 +57,7 @@ func TestHistoryAppNamesTheAppByItsLabel(t *testing.T) {
 		assert.Equal(t, want, historyKey(got), client)
 	}
 	_, err := historyApp(t.Context(), apps, switchTarget{client: "client:gone"})
-	require.EqualError(t, err, "no Rex app client:gone is connected")
+	require.EqualError(t, err, "no unique Rex app matches client:gone")
 	_, err = historyApp(t.Context(), apps, switchTarget{})
 	require.EqualError(t, err, "3 Rex apps are connected; choose one with --client")
 	assert.Empty(t, historyKey(rex.AppClient{}))
@@ -86,7 +86,7 @@ func abc(current string) collection {
 	for i := range sessions {
 		sessions[i].Attached = sessions[i].Machine == "" && sessions[i].Name == current
 	}
-	return collection{Sessions: sessions, CurrentSessionID: currentOf(sessions)}
+	return collection{ListedHosts: map[string]bool{"devbox": true}, Sessions: sessions, CurrentSessionID: currentOf(sessions)}
 }
 
 // shownHistory is pickerHistory for an app known to show the picker's
@@ -215,25 +215,21 @@ func TestPickerHistoryDoesNotTakeAnUnreachableHostAsClosed(t *testing.T) {
 	recordSwitches(t, "label:mac",
 		[2]state.Visit{localVisit("session:a"), away},
 		[2]state.Visit{away, localVisit("session:c")})
-	for _, unlisted := range []string{"away", ""} {
-		col := abc("C")
-		col.Unlisted = map[string]bool{unlisted: true}
-		got := shownHistory("label:mac", col)
-		assert.Empty(t, got.LastSessionID, unlisted)
-		assert.True(t, got.LastSessionUnknown, unlisted)
-	}
 	col := abc("C")
-	col.Unlisted = map[string]bool{"other": true}
+	got := shownHistory("label:mac", col)
+	assert.Empty(t, got.LastSessionID)
+	assert.True(t, got.LastSessionUnknown)
+	col.ListedHosts["away"] = true
 	assert.Equal(t, "session:a", shownHistory("label:mac", col).LastSessionID, "away answered")
 	assert.Equal(t, []state.Visit{localVisit("session:c"), away, localVisit("session:a")}, historyOf(t, "label:mac"))
 }
 
-func TestCollectPickerNamesTheHostsThatDidNotAnswer(t *testing.T) {
+func TestCollectPickerTracksSuccessfulEmptyHostListing(t *testing.T) {
 	t.Setenv("FAKE_REX_LOG", filepath.Join(t.TempDir(), "rex.log"))
-	useFakeRex(t, fakeRexHosts)
+	useFakeRex(t, strings.ReplaceAll(fakeRexHosts, `[{"session_id":"session:9","label":"train","agent_status":"working"}]`, `[]`))
 	col, err := (&App{}).collectPicker(t.Context(), config.Default())
 	require.NoError(t, err)
-	assert.Equal(t, map[string]bool{"away": true}, col.Unlisted)
+	assert.Equal(t, map[string]bool{"devbox": true}, col.ListedHosts)
 }
 
 func TestPickerHistoryWithoutAnAppIsUnknown(t *testing.T) {
@@ -370,7 +366,7 @@ func TestSwitchesReachTheHistoryInTheOrderTheAppTookThem(t *testing.T) {
 	require.NoError(t, os.WriteFile(release, nil, 0o600))
 	require.NoError(t, <-toB)
 	require.NoError(t, <-toC)
-	assert.Equal(t, []state.Visit{localVisit("session:c"), localVisit("session:b"), localVisit("session:a")}, historyOf(t, "label:Mac"))
+	assert.Equal(t, []state.Visit{localVisit("session:c"), localVisit("session:b"), localVisit("session:a")}, historyOf(t, "id:client:app"))
 }
 
 // A directory row records the session the switch created for it.
@@ -401,20 +397,20 @@ func TestSwitchRecordsAHostSessionByItsHost(t *testing.T) {
 	mac := rex.AppClient{ID: "client:mac", Label: "Mac"}
 	train := model.Session{Source: "rex", Machine: "devbox", Name: "train", SessionID: "session:9"}
 	require.NoError(t, (&App{}).switchTo(t.Context(), switchTarget{opener: "client:mac", app: mac, currentSessionID: "session:1"}, train))
-	assert.Equal(t, []state.Visit{{Host: "devbox", SessionID: "session:9"}, localVisit("session:1")}, historyOf(t, "label:Mac"))
+	assert.Equal(t, []state.Visit{{Host: "devbox", SessionID: "session:9"}, localVisit("session:1")}, historyOf(t, "id:client:mac"))
 }
 
 // When devbox's only app is another app, that app took the switch. It goes in
 // that app's history, without the picker's session, which it never showed.
 func TestSwitchRecordsTheAppThatTookTheSwitch(t *testing.T) {
 	useHistoryDir(t)
-	useFakeRex(t, fakeRexHostApp)
+	useFakeRex(t, strings.Replace(fakeRexHostApp, `"label":"Mac"}}]`, `"label":"Mac"}},{"client_id":"client:ipad","info":{"kind":"app","label":"iPad"}}]`, 1))
 	t.Setenv("FAKE_DEVBOX_APP", "iPad")
 	mac := rex.AppClient{ID: "client:mac", Label: "Mac"}
 	train := model.Session{Source: "rex", Machine: "devbox", Name: "train", SessionID: "session:9"}
 	require.NoError(t, (&App{}).switchTo(t.Context(), switchTarget{opener: "client:mac", app: mac, currentSessionID: "session:1"}, train))
-	assert.Empty(t, historyOf(t, "label:Mac"))
-	assert.Equal(t, []state.Visit{{Host: "devbox", SessionID: "session:9"}}, historyOf(t, "label:iPad"))
+	assert.Empty(t, historyOf(t, "id:client:mac"))
+	assert.Equal(t, []state.Visit{{Host: "devbox", SessionID: "session:9"}}, historyOf(t, "id:client:ipad"))
 
 	// An app without a label has no name here, so its switch is not recorded.
 	t.Setenv("FAKE_DEVBOX_APP", "")
@@ -437,7 +433,7 @@ func TestSwitchFromABlacklistedSessionRecordsItsOrigin(t *testing.T) {
 	var out bytes.Buffer
 	require.NoError(t, (&App{Out: &out, Err: &bytes.Buffer{}}).Run(t.Context(), []string{"picker", "--fzf", "--opener", "client:mac", "--config", cfgPath}))
 	assert.Equal(t, "web\n", out.String())
-	assert.Equal(t, []state.Visit{localVisit("session:2"), localVisit("session:1")}, historyOf(t, "label:Studio Mac"))
+	assert.Equal(t, []state.Visit{localVisit("session:2"), localVisit("session:1")}, historyOf(t, "id:client:mac"))
 }
 
 // fakeRexLabelled answers client ls with one labelled app, lists
@@ -484,7 +480,7 @@ func TestFZFPickerRecordsTheSwitchForTheNextPicker(t *testing.T) {
 	useFakeFZF(t, "\tweb\t")
 	require.NoError(t, (&App{Out: &out, Err: &bytes.Buffer{}}).Run(t.Context(), []string{"picker", "--fzf", "--opener", "client:mac", "--config", cfgPath}))
 	assert.Equal(t, "web\n", out.String())
-	assert.Equal(t, []state.Visit{localVisit("session:2"), localVisit("session:1")}, historyOf(t, "label:Studio Mac"))
+	assert.Equal(t, []state.Visit{localVisit("session:2"), localVisit("session:1")}, historyOf(t, "id:client:mac"))
 
 	// The app now shows web, where the next picker opens.
 	t.Setenv("FAKE_REX_SESSIONS", `{"sessions":[{"session_id":"session:1","label":"api"},{"session_id":"session:2","label":"web","current":true}]}`)
@@ -514,7 +510,7 @@ func TestFZFPickerKeepsItsOriginAfterAnEarlierSwitch(t *testing.T) {
 	}
 	pick("api", "web")
 	pick("ops", "api")
-	assert.Equal(t, []state.Visit{localVisit("session:1"), localVisit("session:3"), localVisit("session:2")}, historyOf(t, "label:Studio Mac"))
+	assert.Equal(t, []state.Visit{localVisit("session:1"), localVisit("session:3"), localVisit("session:2")}, historyOf(t, "id:client:mac"))
 }
 
 func assertHistoryResult(t *testing.T, got pickerpkg.ReloadResult) {
@@ -523,4 +519,20 @@ func assertHistoryResult(t *testing.T, got pickerpkg.ReloadResult) {
 	assert.Equal(t, []string{"session:2", "session:1"}, got.RecentSessionIDs)
 	assert.Equal(t, []string{"api", "web"}, sessionNames(got.RexSessions))
 	assert.Equal(t, []string{"api", "web"}, sessionNames(got.Sessions))
+}
+
+func TestSameLabelClientsKeepIndependentVisits(t *testing.T) {
+	useHistoryDir(t)
+	dir := t.TempDir()
+	t.Setenv("FAKE_REX_LOG", filepath.Join(dir, "rex.log"))
+	useFakeRex(t, strings.Replace(fakeRexHostApp, `"label":"Mac"}}]`, `"label":"Mac"}},{"client_id":"client:other","info":{"kind":"app","label":"Mac"}}]`, 1))
+	t.Setenv("FAKE_DEVBOX_APP", "Mac")
+	a := &App{}
+	for _, pair := range [][2]string{{"client:mac", "session:b"}, {"client:other", "session:c"}} {
+		target := switchTarget{opener: pair[0], currentSessionID: "session:a", app: rex.AppClient{ID: pair[0], Label: "Mac"}}
+		require.NoError(t, a.switchTo(t.Context(), target, model.Session{Source: "rex", SessionID: pair[1]}))
+		require.NoError(t, a.switchTo(t.Context(), target, model.Session{Source: "rex", Machine: "devbox", SessionID: "session:remote"}))
+	}
+	assert.Equal(t, []state.Visit{localVisit("session:b"), localVisit("session:a")}, historyOf(t, "id:client:mac"))
+	assert.Equal(t, []state.Visit{localVisit("session:c"), localVisit("session:a")}, historyOf(t, "id:client:other"))
 }

@@ -256,18 +256,15 @@ The picker records nothing when:
 When two pickers switch one app at the same time, the second waits for the
 first. So the history keeps the order in which the app took the switches.
 
-Each Rex app has its own history. The picker names an app by its device label,
-such as `Studio Mac`, which the app keeps on every host. An app without a
-label is named by its client ID. Two apps with the same label share one
-history. If the picker can't tell which app it switches, it shows no history.
-This happens when several apps are connected and the picker has neither
-`--client` nor `--opener`.
+Each Rex app has its own history, keyed by its client ID on the machine
+running the picker. Two connected apps can have the same device label and
+keep independent visit orders. If the picker can't identify the local app,
+it shows no history for it.
 
-A switch to a host's session goes to the app on that host. If that app has
-the same label, the switch goes in this app's history. If the host's only app
-is another app, the switch goes in that app's history, without the session
-that the picker opened in. If that app has no label, the switch isn't
-recorded.
+For a remote switch, Rex assigns the app a different ID on the host. The
+picker records the switch when the accepting app's device label identifies
+one app on each server. If that identifies a different local app, its
+history records only the destination.
 
 The history names each session by its host and its session ID. So sessions
 with the same name, or the same ID, on two hosts stay apart. The picker skips

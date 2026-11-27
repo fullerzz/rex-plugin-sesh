@@ -24,54 +24,52 @@ func historyApp(ctx context.Context, apps appLister, target switchTarget) (rex.A
 	if err != nil || listed {
 		return app, err
 	}
-	// An app named by a flag or REX_CLIENT, which may be a label, comes
-	// without its label.
+	return namedApp(ctx, apps, app.ID)
+}
+
+// namedApp resolves an explicit ID or a unique device label on this server.
+func namedApp(ctx context.Context, apps appLister, name string) (rex.AppClient, error) {
 	all, err := apps.AppClients(ctx, "")
 	if err != nil {
 		return rex.AppClient{}, err
 	}
 	for _, listed := range all {
-		if listed.ID == app.ID || listed.Label == app.ID {
+		if listed.ID == name {
 			return listed, nil
 		}
 	}
-	return rex.AppClient{}, fmt.Errorf("no Rex app %s is connected", app.ID)
+	if match, ok := uniqueLabel(all, name); ok {
+		return match, nil
+	}
+	return rex.AppClient{}, fmt.Errorf("no unique Rex app matches %s", name)
 }
 
-// historyKey names app's history: its device label, which the app keeps on
-// every server, or its client ID when it has no label, or "" for no app.
-// Apps that share a label share a history.
+// Each server assigns its own client IDs. Only a unique label can associate
+// an app on a remote server with a local client ID.
+func uniqueLabel(apps []rex.AppClient, label string) (rex.AppClient, bool) {
+	var match rex.AppClient
+	for _, app := range apps {
+		if label != "" && app.Label == label {
+			if match.ID != "" {
+				return rex.AppClient{}, false
+			}
+			match = app
+		}
+	}
+	return match, match.ID != ""
+}
+
 func historyKey(app rex.AppClient) string {
-	switch {
-	case app.Label != "":
-		return "label:" + app.Label
-	case app.ID != "":
-		return "id:" + app.ID
-	default:
+	if app.ID == "" {
 		return ""
 	}
+	return "id:" + app.ID
 }
 
 // switchLockTimeout outlasts the longest switch, a client action that rex
 // gives 15 seconds, so a picker waits out another picker's switch of the
 // same app.
 const switchLockTimeout = 20 * time.Second
-
-// recording names the history that a switch accepted by the app accepted
-// goes in, or "" for none, and the switch's origin there. The origin is the
-// session the app showed before, when that is known; see shownSessionID.
-// Another app, such as a host's only app or one found when the picker opened
-// without one, has an unknown origin. A label names it on this machine, and
-// so does its ID when idIsKey: a listing of this machine's apps found it.
-func (t switchTarget) recording(accepted rex.AppClient, idIsKey bool) (key string, from state.Visit) {
-	if !sameApp(t.app, accepted) {
-		if accepted.Label == "" && !idIsKey {
-			return "", state.Visit{}
-		}
-		return historyKey(accepted), state.Visit{}
-	}
-	return historyKey(t.app), state.Visit{SessionID: t.shownSessionID()}
-}
 
 // lockSwitches holds the switch lock of the history named key and returns
 // its release. Without the lock the switch still happens, and only its place
@@ -98,19 +96,6 @@ func (a *App) recordSwitch(key string, from, to state.Visit, revision uint64) {
 	if err := state.RecordSwitch(stateDir(), key, from, to, revision); err != nil {
 		a.warnf("could not record session history: %v", err)
 	}
-}
-
-// sameApp reports whether accepted is opener. An app on this machine named
-// by --client carries only that name, an ID or a label; one on a host has
-// another ID and the same label.
-func sameApp(opener, accepted rex.AppClient) bool {
-	if opener.ID == "" {
-		return false
-	}
-	if accepted.ID == opener.ID || (opener.Label != "" && accepted.ID == opener.Label) {
-		return true
-	}
-	return opener.Label != "" && accepted.Label == opener.Label
 }
 
 // visitState says whether the picker can switch to a visited session.
@@ -143,7 +128,7 @@ func pickerHistory(app, current string, col collection) pickerpkg.ReloadResult {
 		if open[visitRef(v)] {
 			return visitOpen
 		}
-		if v.Host != "" && (col.Unlisted[""] || col.Unlisted[v.Host]) {
+		if v.Host != "" && !col.ListedHosts[v.Host] {
 			return visitUnknown
 		}
 		return visitClosed
