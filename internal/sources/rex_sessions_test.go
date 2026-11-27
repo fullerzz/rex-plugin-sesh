@@ -14,19 +14,27 @@ import (
 type fakeRex struct {
 	sessions []rex.Session
 	err      error
+	block    *string
 }
 
-func (f fakeRex) Sessions(context.Context) ([]rex.Session, error) { return f.sessions, f.err }
+func (f fakeRex) Sessions(_ context.Context, selfBlockID string) ([]rex.Session, error) {
+	if f.block != nil {
+		*f.block = selfBlockID
+	}
+	return f.sessions, f.err
+}
 
 func TestRexSessionsListsOpenSessions(t *testing.T) {
-	got, err := RexSessions{Client: fakeRex{sessions: []rex.Session{
+	var block string
+	got, err := RexSessions{BlockID: "block:7", Client: fakeRex{block: &block, sessions: []rex.Session{
 		{ID: "session:1", Label: "api", Path: "/src/api", Windows: 2},
-		{ID: "session:2", Label: "scratch"},
+		{ID: "session:2", Label: "scratch", Current: true},
 	}}}.List(context.Background())
 	require.NoError(t, err)
+	assert.Equal(t, "block:7", block)
 	assert.Equal(t, []model.Session{
 		{Source: "rex", Name: "api", Path: "/src/api", WorkspaceID: "session:1"},
-		{Source: "rex", Name: "scratch", WorkspaceID: "session:2"},
+		{Source: "rex", Name: "scratch", WorkspaceID: "session:2", Attached: true},
 	}, got.Ordered())
 }
 

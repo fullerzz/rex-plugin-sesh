@@ -454,14 +454,14 @@ func TestPickerOptionsPropagateHomePrioritization(t *testing.T) {
 	assert.True(t, pickerOptionsFromConfig(context.Background(), io.Discard, cfg).DisableHomePrioritization, "prioritize_home=false was not propagated")
 }
 
-func TestPickerJSONCommand(t *testing.T) {
+func TestListJSONCommand(t *testing.T) {
 	var out bytes.Buffer
 	a := &App{Out: &out, Err: &bytes.Buffer{}}
-	require.NoError(t, a.Run(context.Background(), []string{"picker", "--json", "--config", filepath.Join("..", "..", "testdata", "sesh.toml")}))
+	require.NoError(t, a.Run(context.Background(), []string{"list", "--json", "--config", filepath.Join("..", "..", "testdata", "sesh.toml")}))
 	assert.Contains(t, out.String(), `"name": "sesh"`)
 }
 
-func TestPickerJSONAppliesDefaultStartupCommand(t *testing.T) {
+func TestListJSONAppliesDefaultStartupCommand(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "sesh.toml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(`[default_session]
 startup_command = "printf default:{}"
@@ -471,12 +471,12 @@ name = "api"
 path = "/tmp/api"
 `), 0600))
 
-	sessions := runPickerJSON(t, cfgPath, "")
+	sessions := runListJSON(t, cfgPath, "")
 	require.Len(t, sessions, 1)
 	assert.Equal(t, "printf default:{}", sessions[0].StartupCommand)
 }
 
-func TestPickerJSONAppliesWildcardSettings(t *testing.T) {
+func TestListJSONAppliesWildcardSettings(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "project")
 	require.NoError(t, os.Mkdir(project, 0700))
 	cfgPath := filepath.Join(t.TempDir(), "sesh.toml")
@@ -494,7 +494,7 @@ name = "git"
 startup_script = "git status"
 `), 0600))
 
-	sessions := runPickerJSON(t, cfgPath, "42 "+project+"\n")
+	sessions := runListJSON(t, cfgPath, "42 "+project+"\n")
 	require.Len(t, sessions, 1)
 	s := sessions[0]
 	require.Empty(t, s.StartupCommand)
@@ -504,7 +504,7 @@ startup_script = "git status"
 	assert.Empty(t, s.WindowConfigs)
 }
 
-func TestPickerJSONExplicitFalseOverridesWildcardDisable(t *testing.T) {
+func TestListJSONExplicitFalseOverridesWildcardDisable(t *testing.T) {
 	project := filepath.Join(t.TempDir(), "project")
 	require.NoError(t, os.Mkdir(project, 0700))
 	cfgPath := filepath.Join(t.TempDir(), "sesh.toml")
@@ -522,7 +522,7 @@ startup_command = "printf wildcard:{}"
 disable_startup_command = true
 `), 0600))
 
-	sessions := runPickerJSON(t, cfgPath, "")
+	sessions := runListJSON(t, cfgPath, "")
 	require.Len(t, sessions, 1)
 	require.False(t, sessions[0].DisableStartupCommand)
 	assert.Equal(t, "printf wildcard:{}", sessions[0].StartupCommand)
@@ -562,18 +562,6 @@ func TestPreviewCommandUsesExplicitConfig(t *testing.T) {
 	require.NoError(t, a.Run(context.Background(), []string{"preview", "--config", cfgPath, targetDir}))
 	require.Contains(t, out.String(), "configured:")
 	assert.Contains(t, out.String(), targetDir)
-}
-
-func runPickerJSON(t *testing.T, cfgPath, zoxideOutput string) []model.Session {
-	t.Helper()
-	configureFakeSources(t, zoxideOutput)
-
-	var out bytes.Buffer
-	a := &App{Out: &out, Err: &bytes.Buffer{}}
-	require.NoError(t, a.Run(context.Background(), []string{"picker", "--json", "--config", cfgPath}))
-	var sessions []model.Session
-	require.NoError(t, json.Unmarshal(out.Bytes(), &sessions))
-	return sessions
 }
 
 func runListJSON(t *testing.T, cfgPath, zoxideOutput string, extraArgs ...string) []model.Session {

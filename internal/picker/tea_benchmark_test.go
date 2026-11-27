@@ -148,7 +148,7 @@ func benchmarkSessions(count int) []model.Session {
 	statuses := []string{"", "idle", "working"}
 	for i := range count {
 		sessions[i] = model.Session{
-			Source:      "herdr",
+			Source:      "rex",
 			Name:        fmt.Sprintf("service-%04d-api", i),
 			Path:        fmt.Sprintf("/repos/service-%04d", i),
 			WorkspaceID: fmt.Sprintf("workspace-%04d", i),

@@ -35,8 +35,8 @@ func TestFilterRanksNameMatchesBeforePathMatches(t *testing.T) {
 	m := New([]model.Session{
 		{Source: "zoxide", Path: "/work/api-unnamed"},
 		{Source: "config", Name: "api-service", Path: "/work/service"},
-		{Source: "herdr", Name: "api-both", Path: "/work/api-both"},
-		{Source: "herdr", Name: "worker", Path: "/work/api-worker"},
+		{Source: "rex", Name: "api-both", Path: "/work/api-both"},
+		{Source: "rex", Name: "worker", Path: "/work/api-worker"},
 		{Source: "config", Name: "api-web", Path: "/work/web"},
 	})
 
@@ -50,8 +50,8 @@ func TestFilterRanksNameMatchesBeforePathMatches(t *testing.T) {
 }
 func TestFilterKeepsNameMatchAheadOfPathOnlyWorktreeParent(t *testing.T) {
 	m := New([]model.Session{
-		{Source: "herdr", Name: "backend", Path: "/work/api", WorkspaceID: "w-parent"},
-		{Source: "herdr", Name: "api-fix", Path: "/work/api-fix", WorkspaceID: "w-child", Worktree: model.WorktreeRelation{Linked: true, ParentWorkspaceID: "w-parent"}},
+		{Source: "rex", Name: "backend", Path: "/work/api", WorkspaceID: "w-parent"},
+		{Source: "rex", Name: "api-fix", Path: "/work/api-fix", WorkspaceID: "w-child", Worktree: model.WorktreeRelation{Linked: true, ParentWorkspaceID: "w-parent"}},
 	})
 
 	m.Filter("api")

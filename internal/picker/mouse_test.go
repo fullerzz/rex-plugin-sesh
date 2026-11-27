@@ -51,7 +51,7 @@ func runMouseInput(t *testing.T, m teaModel, input string) (teaModel, string) {
 	defer cancel()
 	reader, writer := io.Pipe()
 	defer func() { _ = reader.Close() }()
-	output := &mouseTestOutput{marker: "WORKSPACES", initial: make(chan struct{})}
+	output := &mouseTestOutput{marker: "SESSIONS", initial: make(chan struct{})}
 	inputErr := make(chan error, 1)
 	go func() {
 		defer func() { _ = writer.Close() }()
@@ -99,8 +99,8 @@ func (m statusClickTestModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func TestTeaModelClickUsesLastRenderedFrame(t *testing.T) {
 	items := []model.Session{
-		{Source: "herdr", Name: "api-workspace", WorkspaceID: "w1"},
-		{Source: "herdr", Name: "web-workspace", WorkspaceID: "w2"},
+		{Source: "rex", Name: "api-workspace", WorkspaceID: "w1"},
+		{Source: "rex", Name: "web-workspace", WorkspaceID: "w2"},
 	}
 	output := &mouseTestOutput{marker: "web-workspace", initial: make(chan struct{})}
 	statusApplied := make(chan struct{})
@@ -153,9 +153,9 @@ func TestTeaModelClickWithMultilinePrompt(t *testing.T) {
 			cfg, _, err := config.Load(config.LoadOptions{Path: configPath})
 			require.NoError(t, err)
 			m := newTeaModel([]model.Session{
-				{Source: "herdr", Name: "api", WorkspaceID: "w1"},
-				{Source: "herdr", Name: "web", WorkspaceID: "w2"},
-				{Source: "herdr", Name: "cli", WorkspaceID: "w3"},
+				{Source: "rex", Name: "api", WorkspaceID: "w1"},
+				{Source: "rex", Name: "web", WorkspaceID: "w2"},
+				{Source: "rex", Name: "cli", WorkspaceID: "w3"},
 			}, Options{DisplayOptions: DisplayOptions{HidePreview: !cfg.TUI.ShowPreview, Prompt: cfg.TUI.Prompt}})
 			t.Cleanup(func() { m.cancelActivePreview() })
 			m.width, m.height = tc.width, 28
@@ -180,8 +180,8 @@ func TestTeaModelIgnoresStaleWorkspaceClick(t *testing.T) {
 	for _, state := range []string{"filtered out", "closing", "settings loading", "settings open"} {
 		t.Run(state, func(t *testing.T) {
 			m := newTeaModel([]model.Session{
-				{Source: "herdr", Name: "api", WorkspaceID: "w1"},
-				{Source: "herdr", Name: "web", WorkspaceID: "w2"},
+				{Source: "rex", Name: "api", WorkspaceID: "w1"},
+				{Source: "rex", Name: "web", WorkspaceID: "w2"},
 			}, Options{DisplayOptions: DisplayOptions{HidePreview: true}})
 			m.width, m.height = 120, 28
 			click := m.View().OnMouse(tea.MouseClickMsg{X: 20, Y: 5, Button: tea.MouseLeft})

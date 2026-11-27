@@ -54,7 +54,8 @@ rex.action{
     assert(ctx.block_id, "Sesh needs a focused terminal")
     local source = assert(rex.session.describe_block{ block_id = ctx.block_id })
     local window = assert(source.block.window_id, "The terminal must be in a tab")
-    local argv = { "rex-sesh", "picker", "--from-session", ctx.session_id }
+    -- The picker finds its own session from REX_BLOCK.
+    local argv = { "rex-sesh", "picker" }
     if ctx.client_id then
       argv[#argv + 1] = "--client"
       argv[#argv + 1] = ctx.client_id
@@ -189,3 +190,25 @@ Done on branch `rex-client`. The work is staged, not committed.
 - A missing `rex` binary gives the same single warning and exit 0, so CI without Rex still passes the smoke checks.
 - An empty Lua table encodes as `{}`, so the client treats `{}` and `null` as an empty session list.
 - The picker shows Rex rows with a plain `[rex]` badge. Milestone 3 adds the icon, colour and wording.
+
+## Milestone 3 status (2026-11-27)
+
+Done on branch `picker-rex`, then committed to `main` under the standing approval.
+
+- The picker lists open Rex sessions only, on every path: the TUI, fzf, `--json`, and the reloads after a close or a settings save. `list` still merges every source.
+- The session that holds the picker's own block (`REX_BLOCK`) is marked with a sky `●` in the status column. The Lua script walks floating layers to find it. A picker in a floating layer never supplies its session's directory, so the script falls back to the tab's tiled blocks. The launch snippet no longer needs `--from-session`.
+- If Rex is unavailable, the picker fails before it opens: `list Rex sessions: …`. Reloads return the same error for the picker to show.
+- Wording is now `rex / sesh`, `N sessions`, `SESSIONS`, `No matching sessions`, `Filter sessions`, and `LAST SESSION`. The footer's sort label reads `rex order` for the default mode and leaves out `ctrl+x`. Rex rows have their own icon and keep the sky colour. A session without a directory previews as `session: …`. Settings help says sessions, except where it names `[[workspace]]` config entries.
+- `ctrl+x` is refused (the picker shakes) until closing is implemented. `ctrl+r` still cycles the sort modes, and all three keep `rex ls` order for now.
+- The golden frames were regenerated. All 148 changed lines kept their width, and the changes are text only.
+- Checked live: in an unfocused floating layer in this session's tab, the picker showed the 4 Rex sessions with `●` on this session and its directory intact. The command preview listed the first session's directory. After `ctrl+o`, the pane preview read "pane preview is not available yet".
+- `just check` passes with 778 tests.
+
+### Not done yet
+
+- The focused-layer case (the picker as its tab's focused block) is untested until milestone 5 opens it from a key.
+- Milestone 5: a picker that fails before opening (Rex unavailable) exits at once, and its floating layer closes with it. From a key binding, the error would flash and vanish, so the launch path must keep it readable.
+- The fzf picker (`--fzf` or `REX_SESH_PICKER=fzf`) lists Rex sessions only but shows no `●` mark.
+- Inert settings: `picker.workspace_sort` (`recent` and `agent` have no data), `picker.show_last_workspace` (the footer is hidden), and `ctrl+o` pane mode (shows "pane preview is not available yet" until milestone 6).
+- `WorkspaceID` still holds the Rex session ID. The rename to `SessionID` is a separate refactor.
+- `picker.herdr_theme_inherit` still reads Herdr's theme file.

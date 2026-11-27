@@ -46,7 +46,7 @@ func TestKeyIsStableAndSourceScoped(t *testing.T) {
 }
 
 func TestRemoteSessionIdentityIncludesMachineAndJSONPreservesIt(t *testing.T) {
-	local := Session{Source: "herdr", Name: "api", Path: "/src/api", WorkspaceID: "sp1"}
+	local := Session{Source: "rex", Name: "api", Path: "/src/api", WorkspaceID: "sp1"}
 	remote := local
 	remote.Machine = "buntu26"
 	assert.NotEqual(t, Key(local), Key(remote))

@@ -15,7 +15,7 @@ import (
 )
 
 func TestRenderPaneReportsUnavailable(t *testing.T) {
-	_, err := RenderPane(context.Background(), model.Session{Source: "herdr", WorkspaceID: "w2"})
+	_, err := RenderPane(context.Background(), model.Session{Source: "rex", WorkspaceID: "w2"})
 	require.ErrorIs(t, err, ErrPaneUnavailable)
 }
 
@@ -155,10 +155,10 @@ func TestRenderMissingPathWithoutWorkspaceReturnsStableText(t *testing.T) {
 	assert.Contains(t, out, "No item path available")
 }
 
-func TestRenderMissingPathWithWorkspaceReturnsWorkspaceSummary(t *testing.T) {
+func TestRenderMissingPathWithSessionReturnsSessionSummary(t *testing.T) {
 	out, err := Render(context.Background(), model.Session{Name: "api", WorkspaceID: "ws1"}, "printf %s {}")
 	require.NoError(t, err)
-	require.Contains(t, out, "workspace: api")
+	require.Contains(t, out, "session: api")
 	assert.Contains(t, out, "id: ws1")
 }
 

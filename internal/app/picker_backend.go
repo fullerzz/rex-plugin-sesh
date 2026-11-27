@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/fullerzz/rex-plugin-sesh/internal/config"
 	pickerpkg "github.com/fullerzz/rex-plugin-sesh/internal/picker"
@@ -20,22 +21,16 @@ type pickerBackend struct {
 	ctx              context.Context
 	cfg              config.Config
 	activeConfigPath string
-	// warnings wait for the picker to leave the screen; see flushWarnings.
-	warnings []string
 }
 
-func (b *pickerBackend) noteRexErr(err error) {
-	if warning := rexWarning(err); warning != "" {
-		b.warnings = append(b.warnings, warning)
+// collect lists the picker's rows. It reports an unavailable Rex as an error,
+// which the picker shows, because the picker owns the screen.
+func (b *pickerBackend) collect(ctx context.Context, cfg config.Config) (collection, error) {
+	col, err := b.app.collectPicker(ctx, cfg)
+	if err == nil && col.RexErr != nil {
+		err = fmt.Errorf("list Rex sessions: %w", col.RexErr)
 	}
-}
-
-// flushWarnings prints the warnings once the picker no longer owns the screen.
-func (b *pickerBackend) flushWarnings() {
-	for _, warning := range b.warnings {
-		b.app.warnf("%s", warning)
-	}
-	b.warnings = nil
+	return col, err
 }
 
 func (b *pickerBackend) CloseWorkspace(context.Context, string) error {
@@ -43,11 +38,10 @@ func (b *pickerBackend) CloseWorkspace(context.Context, string) error {
 }
 
 func (b *pickerBackend) ReloadPicker(ctx context.Context) (pickerpkg.ReloadResult, error) {
-	col, err := b.app.collect(ctx, b.cfg, "", true)
+	col, err := b.collect(ctx, b.cfg)
 	if err != nil {
 		return pickerpkg.ReloadResult{}, err
 	}
-	b.noteRexErr(col.RexErr)
 	return pickerpkg.ReloadResult{Sessions: col.Sessions}, nil
 }
 
@@ -66,11 +60,10 @@ func (b *pickerBackend) ReloadSettings(ctx context.Context, saved settings.Resul
 	if err != nil {
 		return pickerpkg.DisplayOptions{}, pickerpkg.ReloadResult{}, err
 	}
-	col, err := b.app.collect(ctx, cfg, "", true)
+	col, err := b.collect(ctx, cfg)
 	if err != nil {
 		return pickerpkg.DisplayOptions{}, pickerpkg.ReloadResult{}, err
 	}
-	b.noteRexErr(col.RexErr)
 	b.cfg = cfg
 	return b.displayOptions(cfg), pickerpkg.ReloadResult{Sessions: col.Sessions}, nil
 }

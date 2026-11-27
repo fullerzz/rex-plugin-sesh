@@ -7,25 +7,30 @@ import (
 	"github.com/fullerzz/rex-plugin-sesh/internal/rex"
 )
 
-// SessionLister lists the sessions on a Rex server.
+// SessionLister lists the sessions on a Rex server. selfBlockID, when set,
+// marks the session that holds that block as current.
 type SessionLister interface {
-	Sessions(context.Context) ([]rex.Session, error)
+	Sessions(ctx context.Context, selfBlockID string) ([]rex.Session, error)
 }
 
 // RexSessions lists open Rex sessions. Each one carries its session ID in
-// WorkspaceID, which marks it as open.
-type RexSessions struct{ Client SessionLister }
+// WorkspaceID, which marks it as open. With BlockID set, the session holding
+// that block is Attached.
+type RexSessions struct {
+	Client  SessionLister
+	BlockID string
+}
 
 func (RexSessions) Name() string { return "rex" }
 
 func (s RexSessions) List(ctx context.Context) (model.Sessions, error) {
 	out := model.NewSessions()
-	sessions, err := s.Client.Sessions(ctx)
+	sessions, err := s.Client.Sessions(ctx, s.BlockID)
 	if err != nil {
 		return out, err
 	}
 	for _, rs := range sessions {
-		out.Add(model.Session{Source: "rex", Name: rs.Label, Path: rs.Path, WorkspaceID: rs.ID})
+		out.Add(model.Session{Source: "rex", Name: rs.Label, Path: rs.Path, WorkspaceID: rs.ID, Attached: rs.Current})
 	}
 	return out, nil
 }

@@ -36,19 +36,19 @@ func TestFZFInputKeepsIndexHiddenAndAddsSeparatorAwareSearch(t *testing.T) {
 
 func TestFZFInputEmitsHomeAliasInHiddenField(t *testing.T) {
 	t.Setenv("HOME", "/Users/zach")
-	got := fzfInput([]model.Session{{Source: "herdr", Name: "zach", Path: "/Users/zach"}}, false)
+	got := fzfInput([]model.Session{{Source: "rex", Name: "zach", Path: "/Users/zach"}}, false)
 	require.True(t, strings.HasSuffix(got, "\thome\t\n"))
 }
 
 func TestFZFInputUsesSourceCategoryColors(t *testing.T) {
 	got := fzfInput([]model.Session{
-		{Source: "herdr", Name: "herdr"},
+		{Source: "rex", Name: "rex"},
 		{Source: "config", Name: "config"},
 		{Source: "zoxide", Name: "zoxide"},
 		{Source: "dir", Name: "dir"},
 	}, false)
 	for _, want := range []string{
-		"\x1b[1;38;5;81m" + herdrSourceIcon + " herdr\x1b[0m",
+		"\x1b[1;38;5;81m" + rexSourceIcon + " rex\x1b[0m",
 		"\x1b[1;38;5;214m" + configSourceIcon + " config\x1b[0m",
 		"\x1b[1;38;5;114m" + zoxideSourceIcon + " zoxide\x1b[0m",
 		"\x1b[1;38;5;176m[dir]\x1b[0m",
@@ -63,7 +63,7 @@ func TestFZFArgsPreviewAllItemsWithBat(t *testing.T) {
 		assert.Contains(t, args, want)
 	}
 	require.NotContains(t, args, "\npath=")
-	assert.NotContains(t, args, "{2} != herdr")
+	assert.NotContains(t, args, "{2} != rex")
 }
 
 func TestFZFPreviewCommandFindsSystemToolsWithMinimalPath(t *testing.T) {

@@ -12,7 +12,7 @@ path_components = 1
 show_icons = true
 herdr_theme_inherit = true
 prompt = "Sesh> "
-placeholder = "Search workspaces"
+placeholder = "Search sessions"
 separator_aware = true
 workspace_sort = "recent"
 

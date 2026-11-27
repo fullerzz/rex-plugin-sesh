@@ -12,8 +12,8 @@ import (
 )
 
 func TestRemoteMachineSearchAndDisplay(t *testing.T) {
-	remote := model.Session{Source: "herdr", Machine: "buntu26", Name: "api", Path: "/src/api", WorkspaceID: "buntu26/sp1"}
-	local := model.Session{Source: "herdr", Name: "api", Path: "/src/api", WorkspaceID: "sp1"}
+	remote := model.Session{Source: "rex", Machine: "buntu26", Name: "api", Path: "/src/api", WorkspaceID: "buntu26/sp1"}
+	local := model.Session{Source: "rex", Name: "api", Path: "/src/api", WorkspaceID: "sp1"}
 	m := New([]model.Session{local, remote})
 	m.Filter("BUNTU26")
 	require.Equal(t, []model.Session{remote}, m.Filtered)
@@ -30,8 +30,8 @@ func TestRemoteMachineSearchAndDisplay(t *testing.T) {
 }
 
 func TestRemoteMachineAndNameSearchTogether(t *testing.T) {
-	remote := model.Session{Source: "herdr", Machine: "buntu26", Name: "api", Path: "/src/api", WorkspaceID: "buntu26/sp1"}
-	local := model.Session{Source: "herdr", Name: "api", Path: "/src/api", WorkspaceID: "sp1"}
+	remote := model.Session{Source: "rex", Machine: "buntu26", Name: "api", Path: "/src/api", WorkspaceID: "buntu26/sp1"}
+	local := model.Session{Source: "rex", Name: "api", Path: "/src/api", WorkspaceID: "sp1"}
 	apiDocs := model.Session{Source: "config", Name: "api-docs", Path: "/src/docs"}
 	byPath := model.Session{Source: "zoxide", Name: "svc", Path: "/src/api/svc"}
 	m := New([]model.Session{byPath, local, remote, apiDocs})
@@ -45,8 +45,8 @@ func TestRemoteMachineAndNameSearchTogether(t *testing.T) {
 func TestRemoteSessionsSkipLocalHomeHeuristics(t *testing.T) {
 	home := "/Users/zach"
 	t.Setenv("HOME", home)
-	remoteHome := model.Session{Source: "herdr", Machine: "buntu26", Name: "~", Path: home, WorkspaceID: "buntu26/sp2"}
-	localHome := model.Session{Source: "herdr", Name: "~", Path: home, WorkspaceID: "sp2"}
+	remoteHome := model.Session{Source: "rex", Machine: "buntu26", Name: "~", Path: home, WorkspaceID: "buntu26/sp2"}
+	localHome := model.Session{Source: "rex", Name: "~", Path: home, WorkspaceID: "sp2"}
 	other := model.Session{Source: "config", Name: "homework", Path: "/src/homework"}
 	m := New([]model.Session{other, remoteHome, localHome})
 	m.Filter("home")
@@ -73,9 +73,9 @@ func TestRealFZFMatchesRemoteMachine(t *testing.T) {
 	if err != nil {
 		t.Skip("fzf not installed")
 	}
-	local := model.Session{Source: "herdr", Name: "api", Path: "/src/api", WorkspaceID: "sp1"}
-	buntu := model.Session{Source: "herdr", Machine: "buntu26", Name: "api", Path: "/src/api", WorkspaceID: "buntu26/sp1"}
-	ser8 := model.Session{Source: "herdr", Machine: "ser8", Name: "web", WorkspaceID: "ser8/sp1"}
+	local := model.Session{Source: "rex", Name: "api", Path: "/src/api", WorkspaceID: "sp1"}
+	buntu := model.Session{Source: "rex", Machine: "buntu26", Name: "api", Path: "/src/api", WorkspaceID: "buntu26/sp1"}
+	ser8 := model.Session{Source: "rex", Machine: "ser8", Name: "web", WorkspaceID: "ser8/sp1"}
 	items := []model.Session{local, buntu, ser8}
 	for _, tc := range []struct {
 		filter string
@@ -97,7 +97,7 @@ func TestRealFZFMatchesRemoteMachine(t *testing.T) {
 }
 
 func TestFZFRemotePreviewNeverReadsLocalFiles(t *testing.T) {
-	script := strings.NewReplacer("{2}", "herdr", "{4}", "api", "{5}", "/does-not-exist", "{7}", "buntu26").Replace(fzfPreviewCommand())
+	script := strings.NewReplacer("{2}", "rex", "{4}", "api", "{5}", "/does-not-exist", "{7}", "buntu26").Replace(fzfPreviewCommand())
 	//nolint:gosec // The preview script and substituted values are fixed by this test.
 	out, err := exec.Command("/bin/sh", "-c", script).CombinedOutput()
 	require.NoError(t, err)

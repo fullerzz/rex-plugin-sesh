@@ -14,16 +14,16 @@ type field struct {
 
 func fieldsFromConfig(c config.Config) []field {
 	fields := []field{
-		{key: "picker.show_icons", label: "Show icons", help: "Display source icons in the workspace list.", value: c.TUI.ShowIcons},
-		{key: "picker.show_path", label: "Show paths", help: "Show directory paths beside workspace names.", value: c.TUI.ShowPath},
+		{key: "picker.show_icons", label: "Show icons", help: "Display source icons in the session list.", value: c.TUI.ShowIcons},
+		{key: "picker.show_path", label: "Show paths", help: "Show directory paths beside session names.", value: c.TUI.ShowPath},
 		{key: "picker.show_preview", label: "Show preview", help: "Display the picker preview panel.", value: c.TUI.ShowPreview},
-		{key: "picker.preview_mode", label: "Preview mode", help: "Command output or the current workspace pane.", value: c.TUI.PreviewMode, choices: []string{"command", "pane"}},
-		{key: "picker.workspace_sort", label: "Workspace order", help: "Default ordering when the picker opens.", value: c.TUI.DefaultSort, choices: []string{"workspace", "recent", "agent"}},
+		{key: "picker.preview_mode", label: "Preview mode", help: "Command output or the current session pane.", value: c.TUI.PreviewMode, choices: []string{"command", "pane"}},
+		{key: "picker.workspace_sort", label: "Session order", help: "Default ordering when the picker opens.", value: c.TUI.DefaultSort, choices: []string{"workspace", "recent", "agent"}},
 		{key: "picker.prioritize_home", label: "Prioritize home", help: "Prioritize the home directory in the picker.", value: c.TUI.PrioritizeHome},
 		{key: "picker.herdr_theme_inherit", label: "Inherit Herdr theme", help: "Use the host theme in the native picker.", value: c.TUI.HerdrThemeInherit},
 		{key: "picker.replace_worktree_icon", label: "Worktree icons", help: "Replace source icons for Git worktrees.", value: c.TUI.ReplaceWorktreeIcon},
-		{key: "picker.show_last_workspace", label: "Last workspace", help: "Show the previous workspace in the picker header.", value: c.TUI.ShowLastWorkspace},
-		{key: "picker.show_last_workspace_path", label: "Last workspace path", help: "Show the previous workspace directory.", value: c.TUI.ShowLastWorkspacePath},
+		{key: "picker.show_last_workspace", label: "Last session", help: "Show the previous session in the picker footer.", value: c.TUI.ShowLastWorkspace},
+		{key: "picker.show_last_workspace_path", label: "Last session path", help: "Show the previous session directory.", value: c.TUI.ShowLastWorkspacePath},
 		{key: "picker.separator_aware", label: "Separator-aware search", help: "Treat path separators specially during matching.", value: c.SeparatorAware},
 		{key: "picker.prompt", label: "Search prompt", help: "Empty uses the built-in picker prompt.", value: c.TUI.Prompt},
 		{key: "picker.placeholder", label: "Search placeholder", help: "Empty uses the built-in search hint.", value: c.TUI.Placeholder},

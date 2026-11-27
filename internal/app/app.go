@@ -100,12 +100,15 @@ func (s *capturingSource) List(ctx context.Context) (model.Sessions, error) {
 	return ss, nil
 }
 
-func (a *App) rexSource() *capturingSource {
+// rexSource lists Rex sessions. With blockID set, the session holding that
+// block is marked current; only the picker asks, because list caches its
+// output for every session to read.
+func (a *App) rexSource(blockID string) *capturingSource {
 	client := a.Rex
 	if client == nil {
 		client = rex.NewClient()
 	}
-	return &capturingSource{Source: sources.RexSessions{Client: client}}
+	return &capturingSource{Source: sources.RexSessions{Client: client, BlockID: blockID}}
 }
 
 // collection is a merged session list. RexErr says why Rex sessions are
@@ -119,7 +122,7 @@ type collection struct {
 // [[workspace]] entries on another machine: list and the picker cannot open
 // them yet.
 func (a *App) collect(ctx context.Context, cfg config.Config, target string, localOnly bool) (collection, error) {
-	rexSrc := a.rexSource()
+	rexSrc := a.rexSource("")
 	srcs := []sources.Source{rexSrc, sources.ConfigSessions{Config: cfg, LocalOnly: localOnly}, sources.Zoxide{}}
 	if target != "" {
 		direct := sources.DirectPath{Path: target}
@@ -131,6 +134,18 @@ func (a *App) collect(ctx context.Context, cfg config.Config, target string, loc
 		srcs = append(srcs, direct)
 	}
 	merged, err := sources.Merge(ctx, srcs, config.MergeOrder(cfg.SortOrder), cfg.Blacklist, false, true)
+	if err != nil {
+		return collection{}, err
+	}
+	sources.ApplyConfig(&merged, cfg, "")
+	return collection{Sessions: merged.Ordered(), RexErr: rexSrc.err}, nil
+}
+
+// collectPicker lists the picker's rows: the open Rex sessions only, with the
+// one that holds this terminal's block marked current.
+func (a *App) collectPicker(ctx context.Context, cfg config.Config) (collection, error) {
+	rexSrc := a.rexSource(os.Getenv("REX_BLOCK"))
+	merged, err := sources.Merge(ctx, []sources.Source{rexSrc}, nil, cfg.Blacklist, false, true)
 	if err != nil {
 		return collection{}, err
 	}
@@ -169,7 +184,7 @@ func (a *App) list(ctx context.Context, args []string) error {
 			return a.printSessions(cached, *jsonOut)
 		}
 	}
-	rexSrc := a.rexSource()
+	rexSrc := a.rexSource("")
 	ss, err := sources.Merge(ctx, []sources.Source{rexSrc, sources.ConfigSessions{Config: cfg, LocalOnly: true}, sources.Zoxide{}}, config.MergeOrder(cfg.SortOrder), cfg.Blacklist, *blacklisted, *hideDup)
 	if err != nil {
 		return err
@@ -198,7 +213,6 @@ func pickerOptionsFromConfig(ctx context.Context, output io.Writer, cfg config.C
 		ShowIcons:                      cfg.TUI.ShowIcons,
 		HerdrThemeInherit:              cfg.TUI.HerdrThemeInherit,
 		DisableWorktreeIconReplacement: !cfg.TUI.ReplaceWorktreeIcon,
-		HideLastWorkspace:              !cfg.TUI.ShowLastWorkspace,
 		HideLastWorkspacePath:          !cfg.TUI.ShowLastWorkspacePath,
 		SeparatorAware:                 cfg.SeparatorAware,
 		DisableHomePrioritization:      !cfg.TUI.PrioritizeHome,
@@ -208,6 +222,9 @@ func pickerOptionsFromConfig(ctx context.Context, output io.Writer, cfg config.C
 		CyclePreviewModeKey:            &cfg.Keys.CyclePreviewMode,
 		DefaultPreviewCommand:          cfg.DefaultSessionConfig.PreviewCommand,
 		WorkspaceSort:                  cfg.TUI.DefaultSort,
+		// rex-sesh records no session history and cannot close sessions yet.
+		HideLastWorkspace: true,
+		DisableClose:      true,
 	}
 }
 
@@ -235,8 +252,8 @@ func (a *App) printSessions(sessions []model.Session, jsonOut bool) error {
 	return nil
 }
 
-// picker prints the chosen session's name. Switching to it comes with the Rex
-// client.
+// picker lists the open Rex sessions and prints the chosen one's name.
+// Switching to it comes later.
 func (a *App) picker(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("picker", flag.ContinueOnError)
 	fs.SetOutput(a.Err)
@@ -250,20 +267,19 @@ func (a *App) picker(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	col, err := a.collect(ctx, cfg, "", true)
+	col, err := a.collectPicker(ctx, cfg)
 	if err != nil {
 		return err
 	}
+	// Without Rex the picker would open empty, so say why instead.
+	if col.RexErr != nil {
+		return fmt.Errorf("list Rex sessions: %w", col.RexErr)
+	}
 	if *jsonOut {
-		if warning := rexWarning(col.RexErr); warning != "" {
-			a.warnf("%s", warning)
-		}
 		return a.printSessions(col.Sessions, true)
 	}
 	opts := pickerOptionsFromConfig(ctx, a.Out, cfg)
-	// The picker takes over the screen, so its warnings print after it exits.
 	backend := &pickerBackend{app: a, ctx: ctx, cfg: cfg, activeConfigPath: activeConfigPath}
-	backend.noteRexErr(col.RexErr)
 	var selected model.Session
 	var ok bool
 	if *fzfPicker || strings.EqualFold(os.Getenv("REX_SESH_PICKER"), "fzf") {
@@ -271,7 +287,6 @@ func (a *App) picker(ctx context.Context, args []string) error {
 	} else {
 		selected, ok, err = pickerpkg.Run(col.Sessions, pickerpkg.Options{DisplayOptions: opts, Backend: backend})
 	}
-	backend.flushWarnings()
 	if err != nil || !ok {
 		return err
 	}

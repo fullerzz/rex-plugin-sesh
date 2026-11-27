@@ -144,7 +144,7 @@ func (m teaModel) filterBox(width int) bloom.SlotNode {
 		count = bloom.Transition(m.countRoll.Float(), count, fx.Roll{From: m.countFrom})
 	}
 	box := bloom.Box(panel(!m.listFocused).Padding(0, 1), bloom.Column(line.ID(inputID))).
-		Edge(bloom.Top, bloom.Start, edgeText(titleStyle.Render("herdr / sesh"))).
+		Edge(bloom.Top, bloom.Start, edgeText(titleStyle.Render("rex / sesh"))).
 		Edge(bloom.Top, bloom.End, count)
 	return bloom.Fixed(rows+panelFrameRows, box)
 }
@@ -236,7 +236,7 @@ func (m teaModel) listBox(width int) bloom.Child {
 		style = closingPanel()
 	}
 	box := bloom.Box(style.PaddingLeft(1), m.listBody(width-panelInset)).
-		Edge(bloom.Top, bloom.Start, edgeText(sectionStyle.Render("WORKSPACES"))).
+		Edge(bloom.Top, bloom.Start, edgeText(sectionStyle.Render("SESSIONS"))).
 		Edge(bloom.Right, bloom.Stretch, listScrollbar{bar: m.listScrollbar(), border: style})
 	if n := len(m.list.Filtered); n > 0 {
 		box = box.Edge(bloom.Top, bloom.End, edgeText(countStyle.Render(fmt.Sprintf("%d/%d", m.list.Selected+1, n))))
@@ -276,7 +276,7 @@ func (m teaModel) listScrollbar() bloom.ScrollbarNode {
 
 func (m teaModel) listBody(width int) bloom.FlexNode {
 	if len(m.list.Filtered) == 0 {
-		return bloom.Column(bloom.Text(fitLine(emptyStyle.Render("No matching workspaces"), width)))
+		return bloom.Column(bloom.Text(fitLine(emptyStyle.Render("No matching sessions"), width)))
 	}
 	clickable := m.selectable()
 	return bloom.Column(bloom.Fill(bloom.List(len(m.list.Filtered), func(i int) bloom.Child {
@@ -415,9 +415,9 @@ func (m teaModel) previewBody(width int) bloom.FlexNode {
 	text := strings.TrimRight(m.preview, "\n")
 	switch {
 	case m.closingWorkspaceID != "" && (m.previewKey == "" || m.quitAfterWorkspaceClose):
-		status := "Closing workspace..."
+		status := "Closing session..."
 		if m.quitAfterWorkspaceClose {
-			status = "Cancelling workspace close..."
+			status = "Cancelling session close..."
 		}
 		return bloom.Column(bloom.Text(fitLine(status, width)))
 	case m.previewLoading:

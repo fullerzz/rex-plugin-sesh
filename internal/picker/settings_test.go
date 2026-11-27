@@ -113,7 +113,7 @@ func TestSettingsOpeningKeepsQuitKeyActive(t *testing.T) {
 }
 
 func TestSettingsSaveRetainsBackendOperationsAndRefreshesMetadata(t *testing.T) {
-	items := []sessionmodel.Session{{Source: "herdr", Name: "alpha", WorkspaceID: "w1"}, {Source: "herdr", Name: "beta", WorkspaceID: "w2"}}
+	items := []sessionmodel.Session{{Source: "rex", Name: "alpha", WorkspaceID: "w1"}, {Source: "rex", Name: "beta", WorkspaceID: "w2"}}
 	closed := ""
 	refreshed := false
 	backend := &fakeBackend{

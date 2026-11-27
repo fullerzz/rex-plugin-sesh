@@ -1,9 +1,9 @@
 
-  ╭─ herdr / sesh ────────────────────────────────── 3 workspaces ─╮
-  │ Sesh> Filter workspaces                                        │
+  ╭─ rex / sesh ────────────────────────────────────── 3 sessions ─╮
+  │ Sesh> Filter sessions                                          │
   ╰────────────────────────────────────────────────────────────────╯
-  ╭─ WORKSPACES ───────────────────────────────────────────── 1/3 ─╮
-  │   ⢄ [herdr]   api                 /src/api                     │
+  ╭─ SESSIONS ─────────────────────────────────────────────── 1/3 ─╮
+  │   ⢄ [rex]     api                 /src/api                     │
   │     [zoxide]  web                 /src/web                     │
   │     [config]  dots                /src/dots                    │
   │                                                                │
@@ -24,4 +24,4 @@
   │                                                                │
   │                                                                │
   ╰────────────────────────────────────────────────────────────────╯
-  enter select · ctrl+j/k · ctrl+r workspace · ctrl+x close · esc e…
+  enter select · ctrl+j/k · ctrl+r rex order · ctrl+x close · esc e…

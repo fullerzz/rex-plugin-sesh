@@ -168,7 +168,7 @@ func TestToastFadeLeavesNoPaletteLookalike(t *testing.T) {
 	updated, _ := m.Update(previewMsg{key: m.previewKey, requestID: m.previewRequestID, text: strings.Join(lines, "\n")})
 	m = updated.(teaModel)
 	m.previewIn.Advance(time.Now().Add(time.Hour))
-	m.toastText = "Failed to close workspace: boom"
+	m.toastText = "Failed to close session: boom"
 	start := time.Now()
 	m.toast.ShowAt(start)
 	m.toast.Advance(start.Add(time.Hour))

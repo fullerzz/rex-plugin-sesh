@@ -69,12 +69,11 @@ func TestCollectForRemoteTargetRunsNoLocalGit(t *testing.T) {
 }
 
 // rex-sesh cannot open a [[workspace]] entry on another machine yet, so list
-// and the picker leave it out.
-func TestListAndPickerOmitRemoteWorkspaces(t *testing.T) {
+// leaves it out.
+func TestListOmitsRemoteWorkspaces(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.toml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(localAndRemoteConfig), 0o600))
 	assert.Equal(t, []string{"web"}, sessionNames(runListJSON(t, cfgPath, "")))
-	assert.Equal(t, []string{"web"}, sessionNames(runPickerJSON(t, cfgPath, "")))
 }
 
 // Preview keeps a remote entry, which shows its metadata without running

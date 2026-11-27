@@ -30,8 +30,10 @@ type Session struct {
 	Windows int
 	// FocusedBlockID is the focused block of the active tab, or "".
 	FocusedBlockID string
-	// Path is the directory the focused terminal last reported, or "".
+	// Path is the directory a terminal in the active tab last reported, or "".
 	Path string
+	// Current marks the session that holds the block passed to Sessions.
+	Current bool
 }
 
 // Runner runs a command with stdin and returns its output.
@@ -82,9 +84,14 @@ func Bin() string {
 	return "rex"
 }
 
-// Sessions lists every session on the server in rex ls order.
-func (c *Client) Sessions(ctx context.Context) ([]Session, error) {
-	out, err := c.run(ctx, sessionsScript, "do", "-", "--json")
+// Sessions lists every session on the server in rex ls order. selfBlockID,
+// when set, is the caller's own block: its session is marked Current.
+func (c *Client) Sessions(ctx context.Context, selfBlockID string) ([]Session, error) {
+	args, err := json.Marshal(map[string]string{"block_id": selfBlockID})
+	if err != nil {
+		return nil, err
+	}
+	out, err := c.run(ctx, sessionsScript, "do", "-", "--args", string(args), "--json")
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +108,7 @@ func (c *Client) Sessions(ctx context.Context) ([]Session, error) {
 		Windows        int    `json:"windows"`
 		FocusedBlockID string `json:"focused_block_id"`
 		PWD            string `json:"pwd"`
+		Current        bool   `json:"current"`
 	}
 	if trimmed := bytes.TrimSpace(result.Sessions); len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("{}")) && !bytes.Equal(trimmed, []byte("null")) {
 		if err := json.Unmarshal(trimmed, &raw); err != nil {
@@ -115,6 +123,7 @@ func (c *Client) Sessions(ctx context.Context) ([]Session, error) {
 			Windows:        r.Windows,
 			FocusedBlockID: r.FocusedBlockID,
 			Path:           PathFromFileURL(r.PWD),
+			Current:        r.Current,
 		})
 	}
 	return sessions, nil
@@ -130,9 +139,9 @@ func (c *Client) run(ctx context.Context, stdin []byte, args ...string) ([]byte,
 	out, errb, err := c.Runner.Run(ctx, c.Bin, argv, stdin)
 	if err != nil {
 		if msg := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(errb)), "Error:")); msg != "" {
-			return nil, fmt.Errorf("rex %s: %s", strings.Join(args, " "), msg)
+			return nil, fmt.Errorf("rex %s: %s", args[0], msg)
 		}
-		return nil, fmt.Errorf("rex %s: %w", strings.Join(args, " "), err)
+		return nil, fmt.Errorf("rex %s: %w", args[0], err)
 	}
 	return out, nil
 }

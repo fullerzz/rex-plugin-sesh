@@ -38,7 +38,7 @@ const (
 
 const (
 	defaultPrompt      = "Sesh> "
-	defaultPlaceholder = "Filter workspaces"
+	defaultPlaceholder = "Filter sessions"
 	defaultWidth       = 80
 	defaultHeight      = 24
 	previewSplitWidth  = 92
@@ -51,7 +51,7 @@ const (
 	rowSourceWidth     = 10
 	rowNameMinWidth    = 12
 	rowNameMaxWidth    = 28
-	herdrSourceIcon    = "\U000f0cc6"
+	rexSourceIcon      = "\uf489"
 	zoxideSourceIcon   = "\uf114"
 	configSourceIcon   = "\ue615"
 
@@ -110,6 +110,10 @@ var (
 	pathStyle = lipgloss.NewStyle().
 			Foreground(mutedColor)
 
+	currentMarkerStyle = lipgloss.NewStyle().
+				Foreground(skyColor).
+				Bold(true)
+
 	worktreeMarkerStyle = lipgloss.NewStyle().
 				Foreground(violetColor).
 				Bold(true)
@@ -152,19 +156,22 @@ type DisplayOptions struct {
 	HerdrThemeInherit              bool
 	DisableWorktreeIconReplacement bool
 	HideLastWorkspace              bool
-	HideLastWorkspacePath          bool
-	SeparatorAware                 bool
-	DisableHomePrioritization      bool
-	HidePath                       bool
-	HidePreview                    bool
-	PreviewMode                    string
-	DefaultPreviewCommand          string
-	FZFCommand                     string
-	RecentWorkspaceIDs             []string
-	WorkspaceSort                  string
-	LastWorkspaceID                string
-	LastWorkspaceUnknown           bool
-	HerdrWorkspaces                []sessionmodel.Session
+	// DisableClose refuses ctrl+x and leaves it out of the footer, for a
+	// backend that cannot close sessions.
+	DisableClose              bool
+	HideLastWorkspacePath     bool
+	SeparatorAware            bool
+	DisableHomePrioritization bool
+	HidePath                  bool
+	HidePreview               bool
+	PreviewMode               string
+	DefaultPreviewCommand     string
+	FZFCommand                string
+	RecentWorkspaceIDs        []string
+	WorkspaceSort             string
+	LastWorkspaceID           string
+	LastWorkspaceUnknown      bool
+	HerdrWorkspaces           []sessionmodel.Session
 }
 
 // Nil metadata slices preserve existing picker metadata; empty slices clear it.
@@ -244,6 +251,7 @@ type teaModel struct {
 	showIcons               bool
 	replaceWorktreeIcon     bool
 	hideLastWorkspace       bool
+	disableClose            bool
 	hideLastWorkspacePath   bool
 	workspaceOrder          []string
 	recentWorkspaceIDs      []string
@@ -380,6 +388,7 @@ func newTeaModel(items []sessionmodel.Session, opts Options) teaModel {
 		showIcons:             opts.ShowIcons,
 		replaceWorktreeIcon:   !opts.DisableWorktreeIconReplacement,
 		hideLastWorkspace:     opts.HideLastWorkspace,
+		disableClose:          opts.DisableClose,
 		hideLastWorkspacePath: opts.HideLastWorkspacePath,
 		workspaceOrder:        workspaceOrder,
 		recentWorkspaceIDs:    append([]string(nil), opts.RecentWorkspaceIDs...),
@@ -658,7 +667,7 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		if closed.closeErr != nil {
-			m.closeError = fmt.Sprintf("Failed to close workspace: %v", closed.closeErr)
+			m.closeError = fmt.Sprintf("Failed to close session: %v", closed.closeErr)
 			return m.refreshPreview()
 		}
 		if closed.reloadRan {
@@ -681,7 +690,7 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			remaining := m.list.All[:0]
 			for _, item := range m.list.All {
-				if item.Source == "herdr" && item.WorkspaceID == closed.workspaceID {
+				if item.Source == "rex" && item.WorkspaceID == closed.workspaceID {
 					continue
 				}
 				if item.Worktree.ParentWorkspaceID == closed.workspaceID {
@@ -701,7 +710,7 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if closed.reloadErr != nil {
-			m.closeError = fmt.Sprintf("Workspace closed, but sessions could not be refreshed: %v", closed.reloadErr)
+			m.closeError = fmt.Sprintf("Session closed, but sessions could not be refreshed: %v", closed.reloadErr)
 		}
 		return m.refreshPreview()
 	}
@@ -839,8 +848,11 @@ func (m teaModel) chooseCurrent() (teaModel, tea.Cmd) {
 }
 
 func (m teaModel) closeSelectedWorkspace() (teaModel, tea.Cmd) {
+	if m.disableClose {
+		return m.refuse()
+	}
 	current, ok := m.list.Current()
-	if !ok || current.Source != "herdr" || current.WorkspaceID == "" || m.backend == nil || m.closingWorkspaceID != "" {
+	if !ok || current.Source != "rex" || current.WorkspaceID == "" || m.backend == nil || m.closingWorkspaceID != "" {
 		return m.refuse()
 	}
 	m.closingWorkspaceID = current.WorkspaceID
@@ -964,16 +976,19 @@ func (m teaModel) View() tea.View {
 
 func (m teaModel) footerText() string {
 	if !m.previewShown() && m.closingWorkspaceID != "" {
-		status := "Closing workspace..."
+		status := "Closing session..."
 		if m.quitAfterWorkspaceClose {
-			status = "Cancelling workspace close..."
+			status = "Cancelling session close..."
 		}
 		return emptyStyle.Render(status)
 	}
 	if m.settingsBusy {
 		return helpStyle.Render("Loading settings…")
 	}
-	help := fmt.Sprintf("enter select · ctrl+j/k · ctrl+r %s · ctrl+x close · esc exit", m.workspaceSort)
+	help := fmt.Sprintf("enter select · ctrl+j/k · ctrl+r %s · ctrl+x close · esc exit", sortLabel(m.workspaceSort))
+	if m.disableClose {
+		help = fmt.Sprintf("enter select · ctrl+j/k · ctrl+r %s · esc exit", sortLabel(m.workspaceSort))
+	}
 	if m.backend != nil {
 		help = m.settingsKey() + " settings · " + help
 	}
@@ -983,11 +998,20 @@ func (m teaModel) footerText() string {
 func herdrWorkspaceIDs(items []sessionmodel.Session) []string {
 	ids := make([]string, 0, len(items))
 	for _, item := range items {
-		if item.Source == "herdr" {
+		if item.Source == "rex" {
 			ids = append(ids, item.WorkspaceID)
 		}
 	}
 	return ids
+}
+
+// sortLabel names a sort mode in the footer. The workspace mode keeps the
+// order rex ls reports.
+func sortLabel(sortMode string) string {
+	if sortMode == workspaceSortWorkspace {
+		return "rex order"
+	}
+	return sortMode
 }
 
 func normalizeWorkspaceSort(sortMode string) string {
@@ -1017,7 +1041,7 @@ func agentStatusRank(status string) int {
 func agentWorkspaceOrder(items []sessionmodel.Session, workspaceOrder []string) []string {
 	statuses := make(map[string]string, len(items))
 	for _, item := range items {
-		if item.Source == "herdr" && item.WorkspaceID != "" {
+		if item.Source == "rex" && item.WorkspaceID != "" {
 			statuses[item.WorkspaceID] = item.AgentStatus
 		}
 	}
@@ -1045,7 +1069,7 @@ func sortHerdrWorkspaces(items []sessionmodel.Session, order []string) {
 	workspaces := make([]rankedWorkspace, 0, len(items))
 	byID := make(map[string]struct{})
 	for _, item := range items {
-		if item.Source != "herdr" {
+		if item.Source != "rex" {
 			continue
 		}
 		// Unranked workspaces get unique ranks past the order list, preserving
@@ -1098,7 +1122,7 @@ func sortHerdrWorkspaces(items []sessionmodel.Session, order []string) {
 
 	workspace := 0
 	for i := range items {
-		if items[i].Source == "herdr" {
+		if items[i].Source == "rex" {
 			items[i] = workspaces[workspace].session
 			workspace++
 		}
@@ -1108,7 +1132,7 @@ func sortHerdrWorkspaces(items []sessionmodel.Session, order []string) {
 func workspaceSessionsByID(items []sessionmodel.Session) map[string]sessionmodel.Session {
 	workspaces := make(map[string]sessionmodel.Session, len(items))
 	for _, item := range items {
-		if item.Source == "herdr" && item.WorkspaceID != "" {
+		if item.Source == "rex" && item.WorkspaceID != "" {
 			workspaces[item.WorkspaceID] = item
 		}
 	}
@@ -1147,9 +1171,9 @@ func (m teaModel) contentWidth() int {
 // filter has text.
 func (m teaModel) countText() string {
 	if m.list.Query != "" {
-		return fmt.Sprintf("%d/%d workspaces", len(m.list.Filtered), len(m.list.All))
+		return fmt.Sprintf("%d/%d sessions", len(m.list.Filtered), len(m.list.All))
 	}
-	return fmt.Sprintf("%d workspaces", len(m.list.All))
+	return fmt.Sprintf("%d sessions", len(m.list.All))
 }
 
 func (m teaModel) lastWorkspaceStatus() (label, path string) {
@@ -1175,7 +1199,7 @@ func (m teaModel) lastWorkspaceStatus() (label, path string) {
 
 func (m teaModel) lastWorkspaceText() string {
 	label, path := m.lastWorkspaceStatus()
-	line := sectionStyle.Render("LAST WORKSPACE") + countStyle.Render(" · ") + rowLabelStyle.Render(label)
+	line := sectionStyle.Render("LAST SESSION") + countStyle.Render(" · ") + rowLabelStyle.Render(label)
 	shownPath := compactHome(path)
 	if item, ok := m.herdrWorkspaces[m.lastWorkspaceID]; ok && item.Machine != "" {
 		shownPath = path
@@ -1261,7 +1285,7 @@ func (m teaModel) receivePreview(preview previewMsg) (teaModel, tea.Cmd) {
 		m.cancelPreview()
 		m.cancelPreview = nil
 	}
-	if current, ok := m.list.Current(); ok && m.panePreview && !m.hidePreview && current.Source == "herdr" && current.WorkspaceID != "" {
+	if current, ok := m.list.Current(); ok && m.panePreview && !m.hidePreview && current.Source == "rex" && current.WorkspaceID != "" {
 		return m, tea.Batch(fadeIn, tea.Tick(panePreviewRefreshInterval, func(time.Time) tea.Msg {
 			return panePreviewTickMsg{requestID: preview.requestID}
 		}))
@@ -1606,6 +1630,9 @@ func rowWithRail(s sessionmodel.Session, selected bool, width int, showIcons, re
 	status := "  "
 	if statusGlyph != "" {
 		status = agentStatusStyle(s.AgentStatus).Render(statusGlyph + " ")
+	} else if s.Attached {
+		// The session the picker was opened from.
+		status = currentMarkerStyle.Render("● ")
 	}
 	// Status is always two cells: a glyph plus space, or two blanks.
 	fixedWidth := lipgloss.Width(rail) + 2
@@ -1617,7 +1644,7 @@ func rowWithRail(s sessionmodel.Session, selected bool, width int, showIcons, re
 		}
 		badgeWidth = min(rowSourceWidth, maxInt(1, width-fixedWidth-1))
 		if badgeWidth < lipgloss.Width(badgeText) {
-			badgeText = "↳ herdr"
+			badgeText = "↳ rex"
 		}
 	}
 	badge := sessionSourceBadgeStyle(s).Render(fitPlain(badgeText, badgeWidth))
@@ -1663,7 +1690,7 @@ func worktreeTreePrefix(items []sessionmodel.Session, index int) string {
 	}
 	parentIndex := -1
 	for i, item := range items {
-		if item.Source == "herdr" && item.WorkspaceID == parentID {
+		if item.Source == "rex" && item.WorkspaceID == parentID {
 			parentIndex = i
 			break
 		}
@@ -1733,8 +1760,8 @@ func sourceBadge(source string, showIcons bool) string {
 		return "[" + source + "]"
 	}
 	switch source {
-	case "herdr":
-		return herdrSourceIcon + " herdr"
+	case "rex":
+		return rexSourceIcon + " rex"
 	case "zoxide":
 		return zoxideSourceIcon + " zoxide"
 	case "config":
@@ -1747,17 +1774,17 @@ func sourceBadge(source string, showIcons bool) string {
 }
 
 func sessionSourceBadge(s sessionmodel.Session, showIcons, replaceWorktreeIcon bool) string {
-	if s.Source == "herdr" && s.Worktree.Linked && replaceWorktreeIcon {
+	if s.Source == "rex" && s.Worktree.Linked && replaceWorktreeIcon {
 		if showIcons {
-			return "↳ herdr"
+			return "↳ rex"
 		}
-		return "[↳ herdr]"
+		return "[↳ rex]"
 	}
 	return sourceBadge(s.Source, showIcons)
 }
 
 func sessionSourceBadgeStyle(s sessionmodel.Session) lipgloss.Style {
-	if s.Source == "herdr" && s.Worktree.Linked {
+	if s.Source == "rex" && s.Worktree.Linked {
 		return lipgloss.NewStyle().Foreground(violetColor).Bold(true)
 	}
 	return sourceBadgeStyle(s.Source)
@@ -1770,7 +1797,7 @@ func sourceBadgeStyle(source string) lipgloss.Style {
 func sourceBadgeTerminalColor(source string) color.Color {
 	color := mutedColor
 	switch source {
-	case "herdr":
+	case "rex":
 		color = skyColor
 	case "config":
 		color = amberColor
@@ -1785,7 +1812,7 @@ func sourceBadgeTerminalColor(source string) color.Color {
 func sourceBadgeColor(source string) string {
 	color := "244"
 	switch source {
-	case "herdr":
+	case "rex":
 		color = "81"
 	case "config":
 		color = "214"

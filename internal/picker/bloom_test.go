@@ -28,13 +28,13 @@ import (
 // Write them again with UPDATE_PICKER_FRAMES=1.
 func TestPickerFramesMatchGolden(t *testing.T) {
 	sessions := []model.Session{
-		{Name: "api", Source: "herdr", WorkspaceID: "w1", Path: "/src/api", AgentStatus: "working"},
+		{Name: "api", Source: "rex", WorkspaceID: "w1", Path: "/src/api", AgentStatus: "working"},
 		{Name: "web", Source: "zoxide", Path: "/src/web"},
 		{Name: "dots", Source: "config", Path: "/src/dots"},
 	}
 	many := make([]model.Session, 30)
 	for i := range many {
-		many[i] = model.Session{Name: fmt.Sprintf("workspace-%02d", i), Source: "herdr", WorkspaceID: fmt.Sprintf("w%d", i)}
+		many[i] = model.Session{Name: fmt.Sprintf("workspace-%02d", i), Source: "rex", WorkspaceID: fmt.Sprintf("w%d", i)}
 	}
 	longPreview := func(m *teaModel) {
 		lines := make([]string, 40)
@@ -127,7 +127,7 @@ func TestPickerFramesMatchGolden(t *testing.T) {
 func TestFocusSmearFollowsTheFilterAfterAnEdit(t *testing.T) {
 	m := newTeaModel([]model.Session{{Name: "api"}, {Name: "web"}}, Options{DisplayOptions: DisplayOptions{
 		HidePreview: true,
-		Placeholder: "Filter\nworkspaces",
+		Placeholder: "Filter\nsessions",
 	}})
 	m.width, m.height, m.reduceMotion = 120, 20, false
 	m.listFocused = true
@@ -177,7 +177,7 @@ func TestPreviewShowsSkeletonWhileLoading(t *testing.T) {
 }
 
 func TestClickWhileSettingsOpenDoesNotChooseWorkspace(t *testing.T) {
-	m := newTeaModel([]model.Session{{Source: "herdr", Name: "api", WorkspaceID: "w1"}}, Options{DisplayOptions: DisplayOptions{HidePreview: true}})
+	m := newTeaModel([]model.Session{{Source: "rex", Name: "api", WorkspaceID: "w1"}}, Options{DisplayOptions: DisplayOptions{HidePreview: true}})
 	m.width, m.height = 120, 28
 	m.View()
 	editor, err := settings.Open(config.LoadOptions{Path: filepath.Join(t.TempDir(), "config.toml")}, nil)
@@ -205,8 +205,8 @@ func TestBloomKeepsPreviewColors(t *testing.T) {
 
 func TestRowClickPassesThroughLayers(t *testing.T) {
 	items := []model.Session{
-		{Source: "herdr", Name: "api", WorkspaceID: "w1"},
-		{Source: "herdr", Name: "web", WorkspaceID: "w2"},
+		{Source: "rex", Name: "api", WorkspaceID: "w1"},
+		{Source: "rex", Name: "web", WorkspaceID: "w2"},
 	}
 	for _, tc := range []struct {
 		name  string
@@ -238,12 +238,12 @@ func TestRowClickPassesThroughLayers(t *testing.T) {
 
 func TestToastTakesClicksOnItself(t *testing.T) {
 	items := []model.Session{
-		{Source: "herdr", Name: "api", WorkspaceID: "w1"},
-		{Source: "herdr", Name: "web", WorkspaceID: "w2"},
+		{Source: "rex", Name: "api", WorkspaceID: "w1"},
+		{Source: "rex", Name: "web", WorkspaceID: "w2"},
 	}
 	m := newTeaModel(items, Options{DisplayOptions: DisplayOptions{HidePreview: true}})
 	m.width, m.height = 120, 12
-	m.closeError = "Failed to close workspace: boom"
+	m.closeError = "Failed to close session: boom"
 	m.toastText = m.closeError
 	m.toast.Show()
 	m.toast.Advance(time.Now().Add(time.Hour))
@@ -280,7 +280,7 @@ func TestWheelOverToastOnPreviewScrollsPreview(t *testing.T) {
 		return updated.(teaModel)
 	}
 	m = deliver(m)
-	m.closeError = "Failed to close workspace: boom"
+	m.closeError = "Failed to close session: boom"
 	m.toastText = m.closeError
 	m.toast.Show()
 	m.toast.Advance(time.Now().Add(time.Hour))
@@ -327,7 +327,7 @@ func TestToastWheelUsesTheFrameItWasFoundIn(t *testing.T) {
 	}
 	updated, _ := m.Update(previewMsg{key: m.previewKey, requestID: m.previewRequestID, text: strings.Join(lines, "\n")})
 	m = updated.(teaModel)
-	m.closeError = "Failed to close workspace: boom"
+	m.closeError = "Failed to close session: boom"
 	m.toastText = m.closeError
 	m.toast.Show()
 	m.toast.Advance(time.Now().Add(time.Hour))
@@ -362,7 +362,7 @@ func TestReduceMotionShowsToastWithoutAnimating(t *testing.T) {
 	m := newTeaModel([]model.Session{{Name: "api"}}, Options{})
 	t.Cleanup(func() { m.cancelActivePreview() })
 	m.width, m.height = 120, 28
-	m.closeError = "Failed to close workspace: herdr workspace close w1: boom"
+	m.closeError = "Failed to close session: herdr workspace close w1: boom"
 
 	updated, _ := m.Update(tea.FocusMsg{})
 	m = updated.(teaModel)
@@ -373,14 +373,14 @@ func TestReduceMotionShowsToastWithoutAnimating(t *testing.T) {
 func TestToastKeepsErrorSummaryInShortPane(t *testing.T) {
 	m := newTeaModel([]model.Session{{Name: "api"}}, Options{DisplayOptions: DisplayOptions{HidePreview: true}})
 	m.width, m.height = 120, 12
-	m.closeError = "Workspace closed, but sessions could not be refreshed: " + strings.Repeat("stderr line\n", 8)
+	m.closeError = "Session closed, but sessions could not be refreshed: " + strings.Repeat("stderr line\n", 8)
 	updated, _ := m.Update(tea.FocusMsg{})
 	m = updated.(teaModel)
 
 	lines := strings.Split(settledView(m), "\n")
 
 	assert.Len(t, lines, 12)
-	assert.Contains(t, strings.Join(lines, "\n"), "Workspace closed, but sessions")
+	assert.Contains(t, strings.Join(lines, "\n"), "Session closed, but sessions")
 	assert.Contains(t, lines[len(lines)-2], "esc exit", "the toast must stay above the footer")
 }
 
@@ -748,7 +748,7 @@ func TestFocusedBoxBorderIsLit(t *testing.T) {
 func TestClosingWorkspaceTurnsItsBoxRed(t *testing.T) {
 	for _, hidden := range []bool{false, true} {
 		t.Run(fmt.Sprintf("hide preview %t", hidden), func(t *testing.T) {
-			m := newTeaModel([]model.Session{{Source: "herdr", Name: "api", WorkspaceID: "w1"}}, Options{DisplayOptions: DisplayOptions{HidePreview: hidden}})
+			m := newTeaModel([]model.Session{{Source: "rex", Name: "api", WorkspaceID: "w1"}}, Options{DisplayOptions: DisplayOptions{HidePreview: hidden}})
 			t.Cleanup(func() { m.cancelActivePreview() })
 			m.width, m.height = 120, 20
 			red := fgSequence(redColor)
@@ -761,7 +761,7 @@ func TestClosingWorkspaceTurnsItsBoxRed(t *testing.T) {
 }
 
 func TestPreviewFadesInTextForAnotherWorkspaceOnly(t *testing.T) {
-	m := newTeaModel([]model.Session{{Source: "herdr", Name: "api", WorkspaceID: "w1"}}, Options{})
+	m := newTeaModel([]model.Session{{Source: "rex", Name: "api", WorkspaceID: "w1"}}, Options{})
 	t.Cleanup(func() { m.cancelActivePreview() })
 	m.width, m.height, m.reduceMotion = 120, 20, false
 	settle := func() { m.previewIn.Advance(time.Now().Add(time.Hour)) }
@@ -797,10 +797,10 @@ func TestWorkspaceCountRollsWhenTheFilterChangesIt(t *testing.T) {
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	m = updated.(teaModel)
 	require.True(t, m.countRoll.Animating())
-	assert.Equal(t, "2 workspaces", m.countFrom)
+	assert.Equal(t, "2 sessions", m.countFrom)
 
 	m.countRoll.Advance(time.Now().Add(time.Hour))
-	require.Contains(t, strings.Split(ansi.Strip(m.View().Content), "\n")[filterLineIndex-1], "1/2 workspaces")
+	require.Contains(t, strings.Split(ansi.Strip(m.View().Content), "\n")[filterLineIndex-1], "1/2 sessions")
 	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	m = updated.(teaModel)
 	assert.False(t, m.countRoll.Animating(), "the count did not change")
@@ -883,24 +883,24 @@ func TestPreviewShownMatchesTheLayout(t *testing.T) {
 }
 
 func TestCollapsedPreviewMovesCloseStatusToTheFooter(t *testing.T) {
-	m := newTeaModel([]model.Session{{Source: "herdr", Name: "api", WorkspaceID: "w1"}}, Options{})
+	m := newTeaModel([]model.Session{{Source: "rex", Name: "api", WorkspaceID: "w1"}}, Options{})
 	t.Cleanup(func() { m.cancelActivePreview() })
 	m.width, m.height = 80, 11
 	require.False(t, m.previewShown(), "the stacked preview collapses at this height")
 	m.closingWorkspaceID = "w1"
 
 	view := m.View().Content
-	assert.Contains(t, ansi.Strip(view), "Closing workspace...")
+	assert.Contains(t, ansi.Strip(view), "Closing session...")
 	assert.Contains(t, strings.Split(view, "\n")[listFirstRowIndex-1], fgSequence(redColor), "the list's border turns red")
 
 	m.quitAfterWorkspaceClose = true
-	assert.Contains(t, ansi.Strip(m.View().Content), "Cancelling workspace close...")
+	assert.Contains(t, ansi.Strip(m.View().Content), "Cancelling session close...")
 }
 
 func shortPaneItems() []model.Session {
 	return []model.Session{
-		{Source: "herdr", Name: "workspace-00", WorkspaceID: "w0"},
-		{Source: "herdr", Name: "workspace-01", WorkspaceID: "w1"},
+		{Source: "rex", Name: "workspace-00", WorkspaceID: "w0"},
+		{Source: "rex", Name: "workspace-01", WorkspaceID: "w1"},
 	}
 }
 
@@ -916,13 +916,13 @@ func TestShortPaneKeepsWorkspaceRowAndCloseStatus(t *testing.T) {
 			t.Cleanup(func() { m.cancelActivePreview() })
 			m.width, m.height, m.reduceMotion = tc.width, tc.height, true
 
-			assert.Contains(t, ansi.Strip(m.View().Content), "[herdr]   workspace-00")
+			assert.Contains(t, ansi.Strip(m.View().Content), "[rex]     workspace-00")
 
 			updated, closing := m.Update(tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl})
 			m = updated.(teaModel)
 			require.NotNil(t, closing)
 			require.Equal(t, "w0", m.closingWorkspaceID)
-			assert.Contains(t, ansi.Strip(m.View().Content), "Closing workspace...")
+			assert.Contains(t, ansi.Strip(m.View().Content), "Closing session...")
 		})
 	}
 }
@@ -1003,8 +1003,8 @@ func TestDividerDragWhileSettingsLoadIsDropped(t *testing.T) {
 
 func TestLoadingPlaceholderShowsWhileWorkspaceCloses(t *testing.T) {
 	items := []model.Session{
-		{Source: "herdr", Name: "api", WorkspaceID: "w1"},
-		{Source: "herdr", Name: "web", WorkspaceID: "w2"},
+		{Source: "rex", Name: "api", WorkspaceID: "w1"},
+		{Source: "rex", Name: "web", WorkspaceID: "w2"},
 	}
 	m := newTeaModel(items, Options{Backend: &fakeBackend{}})
 	t.Cleanup(func() { m.cancelActivePreview() })
@@ -1112,7 +1112,7 @@ func TestWheelStepsOverPreviewBorderAddUp(t *testing.T) {
 
 func TestReduceMotionStillsAgentSpinner(t *testing.T) {
 	t.Setenv("REX_SESH_REDUCE_MOTION", "1")
-	m := newTeaModel([]model.Session{{Name: "api", Source: "herdr", WorkspaceID: "w1", AgentStatus: "working"}}, Options{})
+	m := newTeaModel([]model.Session{{Name: "api", Source: "rex", WorkspaceID: "w1", AgentStatus: "working"}}, Options{})
 	t.Cleanup(func() { m.cancelActivePreview() })
 	m.width, m.height = 120, 12
 	before := strippedLines(m.View().Content)[listFirstRowIndex]

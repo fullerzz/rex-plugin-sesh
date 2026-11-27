@@ -33,7 +33,7 @@ func Render(ctx context.Context, s model.Session, fallbackCommand string) (strin
 	}
 	if s.Path == "" {
 		if s.WorkspaceID != "" {
-			return fmt.Sprintf("workspace: %s\nid: %s\npath: %s\n", s.Name, s.WorkspaceID, s.Path), nil
+			return fmt.Sprintf("session: %s\nid: %s\npath: %s\n", s.Name, s.WorkspaceID, s.Path), nil
 		}
 		return "No item path available\n", nil
 	}
@@ -46,7 +46,7 @@ func Render(ctx context.Context, s model.Session, fallbackCommand string) (strin
 		return runShell(ctx, config.SubstitutePath(cmd, s.Path))
 	}
 	if s.WorkspaceID != "" {
-		return fmt.Sprintf("workspace: %s\nid: %s\npath: %s\n", s.Name, s.WorkspaceID, s.Path), nil
+		return fmt.Sprintf("session: %s\nid: %s\npath: %s\n", s.Name, s.WorkspaceID, s.Path), nil
 	}
 	return directoryFallback(s.Path)
 }

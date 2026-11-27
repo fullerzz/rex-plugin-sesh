@@ -1,19 +1,19 @@
 
-  ╭─ herdr / sesh ─────────────────────────────────────────────────────────────────────────────────── 30 workspaces ─╮
-  │ Sesh> Filter workspaces                                                                                          │
+  ╭─ rex / sesh ─────────────────────────────────────────────────────────────────────────────────────── 30 sessions ─╮
+  │ Sesh> Filter sessions                                                                                            │
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-  ╭─ WORKSPACES ───────────────────────────────────────── 1/30 ─╮ ╭─ PREVIEW [ctrl+o] · workspace-00 ────────────────╮
-  │ ┃   [herdr]   workspace-00                                  ┃ │ line one                                         │
-  │     [herdr]   workspace-01                                  ┃ │ line two                                         │
-  │     [herdr]   workspace-02                                  ┃ │                                                  │
-  │     [herdr]   workspace-03                                  ┃ │                                                  │
-  │     [herdr]   workspace-04                                  ┃ │                                                  │
-  │     [herdr]   workspace-05                                  │ │                                                  │
-  │     [herdr]   workspace-06                                  │⋮│                                                  │
-  │     [herdr]   workspace-07                                  │ │                                                  │
-  │     [herdr]   workspace-08                                  │ │                                                  │
-  │     [herdr]   workspace-09                                  │ │                                                  │
-  │     [herdr]   workspace-10                                  │ │                                                  │
-  │     [herdr]   workspace-11                                  │ │                                                  │
+  ╭─ SESSIONS ─────────────────────────────────────────── 1/30 ─╮ ╭─ PREVIEW [ctrl+o] · workspace-00 ────────────────╮
+  │ ┃   [rex]     workspace-00                                  ┃ │ line one                                         │
+  │     [rex]     workspace-01                                  ┃ │ line two                                         │
+  │     [rex]     workspace-02                                  ┃ │                                                  │
+  │     [rex]     workspace-03                                  ┃ │                                                  │
+  │     [rex]     workspace-04                                  ┃ │                                                  │
+  │     [rex]     workspace-05                                  │ │                                                  │
+  │     [rex]     workspace-06                                  │⋮│                                                  │
+  │     [rex]     workspace-07                                  │ │                                                  │
+  │     [rex]     workspace-08                                  │ │                                                  │
+  │     [rex]     workspace-09                                  │ │                                                  │
+  │     [rex]     workspace-10                                  │ │                                                  │
+  │     [rex]     workspace-11                                  │ │                                                  │
   ╰─────────────────────────────────────────────────────────────╯ ╰──────────────────────────────────────────────────╯
-  enter select · ctrl+j/k · ctrl+r workspace · ctrl+x close · esc exit                  LAST WORKSPACE · None recorded
+  enter select · ctrl+j/k · ctrl+r rex order · ctrl+x close · esc exit                    LAST SESSION · None recorded
