@@ -23,7 +23,9 @@ func TestLuaPrintsTheActionForThisBinary(t *testing.T) {
 	require.NoError(t, (&App{Out: &out, Err: io.Discard}).Run(context.Background(), []string{"lua"}))
 	assert.Contains(t, out.String(), "local bin = "+luaString(bin)+"\n")
 	assert.Contains(t, out.String(), `name = "sesh_picker"`)
-	assert.Contains(t, out.String(), `local argv = { bin, "picker", "--wait-on-error" }`)
+	// The layer runs on the session's machine, which may lack rex-sesh.
+	assert.Contains(t, out.String(), `local argv = { "/bin/sh", "-c", start, bin, "picker" }`)
+	assert.Contains(t, out.String(), `Sesh cannot start: $0 is not on this machine.`)
 	assert.NotContains(t, out.String(), "\nrex.bind(", "no key without --key")
 
 	out.Reset()

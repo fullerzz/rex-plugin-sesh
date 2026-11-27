@@ -15,9 +15,14 @@ rex.action{
     assert(ctx.block_id, "Sesh needs a focused terminal")
     local source = assert(rex.session.describe_block{ block_id = ctx.block_id })
     local window = assert(source.block.window_id, "The terminal must be in a tab")
-    -- The picker finds its own session from REX_BLOCK. It stays open after an
-    -- error until Enter, so the message can be read.
-    local argv = { bin, "picker", "--wait-on-error" }
+    -- The layer's terminal runs on the machine that holds the session, which
+    -- may not have rex-sesh, so check before starting it. Rex keeps a failed
+    -- command's output on screen. The picker finds its own session from
+    -- REX_BLOCK.
+    local start = 'if [ -x "$0" ]; then exec "$0" "$@"; fi; '
+      .. 'printf "%s\\n" "Sesh cannot start: $0 is not on this machine." '
+      .. '"Sesh runs on the machine that holds the current session." >&2; exit 127'
+    local argv = { "/bin/sh", "-c", start, bin, "picker" }
     -- From a key or the palette, ctx.client_id is the app to switch. From the
     -- CLI it is the rex command itself, so the picker finds the app instead.
     if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then

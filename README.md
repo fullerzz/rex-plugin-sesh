@@ -53,6 +53,11 @@ use the picker again.
 Press the key, or run **Sesh: Pick Session** from the command palette. The
 picker opens in a floating layer over the current tab.
 
+The picker runs on the machine that holds the current session, and lists the
+sessions on that machine's Rex server. Opened from a session on another host,
+where `rex-sesh` isn't installed, it shows "Sesh cannot start" instead. Close
+that layer with its × button.
+
 To remove it, delete the `require("sesh")` line and `~/.config/rex/sesh.lua`,
 then run `rex config reload`.
 

@@ -237,7 +237,7 @@ Done on branch `rex-action`, then committed to `main` under the standing approva
 
 - `rex-sesh lua [--key KEY]` prints the Rex config module, from the template `internal/app/sesh.lua.tmpl`. It points at the binary that printed it. Paths and keys are quoted for Lua 5.1, which has no `\x` or `\u` escapes.
 - The `sesh_picker` action ("Sesh: Pick Session") opens `rex-sesh picker --wait-on-error` in a focused floating layer over the current tab. It passes `--client ctx.client_id` only for the `key` and `palette` origins. From the CLI, `ctx.client_id` is the `rex` command itself, so the picker finds the app instead. `focus=false` opens it without moving focus.
-- `--wait-on-error` prints the error and waits for Enter, so the floating layer doesn't close before the error can be read. It doesn't wait after Esc or a successful switch.
+- `--wait-on-error` prints the error and waits for Enter. The action no longer passes it: Rex already keeps a failed command's layer open, with an `Exited` badge, so waiting meant dismissing twice. The flag stays for other callers.
 - The README is rewritten for Rex: build, setup in Rex, keys, config lookup order, environment variables, and the CLI.
 - Checked: `rex config check` accepts the generated module, with and without `--key`, and with a path containing a space, quotes and a backslash.
 
@@ -247,3 +247,18 @@ Done on branch `rex-action`, then committed to `main` under the standing approva
 - Pressing the key again while a picker is open probably opens a second picker.
 - The binding points at `bin/rex-sesh`. `just clean` deletes it, so rebuild after cleaning.
 - The fzf picker's failed switch waits through the same path, but no test covers it, because the tests have no fzf.
+
+### Fix: the picker opened from a session on another host (2026-11-27)
+
+The user's first key press was in `sunlit-delta`, a session on the remote host `rex-buntu26`. The action ran from the Mac's config, but Rex created the layer's block on `rex-buntu26`, and there the Mac path to `rex-sesh` doesn't exist (`zsh:1: no such file or directory`). Rex has no option to start a block on another host.
+
+- The action now runs `/bin/sh -c` and checks that `rex-sesh` is executable before starting it. If it isn't, the layer says "Sesh cannot start: <path> is not on this machine. Sesh runs on the machine that holds the current session." This also covers a binary removed by `just clean`.
+- Checked from a scratch copy, unfocused: a bogus path prints the message and exits 127, and the layer stays. The real path opens the picker, and Esc closes it.
+- A command that exits non-zero keeps its layer open with an `Exited` badge, and one that exits 0 closes it. The earlier note that a failing picker's layer vanishes was wrong.
+- Still untested: a key press in a session on this Mac.
+
+### Open question: sessions on other hosts
+
+- This Mac can list another host's sessions: `rex -S rex-buntu26 ls --json` works.
+- `session.select` takes only a session ID, so whether the Mac app can show another host's session through it is unproven. `client.host.switch` takes no arguments.
+- Under every option, opening the picker from a remote session needs `rex-sesh` on that host. A picker there must find the app itself, because the Mac's client ID would not resolve there.
