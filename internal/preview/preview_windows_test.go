@@ -5,6 +5,7 @@ package preview
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -124,9 +125,11 @@ func TestRunShellCancellationKillsDescendantProcess(t *testing.T) {
 func TestRunShellCleansUpBackgroundDescendantAfterShellExit(t *testing.T) {
 	files, start := helper(t)
 	// start /b leaves the helper running after cmd.exe exits; the second
-	// helper keeps cmd.exe alive until the first has started.
-	_, err := runShell(context.Background(), `start "" /b `+start+` >nul 2>&1 & `+start+` -- wait`)
-	require.NoError(t, err)
+	// helper keeps cmd.exe alive until the first has started. The background
+	// helper inherits cmd.exe's output pipes, so runShell stops waiting for
+	// them after WaitDelay, then ends the job, as sh does on Unix.
+	_, err := runShell(context.Background(), `start "" /b `+start+` & `+start+` -- wait`)
+	require.ErrorIs(t, err, exec.ErrWaitDelay)
 	_, err = os.Stat(files.ready)
 	require.NoError(t, err, "descendant process did not start")
 	assertNeverWritten(t, files)
