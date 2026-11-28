@@ -142,6 +142,11 @@ func (s *capturingSource) List(ctx context.Context) (model.Sessions, error) {
 // blockID set, the session holding that block is marked current; only the
 // picker asks, because list caches its output for every session to read.
 func (a *App) rexSource(blockID string) *capturingSource {
+	client, hosts := a.rexClients()
+	return sessionSource(blockID, client, hosts)
+}
+
+func (a *App) rexClients() (sources.SessionLister, sources.RexHosts) { //nolint:ireturn // Sources support injected Rex clients.
 	client, hosts := a.Rex, a.RexHosts
 	if client == nil {
 		client = rex.NewClient()
@@ -149,6 +154,10 @@ func (a *App) rexSource(blockID string) *capturingSource {
 			hosts = cliHosts{}
 		}
 	}
+	return client, hosts
+}
+
+func sessionSource(blockID string, client sources.SessionLister, hosts sources.RexHosts) *capturingSource {
 	src := &capturingSource{listedHosts: make(map[string]bool)}
 	src.Source = sources.RexSessions{Client: client, BlockID: blockID, Hosts: hosts, HostErr: src.hostFailed, HostListed: func(host string) { src.listedHosts[host] = true }}
 	return src
@@ -204,8 +213,36 @@ func (a *App) collect(ctx context.Context, cfg config.Config, target string, loc
 // that holds this terminal's block marked current, and zoxide directories, in
 // source_order. A directory named like an open session is left out.
 func (a *App) collectPicker(ctx context.Context, cfg config.Config) (collection, error) {
-	rexSrc := a.rexSource(os.Getenv("REX_BLOCK"))
-	merged, err := sources.Merge(ctx, []sources.Source{rexSrc, sources.Zoxide{}}, config.MergeOrder(cfg.SortOrder), cfg.Blacklist, false, true)
+	return mergePickerRows(ctx, cfg, a.rexSource(os.Getenv("REX_BLOCK")), sources.Zoxide{})
+}
+
+// Startup reuses the same local snapshot for both frames. A later explicit
+// reload constructs fresh sources and sees changes made since opening.
+func (a *App) startupRows(ctx context.Context, cfg config.Config) func(bool) (collection, error) {
+	client, hosts := a.rexClients()
+	block := os.Getenv("REX_BLOCK")
+	local := startupSessions(sync.OnceValues(func() ([]rex.Session, error) { return client.Sessions(ctx, block) }))
+	dirs := startupDirectories(sync.OnceValues(func() (model.Sessions, error) { return (sources.Zoxide{}).List(ctx) }))
+	return func(includeHosts bool) (collection, error) {
+		remote := hosts
+		if !includeHosts {
+			remote = nil
+		}
+		return mergePickerRows(ctx, cfg, sessionSource(block, local, remote), dirs)
+	}
+}
+
+type startupSessions func() ([]rex.Session, error)
+
+func (load startupSessions) Sessions(context.Context, string) ([]rex.Session, error) { return load() }
+
+type startupDirectories func() (model.Sessions, error)
+
+func (startupDirectories) Name() string                                      { return (sources.Zoxide{}).Name() }
+func (load startupDirectories) List(context.Context) (model.Sessions, error) { return load() }
+
+func mergePickerRows(ctx context.Context, cfg config.Config, rexSrc *capturingSource, dirs sources.Source) (collection, error) {
+	merged, err := sources.Merge(ctx, []sources.Source{rexSrc, dirs}, config.MergeOrder(cfg.SortOrder), cfg.Blacklist, false, true)
 	if err != nil {
 		return collection{}, err
 	}
@@ -352,7 +389,11 @@ func (a *App) runPicker(ctx context.Context, cfgPath string, jsonOut, fzfPicker 
 	if err != nil {
 		return err
 	}
-	col, err := a.collectPicker(ctx, cfg)
+	useFZF := fzfPicker || strings.EqualFold(os.Getenv("REX_SESH_PICKER"), "fzf")
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	collect := a.startupRows(ctx, cfg)
+	col, err := collect(jsonOut || useFZF)
 	if err != nil {
 		return err
 	}
@@ -373,14 +414,20 @@ func (a *App) runPicker(ctx context.Context, cfgPath string, jsonOut, fzfPicker 
 	opts := backend.withHistory(pickerOptionsFromConfig(ctx, a.Out, cfg), col)
 	var selected model.Session
 	var ok bool
-	if fzfPicker || strings.EqualFold(os.Getenv("REX_SESH_PICKER"), "fzf") {
+	if useFZF {
 		selected, ok, err = pickerpkg.RunFZF(ctx, col.Sessions, pickerpkg.Options{DisplayOptions: opts})
 		if err == nil && ok {
 			err = a.switchTo(ctx, target, selected)
 		}
 	} else {
 		// The native picker switches through the backend before it exits.
-		selected, ok, err = pickerpkg.Run(col.Sessions, pickerpkg.Options{DisplayOptions: opts, Backend: backend})
+		selected, ok, err = pickerpkg.Run(col.Sessions, pickerpkg.Options{DisplayOptions: opts, Backend: backend, LoadSessions: func() (pickerpkg.ReloadResult, error) {
+			full, err := collect(true)
+			if err != nil {
+				return pickerpkg.ReloadResult{}, err
+			}
+			return backend.reloadResult(full), nil
+		}})
 	}
 	if err != nil || !ok {
 		return err

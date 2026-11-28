@@ -146,6 +146,9 @@ func (m teaModel) filterBox(width int) bloom.SlotNode {
 	box := bloom.Box(panel(!m.listFocused).Padding(0, 1), bloom.Column(line.ID(inputID))).
 		Edge(bloom.Top, bloom.Start, edgeText(titleStyle.Render("rex / sesh"))).
 		Edge(bloom.Top, bloom.End, count)
+	if m.bodyRows() < panelFrameRows+1 {
+		box = m.withDiscoveryStatus(box, width)
+	}
 	return bloom.Fixed(rows+panelFrameRows, box)
 }
 
@@ -241,10 +244,23 @@ func (m teaModel) listBox(width int) bloom.Child {
 	if n := len(m.list.Filtered); n > 0 {
 		box = box.Edge(bloom.Top, bloom.End, edgeText(countStyle.Render(fmt.Sprintf("%d/%d", m.list.Selected+1, n))))
 	}
+	box = m.withDiscoveryStatus(box, width)
 	if m.shake.Animating() {
 		return bloom.Transition(m.shake.Float(), box, fx.Shake{Amount: 2, Times: 3})
 	}
 	return box
+}
+
+// A short pane has no list border, so the filter carries the same status.
+func (m teaModel) withDiscoveryStatus(box bloom.BoxNode, width int) bloom.BoxNode {
+	if m.loadSessions == nil {
+		return box
+	}
+	status := m.discoverySpinner.View()
+	if lipgloss.Width(status+" Resolving hosts")+6 <= width {
+		status += " Resolving hosts"
+	}
+	return box.Edge(bloom.Bottom, bloom.End, edgeText(countStyle.Render(status)))
 }
 
 // listScrollbar leaves the scrollbar out when the list is one row tall, as

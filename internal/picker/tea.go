@@ -150,7 +150,8 @@ type Switcher interface {
 type Options struct {
 	DisplayOptions
 
-	Backend Backend
+	Backend      Backend
+	LoadSessions func() (ReloadResult, error)
 }
 
 type DisplayOptions struct {
@@ -217,6 +218,7 @@ func Run(items []sessionmodel.Session, opts Options) (sessionmodel.Session, bool
 
 type teaModel struct {
 	ui                *bloom.Root
+	loadSessions      func() (ReloadResult, error)
 	backend           Backend
 	settings          *settings.Model
 	settingsBusy      bool
@@ -226,6 +228,7 @@ type teaModel struct {
 	list              Model
 	input             textinput.Model
 	agentSpinner      spinner.Model
+	discoverySpinner  spinner.Model
 	width             int
 	height            int
 	choice            sessionmodel.Session
@@ -400,9 +403,11 @@ func newTeaModel(items []sessionmodel.Session, opts Options) teaModel {
 		pointer:               &pointerInput{},
 		previewScroll:         &previewViewport{},
 		backend:               opts.Backend,
+		loadSessions:          opts.LoadSessions,
 		list:                  list,
 		input:                 input,
 		agentSpinner:          spinner.New(spinner.WithSpinner(agentStatusSpinner)),
+		discoverySpinner:      spinner.New(spinner.WithSpinner(spinner.Points)),
 		defaultPreviewCommand: opts.DefaultPreviewCommand,
 		hidePath:              opts.HidePath,
 		hidePreview:           opts.HidePreview,
@@ -442,8 +447,19 @@ func reduceMotionRequested() bool {
 	return value == "1" || strings.EqualFold(value, "true")
 }
 
+type sessionsLoadedMsg struct {
+	result ReloadResult
+	err    error
+}
+
 func (m teaModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.input.Focus(), m.ui.Init()}
+	if m.loadSessions != nil {
+		cmds = append(cmds, func() tea.Msg { result, err := m.loadSessions(); return sessionsLoadedMsg{result, err} })
+		if !m.reduceMotion {
+			cmds = append(cmds, m.discoverySpinner.Tick)
+		}
+	}
 	if current, ok := m.list.Current(); ok && m.previewKey != "" {
 		cmds = append(cmds, previewCommand(m.previewContext, m.previewKey, m.previewRequestID, current, m.defaultPreviewCommand, m.panePreview), previewLoadingCommand(m.previewContext, m.previewRequestID))
 	}
@@ -587,6 +603,46 @@ func (m teaModel) syncToast() (teaModel, tea.Cmd) {
 
 //nolint:gocyclo,ireturn // Bubble Tea's central event dispatcher requires this return shape.
 func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if tick, ok := msg.(spinner.TickMsg); ok && tick.ID == m.discoverySpinner.ID() {
+		if m.loadSessions == nil || m.reduceMotion {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.discoverySpinner, cmd = m.discoverySpinner.Update(tick)
+		return m, cmd
+	}
+	if loaded, ok := msg.(sessionsLoadedMsg); ok {
+		if m.loadSessions == nil {
+			return m, nil
+		}
+		m.loadSessions = nil
+		if loaded.err != nil {
+			m.closeError = loaded.err.Error()
+			return m, nil
+		}
+		current, selected := m.list.Current()
+		m.list.All = loaded.result.Sessions
+		m.sessionOrder = rexSessionRefs(m.list.All)
+		m.recentSessionIDs = loaded.result.RecentSessionIDs
+		m.lastSessionID = loaded.result.LastSessionID
+		m.lastSessionUnknown = loaded.result.LastSessionUnknown
+		m.rexSessions = rexSessionsByID(loaded.result.RexSessions)
+		m.resortWorkspaces()
+		m.list.Filter(m.list.Query)
+		if selected {
+			for i, item := range m.list.Filtered {
+				if sameDiscoveryRow(item, current) {
+					m.list.Selected = i
+					break
+				}
+			}
+		}
+		if m.settings != nil || m.settingsBusy {
+			return m, nil
+		}
+		return m.refreshPreview()
+	}
+
 	if next, cmd, handled := m.updateSettings(msg); handled {
 		return next, cmd
 	}
@@ -878,11 +934,21 @@ func (m teaModel) busy() bool {
 	return m.closingSessionID != "" || m.switchingKey != ""
 }
 
+func sameDiscoveryRow(a, b sessionmodel.Session) bool {
+	if b.SessionID != "" {
+		return a.Ref() == b.Ref()
+	}
+	return sessionmodel.Key(a) == sessionmodel.Key(b)
+}
+
 func (m teaModel) chooseCurrent() (teaModel, tea.Cmd) {
 	if m.busy() {
 		return m.refuse()
 	}
 	choice, ok := m.list.Current()
+	if !ok && m.loadSessions != nil {
+		return m, nil
+	}
 	if switcher, canSwitch := m.backend.(Switcher); ok && canSwitch {
 		// Quit only once the host has switched; a failure keeps the picker.
 		m.switchingKey = sessionmodel.Key(choice)
