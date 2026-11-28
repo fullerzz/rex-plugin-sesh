@@ -43,29 +43,75 @@ build:
     mkdir -p bin
     go build -ldflags "-X github.com/fullerzz/rex-plugin-sesh/internal/app.Version=$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || printf 'dev')" -o bin/rex-sesh ./cmd/rex-sesh
 
-# Install rex-sesh at ~/.local/bin/rex-sesh on each SSH host, built for its OS and CPU
+# Install rex-sesh on each SSH destination (such as user@hostname, not a Rex
+# host label), built for its OS and CPU: at ~/.local/bin/rex-sesh on Linux and
+# macOS, or at %LOCALAPPDATA%\Programs\rex-sesh\rex-sesh.exe on Windows
 [positional-arguments]
 install-host +hosts:
     #!/usr/bin/env bash
     set -euo pipefail
     version=$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || printf 'dev')
     ssh_opts=(-o BatchMode=yes -o ConnectTimeout=8)
+    # Windows OpenSSH may start cmd.exe or PowerShell; an encoded command
+    # reaches PowerShell unchanged through either.
+    run_ps() {
+        local encoded
+        encoded=$(printf '%s' "$2" | iconv -f UTF-8 -t UTF-16LE | base64 | tr -d '\n')
+        ssh "${ssh_opts[@]}" "$1" "powershell -NoLogo -NoProfile -NonInteractive -EncodedCommand $encoded" | tr -d '\r'
+    }
+    ssh_err=$(mktemp)
+    trap 'rm -f "$ssh_err"' EXIT
     mkdir -p bin
     for host in "$@"; do
-        read -r os arch < <(ssh "${ssh_opts[@]}" "$host" 'uname -sm')
+        status=0
+        probe=$(ssh "${ssh_opts[@]}" "$host" 'uname -sm' 2>"$ssh_err") || status=$?
+        if [ "$status" -eq 255 ]; then
+            cat "$ssh_err" >&2
+            echo "$host: ssh could not connect. install-host takes an SSH destination, such as user@hostname, not a Rex host label." >&2
+            exit 1
+        elif [ "$status" -eq 0 ]; then
+            read -r os arch <<<"$probe"
+        else
+            os=Windows
+            arch=$(run_ps "$host" '[Console]::Out.Write($env:PROCESSOR_ARCHITECTURE)') || {
+                echo "$host: neither uname -sm nor PowerShell reported its OS" >&2
+                exit 1
+            }
+        fi
         case "$os" in
             Linux) goos=linux ;;
             Darwin) goos=darwin ;;
+            Windows | MINGW* | MSYS* | CYGWIN*) goos=windows ;;
             *) echo "$host: unsupported OS $os" >&2; exit 1 ;;
         esac
         case "$arch" in
-            x86_64 | amd64) goarch=amd64 ;;
-            aarch64 | arm64) goarch=arm64 ;;
+            x86_64 | amd64 | AMD64) goarch=amd64 ;;
+            aarch64 | arm64 | ARM64) goarch=arm64 ;;
             *) echo "$host: unsupported CPU $arch" >&2; exit 1 ;;
         esac
         out="bin/rex-sesh-$goos-$goarch"
+        if [ "$goos" = windows ]; then
+            out="$out.exe"
+        fi
         echo "{{ BOLD + BLUE + BG_BLACK }} Building rex-sesh $version for $host ($goos/$goarch)...{{ NORMAL }}"
         CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -ldflags "-X github.com/fullerzz/rex-plugin-sesh/internal/app.Version=$version" -o "$out" ./cmd/rex-sesh
+        if [ "$goos" = windows ]; then
+            dir=$(run_ps "$host" '$d = Join-Path $env:LOCALAPPDATA "Programs\rex-sesh"; New-Item -ItemType Directory -Force -Path $d | Out-Null; [Console]::Out.Write($d)')
+            scp -q "${ssh_opts[@]}" "$out" "$host:${dir//\\//}/rex-sesh.exe.new"
+            # Windows can't replace a running .exe, but it can rename one, so
+            # a picker that is running keeps its binary.
+            run_ps "$host" '$ErrorActionPreference = "Stop"
+    $d = Join-Path $env:LOCALAPPDATA "Programs\rex-sesh"
+    $exe = Join-Path $d "rex-sesh.exe"
+    $old = Join-Path $d "rex-sesh.exe.old"
+    Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $exe) { Move-Item -LiteralPath $exe -Destination $old -Force }
+    Move-Item -LiteralPath (Join-Path $d "rex-sesh.exe.new") -Destination $exe
+    & $exe --version
+    exit $LASTEXITCODE'
+            echo "Installed rex-sesh $version on $host at $dir\\rex-sesh.exe"
+            continue
+        fi
         # Upload beside the target, then rename it into place, so a picker
         # that is running keeps its binary.
         ssh "${ssh_opts[@]}" "$host" 'mkdir -p "$HOME/.local/bin"'

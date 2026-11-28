@@ -11,6 +11,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.10
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/stretchr/testify v1.12.1
+	golang.org/x/sys v0.50.0
 )
 
 require (
@@ -30,7 +31,6 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/perf v0.0.0-20261117185222-4febdb082b2c // indirect
 	golang.org/x/sync v0.25.0 // indirect
-	golang.org/x/sys v0.50.0 // indirect
 )
 
 tool golang.org/x/perf/cmd/benchstat

@@ -48,7 +48,7 @@ Run `just` to list every recipe. These are the ones for day-to-day work:
 | `just clean` | Deletes `bin/rex-sesh` and the host builds in `bin/`. |
 | `just run` | Runs `./cmd/rex-sesh` with `go run`. |
 | `just settings-demo [CONFIG]` | Opens the settings editor on a disposable copy of `testdata/rex-sesh.toml`, or on the config path you pass. |
-| `just install-host HOST...` | Builds rex-sesh for each SSH host and installs it there. |
+| `just install-host DESTINATION...` | Builds rex-sesh for each SSH destination's OS and CPU and installs it there. |
 | `just lint` | Runs `golangci-lint`. |
 | `just fmt` / `just fmt-check` | Formats the code, or checks the formatting without changing files. |
 | `just test` | Runs the race-enabled tests through `gotestsum`. |
@@ -87,14 +87,17 @@ The picker in a host's session runs on that host, with the host's own copy of
 just install-host devbox lab
 ```
 
-Each argument is an SSH host. SSH must log in without a password prompt. For
-each host, `install-host` reads its OS and CPU with `uname -sm`, builds
-`bin/rex-sesh-GOOS-GOARCH` for it, such as `bin/rex-sesh-linux-amd64`, and
-installs it at `~/.local/bin/rex-sesh`. It supports Linux and macOS on `amd64`
-and `arm64`. It uploads the binary beside the old copy and then renames it into
-place, so a picker that is running keeps its binary. It prints the installed
-version. A host's copy stays at that version until you run `install-host`
-again.
+Each argument is an SSH destination, such as `user@hostname`, passed to `ssh`
+and `scp` as given. A Rex host label works only if SSH also resolves it. SSH
+must log in without a password prompt. For each host, `install-host` reads its
+OS and CPU with `uname -sm`, or on Windows with PowerShell. It builds
+`bin/rex-sesh-GOOS-GOARCH` for it, such as `bin/rex-sesh-linux-amd64` or
+`bin/rex-sesh-windows-amd64.exe`. It installs it at `~/.local/bin/rex-sesh`,
+or at `%LOCALAPPDATA%\Programs\rex-sesh\rex-sesh.exe` on Windows. It supports
+Linux, macOS and Windows on `amd64` and `arm64`. It uploads the binary beside
+the old copy and then renames it into place, so a picker that is running keeps
+its binary. It prints the installed version. A host's copy stays at that
+version until you run `install-host` again.
 
 ### Build versions
 
@@ -199,7 +202,18 @@ sessions, cache, session history, or zoxide history:
 - `internal/rex` tests give the client a fake runner instead of a `rex`
   process.
 - The start script tests run `pickerStart` with `/bin/sh` against stub
-  binaries.
+  binaries. The Lua tests run the generated module's actions in `lua`, when it
+  is installed, against a stub Rex API.
+
+Windows code sits in `_windows.go` files beside its Unix twin: the settings
+and history locks in `internal/filelock`, replacing state and config files in
+`internal/atomicfile`, the preview runner in `internal/preview`, and the picker
+launcher in `internal/launcher`. Their Windows tests are in `_windows_test.go`
+files, which run only on Windows. The Test workflow's `windows-latest` job runs
+those packages' tests, plus the `TestSettingsLock` and `TestWindows` tests in
+`internal/config`. It builds `rex-sesh.exe` with `CGO_ENABLED=0` and
+smoke-tests it. Lint checks the
+Windows build with `GOOS=windows just lint`.
 
 One picker test runs your installed `fzf`, and it skips when `fzf` is missing.
 
@@ -285,8 +299,10 @@ It needs `GITHUB_TOKEN` for the changelog's GitHub metadata. Preview the
 changelog first with `just preview-changelog vMAJOR.MINOR.PATCH`.
 
 The tag push starts the Release workflow. It tests the tag, builds
-`rex-sesh_VERSION_OS_ARCH.tar.gz` for Linux and macOS on amd64 and arm64, with
-`checksums.txt`, writes the release notes, and publishes the GitHub release.
+`rex-sesh_VERSION_OS_ARCH.tar.gz` for Linux and macOS on amd64 and arm64, and
+`rex-sesh_VERSION_windows_amd64.zip` with `bin/rex-sesh.exe`, with
+`checksums.txt` for all of them. It writes the release notes and publishes the
+GitHub release.
 
 The changelog starts at the Rex fork. `.github/scripts/changelog-range.sh`
 holds the last Herdr commit and gives every git-cliff call its commit range, so

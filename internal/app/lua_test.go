@@ -3,13 +3,16 @@ package app
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/fullerzz/rex-plugin-sesh/internal/launcher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +31,7 @@ func TestLuaPrintsTheActionForThisBinary(t *testing.T) {
 	assert.Contains(t, out.String(), `local argv = { "/bin/sh", "-c", start, bin, "picker" }`)
 	assert.Contains(t, out.String(), "local start = "+luaString(pickerStart)+"\n")
 	// Only a key or the palette names the app that opened the picker.
-	assert.Contains(t, out.String(), `if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
+	assert.Contains(t, out.String(), `if opener and ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
     argv[#argv + 1] = "--opener"
     argv[#argv + 1] = ctx.client_id`)
 	assert.NotContains(t, out.String(), `"--client"`)
@@ -133,7 +136,7 @@ func TestPickerStartSaysHowToInstallWhenMissing(t *testing.T) {
 	require.ErrorAs(t, err, &exitErr)
 	assert.Equal(t, 127, exitErr.ExitCode())
 	assert.Contains(t, out, "Sesh cannot start: rex-sesh is not installed on this machine.\n")
-	assert.Contains(t, out, "just install-host HOST")
+	assert.Contains(t, out, "just install-host SSH_DESTINATION")
 }
 
 // Execute the generated action when a Lua interpreter is available. Only the
@@ -167,6 +170,101 @@ for i=2,#argv do print(argv[i]) end
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%s", out)
 	assert.Equal(t, []string{history, "last", "--opener", "client:config", "--opener-history-stdin", "--opener-session", "session:9", "--opener-host", "devbox"}, strings.Split(strings.TrimSuffix(string(out), "\n"), "\n"))
+}
+
+// runPickerAction runs the generated module's sesh_picker action in a Lua
+// interpreter with a stub Rex API, as a key press from client:mac in the
+// session ctx.server names, and returns the layer's command and shell. A
+// host's server.version reports platforms[host]; a host missing from it
+// fails. edit changes the module before it runs.
+func runPickerAction(t *testing.T, server string, platforms map[string]string, edit func(string) string) (argv []string, shell string) {
+	t.Helper()
+	lua, err := exec.LookPath("lua")
+	if err != nil {
+		t.Skip("lua interpreter unavailable")
+	}
+	var module bytes.Buffer
+	require.NoError(t, (&App{Out: &module, Err: io.Discard}).Run(t.Context(), []string{"lua"}))
+	src := module.String()
+	if edit != nil {
+		src = edit(src)
+	}
+	var hosts strings.Builder
+	for host, platform := range platforms {
+		fmt.Fprintf(&hosts, "  [%s] = %s,\n", luaString(host), luaString(platform))
+	}
+	server = luaString(server)
+	if server == `""` {
+		server = "nil"
+	}
+	script := `local actions = {}
+local platforms = {
+` + hosts.String() + `}
+local layer
+rex = {
+  action = function(action) actions[action.name] = action end,
+  bind = function() end,
+  server = function(host)
+    return { call = function(method)
+      assert(method == "server.version")
+      return { platform = assert(platforms[host], "unreachable") }
+    end }
+  end,
+  session = {
+    describe_block = function() return { block = { window_id = "window:1" } } end,
+    new_layer = function(l) layer = l; return true end,
+  },
+  layout = { block = function(b) return b end },
+}
+` + src + `
+actions.sesh_picker.run({block_id="block:1", origin="key", client_id="client:mac", server=` + server + `}, {})
+io.write(layer.layout.options.shell or "", "\0")
+for _, a in ipairs(layer.layout.options.command) do io.write(a, "\0") end
+`
+	//nolint:gosec // execute only the generated module with a stub Rex API.
+	cmd := exec.CommandContext(t.Context(), lua, "-")
+	cmd.Stdin = strings.NewReader(script)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	fields := strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00")
+	return fields[1:], fields[0]
+}
+
+func TestLuaPickerUsesShOnLinuxAndMacHosts(t *testing.T) {
+	bin, err := os.Executable()
+	require.NoError(t, err)
+	if resolved, err := filepath.EvalSymlinks(bin); err == nil {
+		bin = resolved
+	}
+	sh := []string{"/bin/sh", "-c", pickerStart, bin, "picker", "--opener", "client:mac"}
+	for _, server := range []string{"", "devbox", "offline"} {
+		argv, shell := runPickerAction(t, server, map[string]string{"devbox": "linux_amd64"}, func(src string) string {
+			return strings.Replace(src, `local config_os = "`+runtime.GOOS+`"`, `local config_os = "linux"`, 1)
+		})
+		assert.Equal(t, sh, argv, "server %q", server)
+		assert.Empty(t, shell, "server %q", server)
+	}
+}
+
+// A Windows host has no /bin/sh. Its own copy runs without this machine's
+// client ID.
+func TestLuaPickerRunsAWindowsHostsOwnCopy(t *testing.T) {
+	argv, shell := runPickerAction(t, "winbox", map[string]string{"winbox": "windows_amd64"}, nil)
+	assert.Equal(t, launcher.WindowsPickerArgv(), argv)
+	assert.Equal(t, "none", shell)
+}
+
+// On Windows, the module runs its own binary directly, with the opener.
+func TestLuaPickerRunsThisWindowsMachinesBinary(t *testing.T) {
+	bin := `C:\Users\Jo Doe\AppData\Local\Programs\rex-sesh\rex-sesh.exe`
+	argv, shell := runPickerAction(t, "", nil, func(src string) string {
+		src = strings.Replace(src, `local config_os = "`+runtime.GOOS+`"`, `local config_os = "windows"`, 1)
+		i := strings.Index(src, "local bin = ")
+		j := i + strings.Index(src[i:], "\n")
+		return src[:i] + "local bin = " + luaString(bin) + src[j:]
+	})
+	assert.Equal(t, []string{bin, "picker", "--opener", "client:mac"}, argv)
+	assert.Equal(t, "none", shell)
 }
 
 func TestLuaEmbedsAbsoluteRexPath(t *testing.T) {

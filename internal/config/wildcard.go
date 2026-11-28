@@ -25,24 +25,8 @@ func FindWildcard(cfg Config, path, home string) (WildcardConfig, bool) {
 	return WildcardConfig{}, false
 }
 
+// SubstitutePath replaces each {} in command with path, quoted for the shell
+// that runs preview commands: sh on Unix, cmd.exe on Windows.
 func SubstitutePath(command, path string) string {
 	return strings.ReplaceAll(command, "{}", shellQuote(path))
-}
-func shellQuote(s string) string {
-	if s == "" {
-		return "''"
-	}
-	if strings.IndexFunc(s, func(r rune) bool {
-		return !isShellSafeRune(r)
-	}) < 0 {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
-}
-
-func isShellSafeRune(r rune) bool {
-	return r >= 'A' && r <= 'Z' ||
-		r >= 'a' && r <= 'z' ||
-		r >= '0' && r <= '9' ||
-		strings.ContainsRune("/_:.,-+", r)
 }

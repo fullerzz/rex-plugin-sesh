@@ -50,27 +50,35 @@ new session stays open in Rex.
 
 Rex runs the picker on the machine that holds the current session. In a
 session on another host, the picker needs a copy of rex-sesh on that host, at
-`~/.local/bin/rex-sesh` or on its `PATH`. Without one, the layer shows:
+`~/.local/bin/rex-sesh` or on its `PATH`. A Windows host needs
+`%LOCALAPPDATA%\Programs\rex-sesh\rex-sesh.exe`, or `rex-sesh.exe` on its
+`PATH`. Without one, the layer shows:
 
 ```text
 Sesh cannot start: rex-sesh is not installed on this machine.
 On this machine, rebuild it with: just build
-On another host, install it from your main machine with: just install-host HOST
+On another host, install it from your main machine with: just install-host SSH_DESTINATION
 ```
 
 Rex keeps the layer open with the message and marks its command as exited.
 Close the layer with its × button.
 
-Install a copy from your checkout. `HOST` is the host's SSH name, which may
-differ from the name `rex hosts` shows:
+Install a copy from your checkout. The argument is an SSH destination, such
+as `user@hostname` or a name from `~/.ssh/config`, not the label `rex hosts`
+shows. `ssh` must be able to connect to it:
 
 ```bash
 just install-host devbox
 ```
 
-The recipe builds rex-sesh for the host's OS and CPU, installs it at
-`~/.local/bin/rex-sesh`, and prints the installed version. Run it again after
-you update rex-sesh, or the host keeps its older copy.
+The recipe builds rex-sesh for the host's OS and CPU, installs it, and prints
+the installed version. Run it again after you update rex-sesh, or the host
+keeps its older copy. To install a release on Windows without a checkout, see
+[Install on a Windows host](rex-app.md#install-on-a-windows-host).
+
+On a Windows host, a module printed by an older rex-sesh fails before it can
+show this message, because it runs `/bin/sh`. Print the module again with
+`rex-sesh lua` and run `rex config reload`.
 
 ## The picker doesn't open after `just clean`
 

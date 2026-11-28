@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/fullerzz/rex-plugin-sesh/internal/atomicfile"
 )
 
 func writeJSONFile(path string, v any) error {
@@ -35,5 +37,5 @@ func writeFile(path string, contents []byte) error {
 	if err := os.Chmod(tmpName, 0600); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, path)
+	return atomicfile.Replace(tmpName, path)
 }

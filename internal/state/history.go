@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
+
+	"github.com/fullerzz/rex-plugin-sesh/internal/filelock"
 )
 
 // Visit names a Rex session that an app switched to: the host whose server
@@ -132,18 +133,17 @@ func lockFile(dir, name string, timeout time.Duration) (unlock func() error, err
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
-	//nolint:gosec // dir is the trusted rex-sesh state directory supplied to this API.
-	lock, err := os.OpenFile(filepath.Join(dir, name), os.O_CREATE|os.O_RDWR, 0600)
+	lock, err := filelock.Open(filepath.Join(dir, name))
 	if err != nil {
 		return nil, err
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		err := filelock.TryLock(lock)
 		if err == nil {
 			break
 		}
-		if !errors.Is(err, syscall.EWOULDBLOCK) {
+		if !errors.Is(err, filelock.ErrWouldBlock) {
 			return nil, errors.Join(err, lock.Close())
 		}
 		if time.Now().Add(historyLockInterval).After(deadline) {
@@ -152,7 +152,7 @@ func lockFile(dir, name string, timeout time.Duration) (unlock func() error, err
 		time.Sleep(historyLockInterval)
 	}
 	return func() error {
-		return errors.Join(syscall.Flock(int(lock.Fd()), syscall.LOCK_UN), lock.Close())
+		return errors.Join(filelock.Unlock(lock), lock.Close())
 	}, nil
 }
 

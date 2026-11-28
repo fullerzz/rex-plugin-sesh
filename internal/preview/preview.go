@@ -6,11 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/fullerzz/rex-plugin-sesh/internal/config"
@@ -76,42 +74,15 @@ func remoteSummary(s model.Session) string {
 	return fmt.Sprintf("workspace: %s\nmachine: %s\nid: %s\npath: %s\n", s.Name, s.Machine, s.SessionID, s.Path)
 }
 
+// runShell runs a user's preview command through this platform's shell and
+// returns its output. It ends every process the command started, both when
+// the command finishes and when ctx ends or the 5 second limit passes.
 func runShell(ctx context.Context, command string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	sentinel := exec.Command("sh", "-c", `kill -s STOP "$$"`)
-	sentinel.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := sentinel.Start(); err != nil {
-		return "", err
-	}
-	processGroupID := sentinel.Process.Pid
-	killProcessGroup := func() error {
-		err := syscall.Kill(-processGroupID, syscall.SIGKILL)
-		if errors.Is(err, syscall.ESRCH) {
-			return os.ErrProcessDone
-		}
-		return err
-	}
-	//nolint:gosec // preview commands are user-configured shell snippets by design.
-	c := exec.CommandContext(ctx, "sh", "-lc", command)
-	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pgid: processGroupID}
-	c.Cancel = killProcessGroup
-	c.WaitDelay = 250 * time.Millisecond
 	var out, errb bytes.Buffer
-	c.Stdout = &out
-	c.Stderr = &errb
-	err := c.Run()
-	killErr := killProcessGroup()
-	if killErr != nil {
-		_ = sentinel.Process.Kill()
-	}
-	_ = sentinel.Wait()
-	output := out.String() + errb.String()
-	if err != nil {
-		return output, err
-	}
-	if killErr != nil {
-		return output, killErr
+	if err := runProcessTree(ctx, command, &out, &errb); err != nil {
+		return out.String() + errb.String(), err
 	}
 	return out.String(), nil
 }

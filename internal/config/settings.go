@@ -9,8 +9,9 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"syscall"
 
+	"github.com/fullerzz/rex-plugin-sesh/internal/atomicfile"
+	"github.com/fullerzz/rex-plugin-sesh/internal/filelock"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/pelletier/go-toml/v2/unstable"
 )
@@ -285,16 +286,16 @@ func (d *SettingsDocument) persistModeChecked(data []byte, modeOverride os.FileM
 		return err
 	}
 	// Keep the lock inode: deleting lock files lets concurrent writers lock different inodes.
-	//nolint:gosec // User-selected directory; refuse symlink lock files.
-	lock, err := os.OpenFile(d.Path+".settings.lock", os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	// Refuse a lock file that redirects elsewhere.
+	lock, err := filelock.OpenNoFollow(d.Path + ".settings.lock")
 	if err != nil {
 		return err
 	}
 	defer func() { _ = lock.Close() }()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := filelock.TryLock(lock); err != nil {
 		return fmt.Errorf("config is busy; retry saving: %w", err)
 	}
-	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
+	defer func() { _ = filelock.Unlock(lock) }()
 	if err := d.unchanged(); err != nil {
 		return err
 	}
@@ -343,7 +344,7 @@ func (d *SettingsDocument) persistModeChecked(data []byte, modeOverride os.FileM
 		if err := os.Link(tmp.Name(), d.Path); err != nil {
 			return err
 		}
-	} else if err := os.Rename(tmp.Name(), d.Path); err != nil {
+	} else if err := atomicfile.Replace(tmp.Name(), d.Path); err != nil {
 		return err
 	}
 	d.Missing = false

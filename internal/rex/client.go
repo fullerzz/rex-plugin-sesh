@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -97,7 +98,11 @@ func Bin() string {
 		return bin
 	}
 	if dir := os.Getenv("REX_BIN_DIR"); dir != "" {
-		bin := filepath.Join(dir, "rex")
+		name := "rex"
+		if runtime.GOOS == "windows" {
+			name = "rex.exe"
+		}
+		bin := filepath.Join(dir, name)
 		//nolint:gosec // REX_BIN_DIR is set by the Rex server that runs this terminal.
 		if st, err := os.Stat(bin); err == nil && !st.IsDir() {
 			return bin
