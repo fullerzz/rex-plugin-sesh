@@ -42,7 +42,9 @@ func TestWindowsSettingsSaveKeepsAnEditMadeDuringTheReplaceRetry(t *testing.T) {
 }
 
 // A forced migration that waits on a held destination must notice an import
-// edited meanwhile, and leave the existing native config alone.
+// edited meanwhile, and leave the existing native config alone. The edit
+// lands after the source check before the first rename, which the held
+// destination then blocks, so only a retry's recheck can catch it.
 func TestWindowsForcedMigrationRechecksSourcesDuringTheReplaceRetry(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "sesh.toml")
@@ -57,18 +59,22 @@ func TestWindowsForcedMigrationRechecksSourcesDuringTheReplaceRetry(t *testing.T
 	require.NoError(t, err)
 	holder, err := os.OpenFile(target, os.O_RDWR, 0) //nolint:gosec // Test-owned file.
 	require.NoError(t, err)
-	saved := make(chan error, 1)
-	go func() { saved <- migration.Save() }()
-	time.Sleep(200 * time.Millisecond)
-	require.NoError(t, os.WriteFile(source, []byte("dir_length=4\n"), 0o600))
-	require.NoError(t, holder.Close())
+	defer func() { _ = holder.Close() }()
 
-	select {
-	case err = <-saved:
-	case <-time.After(5 * time.Second):
-		require.FailNow(t, "Save did not return")
+	// Checks run after taking the lock, then before each rename attempt.
+	checks := 0
+	check := func() error {
+		err := migration.sourcesUnchanged()
+		checks++
+		if checks == 2 {
+			require.NoError(t, os.WriteFile(source, []byte("dir_length=4\n"), 0o600))
+		}
+		return err
 	}
+	err = migration.target.persistModeChecked(migration.data, 0o600, check)
 	require.ErrorIs(t, err, ErrSettingsConflict)
+	assert.Equal(t, 3, checks, "the conflict comes from the first retry")
+	require.NoError(t, holder.Close())
 	data, err := os.ReadFile(target) //nolint:gosec // Test-owned file.
 	require.NoError(t, err)
 	assert.Equal(t, existing, data)
