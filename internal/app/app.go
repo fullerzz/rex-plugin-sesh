@@ -583,6 +583,11 @@ func resolveHostClient(ctx context.Context, local, remote appLister, host string
 	case 1:
 		return apps[0], nil
 	}
+	return matchHostApp(ctx, local, apps, host, target)
+}
+
+// matchHostApp requires a unique device label on both servers.
+func matchHostApp(ctx context.Context, local appLister, apps []rex.AppClient, host string, target switchTarget) (rex.AppClient, error) {
 	localID, err := resolveClient(ctx, local, target)
 	if err != nil {
 		return rex.AppClient{}, err

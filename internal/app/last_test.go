@@ -133,3 +133,39 @@ func TestLastRefusesAnotherAppOnThePreviousHost(t *testing.T) {
 	assert.Empty(t, selectCalls(t, log))
 	assert.Equal(t, []state.Visit{localVisit("session:1"), remote}, historyOf(t, key))
 }
+
+func TestLastUsesHistoryCapturedBeforeEitherChildStarts(t *testing.T) {
+	useHistoryDir(t)
+	log := filepath.Join(t.TempDir(), "rex.log")
+	t.Setenv("FAKE_REX_LOG", log)
+	t.Setenv("FAKE_REX_SESSIONS", `{"sessions":[{"session_id":"a"},{"session_id":"b"},{"session_id":"c"}]}`)
+	useFakeRex(t, fakeRexLabelled)
+	key := "id:client:mac"
+	recordSwitches(t, key, [2]state.Visit{localVisit("a"), localVisit("c")})
+	snapshot := func() []byte {
+		t.Helper()
+		data, err := os.ReadFile(state.HistoryPath(stateDir()))
+		require.NoError(t, err)
+		return data
+	}
+	last := func(shown string, captured []byte) error {
+		t.Helper()
+		a := &App{In: bytes.NewReader(captured)}
+		return a.Run(t.Context(), []string{"last", "--opener", "client:mac", "--opener-session", shown, "--opener-history-stdin"})
+	}
+	captured := snapshot()
+	require.NoError(t, last("c", captured))
+	require.NoError(t, last("c", captured))
+	// A native Rex switch to B leaves history untouched. Its current context
+	// must still win, even when another app has recorded a switch since.
+	manual := snapshot()
+	recordSwitches(t, "id:other", [2]state.Visit{localVisit("b"), localVisit("a")})
+	require.NoError(t, last("b", manual))
+	require.ErrorContains(t, last("b", []byte("{}invalid")), "read captured session history")
+	assert.Equal(t, []string{
+		"--autostart=false -C client:mac do session.select session_id=a",
+		"--autostart=false -C client:mac do session.select session_id=c",
+		"--autostart=false -C client:mac do session.select session_id=c",
+	}, selectCalls(t, log))
+	assert.Equal(t, []state.Visit{localVisit("c"), localVisit("b"), localVisit("a")}, historyOf(t, key))
+}

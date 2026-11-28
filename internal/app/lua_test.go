@@ -38,7 +38,7 @@ func TestLuaPrintsTheActionForThisBinary(t *testing.T) {
 	require.NoError(t, (&App{Out: &out, Err: io.Discard}).Run(context.Background(), []string{"lua", "--key", "ctrl+a>s", "--last-key", "ctrl+a>shift+l"}))
 	assert.Contains(t, out.String(), "\nrex.bind(\"ctrl+a>s\", \"sesh_picker\")\n")
 	assert.Contains(t, out.String(), `rex.bind("ctrl+a>shift+l", "sesh_last")`)
-	assert.Contains(t, out.String(), `local result, err = rex.exec(argv, { env = env })`)
+	assert.Contains(t, out.String(), `local result, err = rex.exec(argv, { env = env, stdin = snapshot })`)
 }
 
 func TestLuaStringEscapesForLua51(t *testing.T) {
@@ -139,6 +139,12 @@ func TestPickerStartSaysHowToInstallWhenMissing(t *testing.T) {
 // Execute the generated action when a Lua interpreter is available. Only the
 // config-server process runner is provided, so launching a remote layer fails.
 func TestLuaLastUsesConfigServerFromRemoteSession(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", dir)
+	t.Setenv("REX_SESH_STATE_DIR", filepath.Join(dir, "custom"))
+	require.NoError(t, os.MkdirAll(stateDir(), 0o700))
+	const history = `{"apps":{"id:client:config":{"revision":9007199254740993}}}`
+	require.NoError(t, os.WriteFile(filepath.Join(stateDir(), "session-history.json"), []byte(history), 0o600))
 	lua, err := exec.LookPath("lua")
 	if err != nil {
 		t.Skip("lua interpreter unavailable")
@@ -149,7 +155,7 @@ func TestLuaLastUsesConfigServerFromRemoteSession(t *testing.T) {
 local argv
 rex = {
   action = function(action) actions[action.name] = action end,
-  exec = function(args) argv = args; return { ok = true } end,
+  exec = function(args, opts) argv = args; print(opts.stdin); return { ok = true } end,
 }
 ` + module.String() + `
 actions.sesh_last.run({origin="key", client_id="client:config", session_id="session:9", server="devbox"})
@@ -160,5 +166,17 @@ for i=2,#argv do print(argv[i]) end
 	cmd.Stdin = strings.NewReader(script)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%s", out)
-	assert.Equal(t, "last\n--opener\nclient:config\n--opener-session\nsession:9\n--opener-host\ndevbox\n", string(out))
+	assert.Equal(t, []string{history, "last", "--opener", "client:config", "--opener-history-stdin", "--opener-session", "session:9", "--opener-host", "devbox"}, strings.Split(strings.TrimSuffix(string(out), "\n"), "\n"))
+}
+
+func TestLuaEmbedsAbsoluteRexPath(t *testing.T) {
+	dir := t.TempDir()
+	writeEcho(t, filepath.Join(dir, "rex"))
+	t.Chdir(dir)
+	t.Setenv("REX_SESH_REX_BIN", "./rex")
+	var out bytes.Buffer
+	require.NoError(t, (&App{Out: &out, Err: io.Discard}).Run(t.Context(), []string{"lua"}))
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "env.REX_SESH_REX_BIN = "+luaString(filepath.Join(cwd, "rex")))
 }

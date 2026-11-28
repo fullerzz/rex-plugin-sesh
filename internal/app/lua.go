@@ -55,7 +55,15 @@ func (a *App) lua(_ context.Context, args []string) error {
 	if resolved, err := filepath.EvalSymlinks(bin); err == nil {
 		bin = resolved
 	}
-	rexBin, _ := exec.LookPath(rex.Bin())
+	rexBin, lookupErr := exec.LookPath(rex.Bin())
+	if lookupErr == nil {
+		rexBin, err = filepath.Abs(rexBin)
+		if err != nil {
+			return fmt.Errorf("resolve Rex executable path: %w", err)
+		}
+	} else {
+		rexBin = ""
+	}
 	return seshLua.Execute(a.Out, struct{ Bin, RexBin, Key, LastKey, Start string }{
 		Bin: bin, RexBin: rexBin, Key: *key, LastKey: *lastKey, Start: pickerStart,
 	})
