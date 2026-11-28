@@ -72,6 +72,16 @@ if ! grep -Fq 'name="rex-sesh_${version}_${goos}_${goarch}"' "$workflow" ||
   echo 'release archives must be named rex-sesh_VERSION_GOOS_GOARCH and hold bin/rex-sesh' >&2
   exit 1
 fi
+if ! grep -Fxq '            windows/amd64' "$workflow"; then
+  echo 'release workflow must build windows/amd64' >&2
+  exit 1
+fi
+# shellcheck disable=SC2016 # Match the workflow's literal shell variables.
+if ! grep -Fq '(cd dist/work && zip -qr "../release/${name}.zip" "$name")' "$workflow" ||
+  ! grep -Fq 'sha256sum -- *.tar.gz *.zip > checksums.txt' "$workflow"; then
+  echo 'the Windows release must be a zip listed in checksums.txt' >&2
+  exit 1
+fi
 # shellcheck disable=SC2016 # Match the workflow's literal shell variables.
 if ! grep -Fq 'cp README.md LICENSE "dist/work/${name}/"' "$workflow"; then
   echo 'release archives must include README.md and LICENSE' >&2

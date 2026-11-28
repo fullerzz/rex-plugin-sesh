@@ -145,7 +145,8 @@ session shows the host's name first, such as `[devbox] api`.
 
 Rex runs the layer on the machine that holds the current session. When you open
 the picker in a host's session, the layer runs on that host, where the path in
-`bin` usually doesn't exist. The start script handles this:
+`bin` usually doesn't exist. On a Linux or macOS host, the start script handles
+this:
 
 ```sh
 if [ -x "$0" ]; then exec "$0" "$@"; fi
@@ -154,7 +155,7 @@ for c in "$HOME/.local/bin/rex-sesh" "$(command -v rex-sesh)"; do
 done
 printf '%s\n' "Sesh cannot start: rex-sesh is not installed on this machine." \
   "On this machine, rebuild it with: just build" \
-  "On another host, install it from your main machine with: just install-host HOST" >&2
+  "On another host, install it from your main machine with: just install-host SSH_DESTINATION" >&2
 exit 127
 ```
 
@@ -168,10 +169,29 @@ exit 127
     ```text
     Sesh cannot start: rex-sesh is not installed on this machine.
     On this machine, rebuild it with: just build
-    On another host, install it from your main machine with: just install-host HOST
+    On another host, install it from your main machine with: just install-host SSH_DESTINATION
     ```
 
     The layer stays open. Close it with its × button.
+
+A Windows host has no `/bin/sh`. Before it opens the layer, the module asks the
+host's Rex server for its platform (`server.version`), once per host label
+until the config reloads. For a Windows host, the layer runs PowerShell, with
+no shell profile, instead of the start script. The script is base64 encoded, so
+Windows command-line quoting can't change it. It runs the host's own copy:
+
+1. `%LOCALAPPDATA%\Programs\rex-sesh\rex-sesh.exe`, or `rex-sesh.exe` on
+   `PATH`, with `picker` and no `--opener`.
+2. If neither exists, the layer says that rex-sesh is not installed, gives the
+   install path, and the command exits 127.
+
+If the host doesn't answer the platform request, the layer uses the start
+script. When the config itself runs on Windows, the module runs `bin` directly,
+with `--opener`, for sessions on that machine.
+
+Rebuild the module with `rex-sesh lua` and run `rex config reload` after you
+update rex-sesh. A module printed by an older rex-sesh always uses the start
+script, which can't run on Windows.
 
 **Sesh: Last Session** uses a different execution path. The config server runs
 the command directly with `rex.exec`. The key and command palette supply
@@ -197,25 +217,88 @@ The picker on a host works from that host's point of view:
 Run `just install-host` in your checkout, with one or more SSH destinations:
 
 ```bash
-just install-host devbox lab
+just install-host devbox jo@winbox
 ```
+
+The arguments are SSH destinations, such as `user@hostname` or names from
+`~/.ssh/config`. They are not the host labels that `rex hosts` shows: the
+recipe passes each one to `ssh` and `scp` as given. When `ssh` can't connect,
+the recipe stops and says so. The recipe runs `ssh` in batch mode, so it needs
+a login that doesn't prompt for a password.
 
 For each destination, the recipe:
 
-1. Reads the host's OS and CPU with `ssh HOST uname -sm`. It supports Linux
-   and macOS, on amd64 or arm64.
+1. Reads the host's OS and CPU with `ssh DESTINATION uname -sm`. If that fails
+   but SSH connects, it treats the host as Windows and reads
+   `PROCESSOR_ARCHITECTURE` with PowerShell. It supports Linux, macOS and
+   Windows, on amd64 or arm64.
 2. Builds rex-sesh for that OS and CPU on this machine. The host doesn't need
    Go.
-3. Uploads it beside `~/.local/bin/rex-sesh` on the host, then renames it into
-   place, so a picker that is running keeps its binary.
+3. Uploads it beside the installed copy, then renames it into place, so a
+   picker that is running keeps its binary. That is `~/.local/bin/rex-sesh` on
+   Linux and macOS, and `%LOCALAPPDATA%\Programs\rex-sesh\rex-sesh.exe` on
+   Windows. Windows can't overwrite a running `.exe`, so the old copy becomes
+   `rex-sesh.exe.old` beside it, and the next install removes it.
 4. Prints the installed version.
-
-The arguments are SSH destinations, such as names from `~/.ssh/config`. They
-can differ from the host labels that `rex hosts` shows. The recipe runs `ssh`
-in batch mode, so it needs a login that doesn't prompt for a password.
 
 A host's copy doesn't change when you rebuild here. Run `just install-host`
 again after you update rex-sesh.
+
+### Install on a Windows host
+
+The Windows AMD64 release is a `.zip` that holds `bin/rex-sesh.exe`, and
+`checksums.txt` lists it. To install a release from a Mac onto a Windows host
+that runs OpenSSH Server, set `dest` to the host's SSH destination, not its Rex
+host label:
+
+```bash
+tag=vX.Y.Z
+version=${tag#v}
+dest=user@hostname
+gh release download "$tag" --repo fullerzz/rex-plugin-sesh \
+  --pattern "rex-sesh_${version}_windows_amd64.zip" --pattern checksums.txt
+shasum -a 256 --check --ignore-missing checksums.txt
+unzip -o "rex-sesh_${version}_windows_amd64.zip"
+ssh "$dest" 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA\Programs\rex-sesh | Out-Null"' &&
+scp "rex-sesh_${version}_windows_amd64/bin/rex-sesh.exe" "$dest:AppData/Local/Programs/rex-sesh/rex-sesh.exe.new" &&
+ssh "$dest" 'powershell -NoProfile -Command "Remove-Item -Force -ErrorAction SilentlyContinue $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe.old; if (Test-Path $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe) { Move-Item -Force $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe.old }; Move-Item $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe.new $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe; & $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe --version"'
+```
+
+The copy uploads beside the installed one as `rex-sesh.exe.new`. The `&&`
+chain stops if a step fails, so only after the upload succeeds does the
+installed copy move aside to `rex-sesh.exe.old`,
+since Windows can rename a running `.exe` but not overwrite it. An interrupted
+upload leaves the installed copy working.
+
+These commands make some assumptions:
+
+- The SSH server starts `cmd.exe`, which is Windows OpenSSH's default. If its
+  default shell is PowerShell, or the account's path has a space, use
+  `just install-host`, which works with either shell.
+- `%LOCALAPPDATA%` is the default `AppData\Local` in the account's profile,
+  because `scp` resolves a relative path from the profile directory.
+
+Then, on the Mac, rebuild the config module so it knows how to start the picker
+on Windows, and reload Rex:
+
+```bash
+~/.local/bin/rex-sesh lua --key 'ctrl+a>s' > ~/.config/rex/sesh.lua
+rex config reload
+```
+
+On the Windows host, check that the copy lists the host's sessions:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe" list --json
+```
+
+On Windows, rex-sesh keeps its state in `%USERPROFILE%\.local\state\rex-sesh`,
+or in `XDG_STATE_HOME` or `REX_SESH_STATE_DIR` when they are set. It runs
+preview commands with `cmd.exe /d /s /c`. In a preview command, `{}` becomes
+`"%REX_SESH_PREVIEW_PATH%"`, and rex-sesh sets that variable to the path, so
+`cmd.exe` keeps `%` and `&` in the path literal. The
+native picker works on Windows. `--fzf` does not, because its preview script
+needs `sh`.
 
 ## Session history
 

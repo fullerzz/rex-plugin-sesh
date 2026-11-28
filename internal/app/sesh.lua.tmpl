@@ -4,6 +4,9 @@
 
 local bin = {{ lua .Bin }}
 
+-- The OS that printed this module, and so the OS bin runs on.
+local config_os = {{ lua .OS }}
+
 -- Read before rex.exec launches the child. Two shortcuts may already have
 -- captured the same visible session when the first child records its switch.
 local function captured_history()
@@ -11,7 +14,9 @@ local function captured_history()
   if not dir or dir == "" then
     local base = os.getenv("XDG_STATE_HOME")
     if not base or base == "" then
-      local home = os.getenv("HOME")
+      -- Match Go's os.UserHomeDir: USERPROFILE on Windows, even when HOME
+      -- is set, and HOME elsewhere.
+      local home = os.getenv(config_os == "windows" and "USERPROFILE" or "HOME")
       if not home or home == "" then return "{}" end
       base = home .. "/.local/state"
     end
@@ -20,13 +25,33 @@ local function captured_history()
   local file, err, code = io.open(dir .. "/session-history.json", "r")
   if not file then
     -- Rex's Lua returns a generic status for Go file errors. Native Lua
-    -- returns ENOENT directly on macOS and Linux.
-    if code == 2 or err:match(": no such file or directory$") then return "{}" end
+    -- returns ENOENT directly on macOS and Linux. Windows reports a missing
+    -- file or directory as "cannot find the file/path specified".
+    if code == 2 or err:match(": no such file or directory$")
+      or err:match("cannot find the %a+ specified%.?$") then return "{}" end
     error(err, 0)
   end
   local data, read_err = file:read("*a")
   file:close()
   return assert(data, read_err)
+end
+
+-- Each host's OS, by label, from its server. Failures are not cached.
+local host_os = {}
+
+-- The OS of the machine holding ctx's session, such as "linux" or
+-- "windows", or nil when its host doesn't answer.
+local function session_os(ctx)
+  local host = ctx.server
+  if not host or host == "" then return config_os end
+  if not host_os[host] then
+    local ok, version = pcall(function() return rex.server(host).call("server.version") end)
+    local platform = ok and type(version) == "table" and version.platform
+    -- platform is OS_ARCH, such as windows_amd64. Read the leading letters,
+    -- so another separator still gives the OS.
+    host_os[host] = type(platform) == "string" and platform:match("^(%a+)") or nil
+  end
+  return host_os[host]
 end
 
 local function picker(ctx, focus)
@@ -39,10 +64,24 @@ local function picker(ctx, focus)
   -- picker finds its own session from REX_BLOCK.
   local start = {{ lua .Start }}
   local argv = { "/bin/sh", "-c", start, bin, "picker" }
+  local shell
+  local opener = true
+  -- Windows has no /bin/sh, so run bin itself on this machine. On another
+  -- host, an encoded PowerShell script runs the host's own rex-sesh.exe from
+  -- %LOCALAPPDATA%\Programs\rex-sesh or PATH, without the client ID, which
+  -- belongs to this machine's server.
+  if session_os(ctx) == "windows" then
+    shell = "none"
+    if ctx.server and ctx.server ~= "" then
+      argv, opener = {{ luaList .WindowsStart }}, false
+    else
+      argv = { bin, "picker" }
+    end
+  end
   -- From a key or the palette, ctx.client_id is the app that opened the
   -- picker: the app to switch, which shows the picker's session. From the
   -- CLI it is the rex command itself, so the picker finds the app instead.
-  if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
+  if opener and ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
     argv[#argv + 1] = "--opener"
     argv[#argv + 1] = ctx.client_id
   end
@@ -52,7 +91,7 @@ local function picker(ctx, focus)
     focus = focus,
     layout = rex.layout.block{
       flavor = "com.superlogical.terminal.shell",
-      options = { command = argv },
+      options = { command = argv, shell = shell },
     },
   })
 end

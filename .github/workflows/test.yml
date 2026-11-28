@@ -43,3 +43,48 @@ jobs:
             --config testdata/rex-sesh.toml \
             >/tmp/rex-sesh-list.json
           test -s /tmp/rex-sesh-list.json
+
+  windows:
+    name: Windows build and test
+    runs-on: windows-latest
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      # The packages with Windows code: locks, file replacement, the preview
+      # runner, and the picker launcher. Their Windows tests are in
+      # _windows_test.go files, so a filter can't skip them.
+      - name: Run Windows tests
+        run: go test -count=1 ./internal/filelock/ ./internal/atomicfile/ ./internal/state/ ./internal/preview/ ./internal/launcher/
+
+      # Most config tests expect Unix paths and sh quoting, so run its
+      # settings lock and Windows tests by name, and fail if none match.
+      - name: Run Windows config tests
+        run: |
+          $pattern = '^(TestSettingsLock|TestWindows)'
+          $tests = go test -list $pattern ./internal/config/ | Select-String '^Test'
+          if ($LASTEXITCODE -ne 0 -or $tests.Count -lt 4) { throw "expected at least 4 config tests for $pattern, found $($tests.Count)" }
+          go test -count=1 -run $pattern ./internal/config/
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build
+        run: go build -o bin/rex-sesh.exe ./cmd/rex-sesh
+
+      - name: CLI smoke test
+        run: |
+          .\bin\rex-sesh.exe --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\bin\rex-sesh.exe list --json --config testdata/rex-sesh.toml > "$env:RUNNER_TEMP\rex-sesh-list.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((Get-Item "$env:RUNNER_TEMP\rex-sesh-list.json").Length -eq 0) { throw 'list printed nothing' }

@@ -9,30 +9,33 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"text/template"
 
+	"github.com/fullerzz/rex-plugin-sesh/internal/launcher"
 	"github.com/fullerzz/rex-plugin-sesh/internal/rex"
 )
 
 //go:embed sesh.lua.tmpl
 var seshLuaTemplate string
 
-var seshLua = template.Must(template.New("sesh.lua").Funcs(template.FuncMap{"lua": luaString}).Parse(seshLuaTemplate))
+var seshLua = template.Must(template.New("sesh.lua").Funcs(template.FuncMap{"lua": luaString, "luaList": luaList}).Parse(seshLuaTemplate))
 
-// pickerStart is the shell script the picker's layer runs, as
-// sh -c pickerStart BIN picker [--opener ID]. The layer runs on the machine
-// that holds the session, which for a session on another host is not this
-// one. There BIN is missing, so the script runs that host's own copy, which
-// "just install-host" puts in ~/.local/bin, and leaves out --opener, because
-// the app has another client ID on that host's server.
+// pickerStart is the shell script the picker's layer runs on a Linux or
+// macOS machine, as sh -c pickerStart BIN picker [--opener ID]. The layer
+// runs on the machine that holds the session, which for a session on another
+// host is not this one. There BIN is missing, so the script runs that host's
+// own copy, which "just install-host" puts in ~/.local/bin, and leaves out
+// --opener, because the app has another client ID on that host's server. A
+// Windows host runs launcher.WindowsPicker instead.
 const pickerStart = `if [ -x "$0" ]; then exec "$0" "$@"; fi
 for c in "$HOME/.local/bin/rex-sesh" "$(command -v rex-sesh)"; do
   if [ -n "$c" ] && [ -x "$c" ]; then exec "$c" "$1"; fi
 done
 printf '%s\n' "Sesh cannot start: rex-sesh is not installed on this machine." \
   "On this machine, rebuild it with: just build" \
-  "On another host, install it from your main machine with: just install-host HOST" >&2
+  "On another host, install it from your main machine with: just install-host SSH_DESTINATION" >&2
 exit 127`
 
 // lua prints the Rex config module that adds the picker action, pointing at
@@ -64,8 +67,12 @@ func (a *App) lua(_ context.Context, args []string) error {
 	} else {
 		rexBin = ""
 	}
-	return seshLua.Execute(a.Out, struct{ Bin, RexBin, Key, LastKey, Start string }{
+	return seshLua.Execute(a.Out, struct {
+		Bin, RexBin, Key, LastKey, Start, OS string
+		WindowsStart                         []string
+	}{
 		Bin: bin, RexBin: rexBin, Key: *key, LastKey: *lastKey, Start: pickerStart,
+		OS: runtime.GOOS, WindowsStart: launcher.WindowsPickerArgv(),
 	})
 }
 
@@ -89,4 +96,13 @@ func luaString(s string) string {
 	}
 	b.WriteByte('"')
 	return b.String()
+}
+
+// luaList writes items as a Lua table of strings.
+func luaList(items []string) string {
+	quoted := make([]string, len(items))
+	for i, item := range items {
+		quoted[i] = luaString(item)
+	}
+	return "{ " + strings.Join(quoted, ", ") + " }"
 }

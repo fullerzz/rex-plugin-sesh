@@ -61,14 +61,19 @@ marked with the host's name, such as `[devbox] api`. A host that doesn't answer
 within 3 seconds is left out.
 
 Opened from a session on another host, the picker runs that host's own copy of
-`rex-sesh`, from `~/.local/bin/rex-sesh` or `PATH`. It lists that host's
-sessions, its hosts' sessions and its zoxide directories. Install or update the
-copy from this machine over SSH, building for each host's OS and CPU. The
-recipe takes SSH destinations, which may differ from the hosts' Rex labels:
+`rex-sesh`, from `~/.local/bin/rex-sesh` or `PATH`, or on Windows from
+`%LOCALAPPDATA%\Programs\rex-sesh\rex-sesh.exe` or `PATH`. It lists that
+host's sessions, its hosts' sessions and its zoxide directories. Install or
+update the copy from this machine over SSH, building for each host's OS and
+CPU (Linux, macOS or Windows). The recipe takes SSH destinations such as
+`user@hostname`, not the hosts' Rex labels:
 
 ```bash
-just install-host devbox lab
+just install-host devbox user@winbox
 ```
+
+Releases include a Windows AMD64 `.zip`. See
+[Install on a Windows host](docs/rex-app.md#install-on-a-windows-host).
 
 Without a copy, the layer shows "Sesh cannot start". Close it with its ×
 button.

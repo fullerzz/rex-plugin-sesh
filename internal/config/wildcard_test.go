@@ -20,8 +20,8 @@ func TestFindWildcardFirstWins(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "first", w.StartupCommand)
 }
-func TestSubstitutePathShellQuotesSpaces(t *testing.T) {
-	got := SubstitutePath("cd {} && pwd", "/tmp/has space")
-	want := "cd '/tmp/has space' && pwd"
-	assert.Equal(t, want, got)
+func TestPreviewCommandShellQuotesSpaces(t *testing.T) {
+	got, env := PreviewCommand("cd {} && pwd", "/tmp/has space")
+	assert.Equal(t, "cd '/tmp/has space' && pwd", got)
+	assert.Empty(t, env)
 }

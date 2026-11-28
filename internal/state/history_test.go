@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
+	"github.com/fullerzz/rex-plugin-sesh/internal/filelock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -190,12 +190,11 @@ func TestLockSwitchesWaitsOnlyForTheSameApp(t *testing.T) {
 
 func TestRecordSwitchTimesOutWaitingForTheLock(t *testing.T) {
 	dir := t.TempDir()
-	//nolint:gosec // the lock path is under t.TempDir().
-	lock, err := os.OpenFile(filepath.Join(dir, "history.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	lock, err := filelock.Open(filepath.Join(dir, "history.lock"))
 	require.NoError(t, err)
 	defer func() { _ = lock.Close() }()
-	require.NoError(t, syscall.Flock(int(lock.Fd()), syscall.LOCK_EX))
-	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
+	require.NoError(t, filelock.TryLock(lock))
+	defer func() { _ = filelock.Unlock(lock) }()
 
 	done := make(chan error, 1)
 	go func() { done <- recordNow(dir, "label:mac", local("A"), local("B")) }()
