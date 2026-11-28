@@ -4,6 +4,59 @@
 
 local bin = {{ lua .Bin }}
 
+-- Read before rex.exec launches the child. Two shortcuts may already have
+-- captured the same visible session when the first child records its switch.
+local function captured_history()
+  local dir = os.getenv("REX_SESH_STATE_DIR")
+  if not dir or dir == "" then
+    local base = os.getenv("XDG_STATE_HOME")
+    if not base or base == "" then
+      local home = os.getenv("HOME")
+      if not home or home == "" then return "{}" end
+      base = home .. "/.local/state"
+    end
+    dir = base .. "/rex-sesh"
+  end
+  local file, err, code = io.open(dir .. "/session-history.json", "r")
+  if not file then
+    -- Rex's Lua returns a generic status for Go file errors. Native Lua
+    -- returns ENOENT directly on macOS and Linux.
+    if code == 2 or err:match(": no such file or directory$") then return "{}" end
+    error(err, 0)
+  end
+  local data, read_err = file:read("*a")
+  file:close()
+  return assert(data, read_err)
+end
+
+local function picker(ctx, focus)
+  assert(ctx.block_id, "Sesh needs a focused terminal")
+  local source = assert(rex.session.describe_block{ block_id = ctx.block_id })
+  local window = assert(source.block.window_id, "The terminal must be in a tab")
+  -- The layer's terminal runs on the machine that holds the session. On
+  -- another host, start runs that host's own rex-sesh from ~/.local/bin, or
+  -- says it is missing; Rex keeps a failed command's output on screen. The
+  -- picker finds its own session from REX_BLOCK.
+  local start = {{ lua .Start }}
+  local argv = { "/bin/sh", "-c", start, bin, "picker" }
+  -- From a key or the palette, ctx.client_id is the app that opened the
+  -- picker: the app to switch, which shows the picker's session. From the
+  -- CLI it is the rex command itself, so the picker finds the app instead.
+  if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
+    argv[#argv + 1] = "--opener"
+    argv[#argv + 1] = ctx.client_id
+  end
+  return assert(rex.session.new_layer{
+    window_id = window,
+    bounds = { 0.1, 0.1, 0.8, 0.8 },
+    focus = focus,
+    layout = rex.layout.block{
+      flavor = "com.superlogical.terminal.shell",
+      options = { command = argv },
+    },
+  })
+end
+
 rex.action{
   name = "sesh_picker",
   title = "Sesh: Pick Session",
@@ -12,33 +65,57 @@ rex.action{
   -- focus = false opens the picker without moving focus to it.
   args = { focus = "boolean?" },
   run = function(ctx, args)
-    assert(ctx.block_id, "Sesh needs a focused terminal")
-    local source = assert(rex.session.describe_block{ block_id = ctx.block_id })
-    local window = assert(source.block.window_id, "The terminal must be in a tab")
-    -- The layer's terminal runs on the machine that holds the session. On
-    -- another host, start runs that host's own rex-sesh from ~/.local/bin, or
-    -- says it is missing; Rex keeps a failed command's output on screen. The
-    -- picker finds its own session from REX_BLOCK.
-    local start = {{ lua .Start }}
-    local argv = { "/bin/sh", "-c", start, bin, "picker" }
-    -- From a key or the palette, ctx.client_id is the app that opened the
-    -- picker: the app to switch, which shows the picker's session. From the
-    -- CLI it is the rex command itself, so the picker finds the app instead.
+    return picker(ctx, not (args and args.focus == false))
+  end,
+}
+rex.action{
+  name = "sesh_last",
+  title = "Sesh: Last Session",
+  description = "Switch to the previous open session in this app's rex-sesh history.",
+  keywords = "sesh previous last session workspace",
+  run = function(ctx)
+    -- rex.exec runs beside this config. A layer runs on the server holding
+    -- the visible session, which can have unrelated history for this app.
+    local argv = { bin, "last" }
+    local snapshot
     if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
       argv[#argv + 1] = "--opener"
       argv[#argv + 1] = ctx.client_id
+      if ctx.session_id then
+        snapshot = captured_history()
+        argv[#argv + 1] = "--opener-history-stdin"
+        argv[#argv + 1] = "--opener-session"
+        argv[#argv + 1] = ctx.session_id
+        if ctx.server then
+          argv[#argv + 1] = "--opener-host"
+          argv[#argv + 1] = ctx.server
+        end
+      end
+    elseif ctx.session_id then
+      argv[#argv + 1] = "--context-session"
+      argv[#argv + 1] = ctx.session_id
+      if ctx.server then
+        argv[#argv + 1] = "--context-host"
+        argv[#argv + 1] = ctx.server
+      end
     end
-    return assert(rex.session.new_layer{
-      window_id = window,
-      bounds = { 0.1, 0.1, 0.8, 0.8 },
-      focus = not (args and args.focus == false),
-      layout = rex.layout.block{
-        flavor = "com.superlogical.terminal.shell",
-        options = { command = argv },
-      },
-    })
+    -- A config action can run outside a terminal's PATH. Use the Rex CLI
+    -- found when this module was generated unless the server sets its own.
+    local env = {}
+    {{- if .RexBin }}
+    if not os.getenv("REX_BIN_DIR") and not os.getenv("REX_SESH_REX_BIN") then
+      env.REX_SESH_REX_BIN = {{ lua .RexBin }}
+    end
+    {{- end }}
+    local result, err = rex.exec(argv, { env = env, stdin = snapshot })
+    if not result then error(err, 0) end
+    if not result.ok then error(result.stderr, 0) end
+    return true
   end,
 }
+{{ if .LastKey }}
+rex.bind({{ lua .LastKey }}, "sesh_last")
+{{- end }}
 {{ if .Key }}
 rex.bind({{ lua .Key }}, "sesh_picker")
 {{- else }}

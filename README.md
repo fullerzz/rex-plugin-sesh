@@ -52,7 +52,8 @@ use the picker again.
 4. Turn on Remote Control in the Rex app's settings.
 
 Press the key, or run **Sesh: Pick Session** from the command palette. The
-picker opens in a floating layer over the current tab.
+picker opens in a floating layer over the current tab. **Sesh: Last Session**
+returns directly to the previous open session. Add `--last-key 'ctrl+a>shift+l'` to the generator command to bind it to Ctrl+A, then Shift+L.
 
 The picker runs on the machine that holds the current session. It lists that
 machine's Rex sessions, then the sessions on each host that `rex hosts` lists,

@@ -63,6 +63,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.config(ctx, args[1:])
 	case "picker":
 		return a.picker(ctx, args[1:])
+	case "last":
+		return a.last(ctx, args[1:])
 	case "lua":
 		return a.lua(ctx, args[1:])
 	default:
@@ -70,7 +72,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 }
 func (a *App) usage() error {
-	_, err := fmt.Fprintln(a.Out, "rex-sesh list|preview|root|picker|lua|config|--version")
+	_, err := fmt.Fprintln(a.Out, "rex-sesh list|preview|root|picker|last|lua|config|--version")
 	return err
 }
 
@@ -109,6 +111,7 @@ type capturingSource struct {
 	// current is the session on this machine that holds the picker, found
 	// before the merge's blacklist can hide it.
 	current string
+	rows    []model.Session
 }
 
 func (s *capturingSource) hostFailed(host string, err error) {
@@ -125,7 +128,8 @@ func (s *capturingSource) List(ctx context.Context) (model.Sessions, error) {
 		s.err = err
 		return model.NewSessions(), nil
 	}
-	for _, sess := range ss.Ordered() {
+	s.rows = ss.Ordered()
+	for _, sess := range s.rows {
 		if sess.Attached && sess.Machine == "" {
 			s.current = sess.SessionID
 			break
@@ -164,6 +168,8 @@ func (cliHosts) Host(label string) sources.SessionLister { //nolint:ireturn // R
 // CurrentSessionID is the session that holds the picker,
 // even when the blacklist leaves it out of Sessions.
 type collection struct {
+	// Open Rex sessions before the picker applies its row filters.
+	RexSessions      []model.Session
 	Sessions         []model.Session
 	RexErr           error
 	HostWarnings     []string
@@ -191,7 +197,7 @@ func (a *App) collect(ctx context.Context, cfg config.Config, target string, loc
 		return collection{}, err
 	}
 	sources.ApplyConfig(&merged, cfg, "")
-	return collection{Sessions: merged.Ordered(), RexErr: rexSrc.err, HostWarnings: rexSrc.hostWarnings, ListedHosts: rexSrc.listedHosts, CurrentSessionID: rexSrc.current}, nil
+	return collection{RexSessions: rexSrc.rows, Sessions: merged.Ordered(), RexErr: rexSrc.err, HostWarnings: rexSrc.hostWarnings, ListedHosts: rexSrc.listedHosts, CurrentSessionID: rexSrc.current}, nil
 }
 
 // collectPicker lists the picker's rows: the open Rex sessions, with the one
@@ -204,7 +210,7 @@ func (a *App) collectPicker(ctx context.Context, cfg config.Config) (collection,
 		return collection{}, err
 	}
 	sources.ApplyConfig(&merged, cfg, "")
-	return collection{Sessions: merged.Ordered(), RexErr: rexSrc.err, HostWarnings: rexSrc.hostWarnings, ListedHosts: rexSrc.listedHosts, CurrentSessionID: rexSrc.current}, nil
+	return collection{RexSessions: rexSrc.rows, Sessions: merged.Ordered(), RexErr: rexSrc.err, HostWarnings: rexSrc.hostWarnings, ListedHosts: rexSrc.listedHosts, CurrentSessionID: rexSrc.current}, nil
 }
 
 // rexWarning words an unavailable Rex server for the user, or "" when Rex
@@ -280,9 +286,9 @@ func pickerOptionsFromConfig(ctx context.Context, output io.Writer, cfg config.C
 		CyclePreviewModeKey:            &cfg.Keys.CyclePreviewMode,
 		DefaultPreviewCommand:          cfg.DefaultSessionConfig.PreviewCommand,
 		WorkspaceSort:                  cfg.TUI.DefaultSort,
-		// The footer's last session and closing sessions are not supported yet.
-		HideLastWorkspace: true,
-		DisableClose:      true,
+		HideLastWorkspace:              !cfg.TUI.ShowLastWorkspace,
+		LastWorkspaceLabel:             &cfg.History.LastWorkspaceLabel,
+		DisableClose:                   true,
 	}
 }
 
@@ -577,6 +583,11 @@ func resolveHostClient(ctx context.Context, local, remote appLister, host string
 	case 1:
 		return apps[0], nil
 	}
+	return matchHostApp(ctx, local, apps, host, target)
+}
+
+// matchHostApp requires a unique device label on both servers.
+func matchHostApp(ctx context.Context, local appLister, apps []rex.AppClient, host string, target switchTarget) (rex.AppClient, error) {
 	localID, err := resolveClient(ctx, local, target)
 	if err != nil {
 		return rex.AppClient{}, err

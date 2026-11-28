@@ -1,12 +1,13 @@
 # Rex setup
 
-rex-sesh adds one action to Rex, `sesh_picker`. The command palette lists it as
-**Sesh: Pick Session**. It opens the picker in a floating layer over the current
-tab. When you choose a row, the picker asks the Rex app to switch to that
-session, and the layer closes.
+The Lua module registers two actions in the Rex command palette.
+**Sesh: Pick Session** opens the picker in a floating layer.
+**Sesh: Last Session** returns directly to the previous open session
+recorded for your app. To bind both, pass their keys when generating the module:
 
-You add the action to Rex with a Lua module, `sesh.lua`, that rex-sesh prints
-for you.
+```bash
+./bin/rex-sesh lua --key 'ctrl+a>s' --last-key 'ctrl+a>shift+l' > ~/.config/rex/sesh.lua
+```
 
 ## Install
 
@@ -48,35 +49,9 @@ key bound to `sesh_picker`.
 
 ## What the module does
 
-`rex-sesh lua` prints the module for the binary that runs it. This is the
-output of `rex-sesh lua --key 'ctrl+a>s'`, shortened:
-
-```lua
-local bin = "/path/to/rex-plugin-sesh/bin/rex-sesh"
-
-rex.action{
-  name = "sesh_picker",
-  title = "Sesh: Pick Session",
-  -- ...
-  args = { focus = "boolean?" },
-  run = function(ctx, args)
-    -- ...
-    local argv = { "/bin/sh", "-c", start, bin, "picker" }
-    if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
-      argv[#argv + 1] = "--opener"
-      argv[#argv + 1] = ctx.client_id
-    end
-    return assert(rex.session.new_layer{
-      window_id = window,
-      bounds = { 0.1, 0.1, 0.8, 0.8 },
-      focus = not (args and args.focus == false),
-      -- ...
-    })
-  end,
-}
-
-rex.bind("ctrl+a>s", "sesh_picker")
-```
+`rex-sesh lua` prints the module for the binary that runs it. The picker runs in a layer on the machine holding the session.
+**Sesh: Last Session** runs `last` on the server that loaded the module,
+including while the app displays a remote session.
 
 - `bin` is the full path of the rex-sesh binary that printed the module. A
   symlink is resolved to the file it points to.
@@ -198,6 +173,15 @@ exit 127
 
     The layer stays open. Close it with its × button.
 
+**Sesh: Last Session** uses a different execution path. The config server runs
+the command directly with `rex.exec`. The key and command palette supply
+the active session, its host, and the app's client ID on the config server.
+For example, after the local picker takes you from local A to devbox/C, the
+shortcut in C reads the original history and returns to A. It also works if
+devbox has its own rex-sesh history or has no rex-sesh installed. If the
+config server uses a nondefault local socket, set `REX_SERVER` in its
+process environment to that socket.
+
 The picker on a host works from that host's point of view:
 
 - It lists the host's own sessions, the sessions on the hosts that its own
@@ -236,8 +220,7 @@ again after you update rex-sesh.
 ## Session history
 
 Rex doesn't report which session an app shows, or the order in which the app
-showed sessions. So rex-sesh keeps its own history of the switches the picker
-makes. The picker's `recent` order comes from it.
+showed sessions. So rex-sesh keeps its own history of accepted picker and last-session switches. The picker's `recent` order comes from it.
 
 The picker records a switch when the Rex app accepts it, in the native picker
 and with `--fzf`. It records the session it switched to. For a directory row,
@@ -278,8 +261,10 @@ can't name the previous session.
 The history is `session-history.json` in the state directory: `REX_SESH_STATE_DIR`,
 or `$XDG_STATE_HOME/rex-sesh` (by default `~/.local/state/rex-sesh`). Each
 machine that runs the picker keeps its own. A picker opened in a host's
-session runs on that host, so it reads and writes that host's history. It
-runs without `--opener`, so it records only where the app went. See
+session runs on that host, so it reads and writes that host's history.
+When you use the shortcut, it reads the config server's history. To
+use visits recorded by a remote picker, run `rex-sesh last` in a terminal
+on that host. See
 [Open the picker on a host](#open-the-picker-on-a-host).
 
 ### What the history can't see
@@ -289,7 +274,7 @@ change the session, so the history leaves these out:
 
 | Change | Recorded |
 | --- | --- |
-| Choose a session in the picker | Yes |
+| Choose a session in the picker or invoke **Sesh: Last Session** | Yes |
 | Rex's session commands, such as **Change Session…**, **Next Session**, **Previous Session** and **Go to Session** | No |
 | **Navigate Back** and **Navigate Forward** | No |
 | Change tabs or panes in a session | No. This doesn't change the session. |

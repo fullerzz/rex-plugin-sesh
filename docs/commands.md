@@ -34,9 +34,10 @@ its flags.
 | --- | --- |
 | `--version` or `version` | Print the build version. |
 | `picker [--config PATH] [--client ID] [--opener ID] [--fzf] [--json] [--wait-on-error]` | Open the picker and switch the Rex app to the chosen row, or print the rows as JSON. |
+| `last [--client ID] [--opener ID]` | Switch directly to the app’s previous open session. |
 | `list [--config PATH] [--json] [--blacklisted] [--hide-duplicates=false]` | List Rex sessions, hosts' sessions, config entries and zoxide directories. |
 | `preview [--config PATH] TARGET` | Print the command preview for a session, config entry or directory. |
-| `lua [--key KEY]` | Print the Rex config module that adds the picker action. |
+| `lua [--key KEY] [--last-key KEY]` | Print the Rex config module that registers the picker and last-session actions. |
 | `root` | Print the root of the Git repository in the current directory. |
 | `config path` | Print the config file in use, or where a new one would go. |
 | `config init` | Create a starter config if none exists. |
@@ -99,6 +100,23 @@ The native picker stays open when a switch fails, and shows the error. The
 fzf picker switches after fzf exits, so a failed switch ends the command with
 the error.
 
+## `last`
+
+Run `rex-sesh last` with the picker closed. It looks up the most recent other
+open session in the target app’s history and switches to it. If you picked
+C from A, calling `last` twice returns you to A and then C, even if B sits
+between them in Rex’s session list. The native picker shows the same target
+in its footer.
+
+A key or palette action supplies `--opener` to identify the current session.
+Without that information the command uses the newest recorded visit as current.
+You can target an app explicitly with `--client ID`. Closed sessions are
+skipped. An unreachable previous host, empty history, or a refused switch
+produces an error and preserves the visit order. A remote target requires
+an identifiable connection for the same app on that host. Host discovery and
+concurrent session listings share a three-second timeout, so a slow host can
+delay even a local switch.
+
 ## `list`
 
 `rex-sesh list` prints every source, in `source_order`: Rex sessions on this
@@ -155,14 +173,14 @@ this command.
 ## `lua`
 
 `rex-sesh lua` prints the Rex config module, `sesh.lua`, that adds the
-`sesh_picker` action. It points at the binary that prints it.
+`sesh_picker` and `sesh_last` actions. It points at the binary that prints it.
 
 ```bash
 ./bin/rex-sesh lua --key 'ctrl+a>s' > ~/.config/rex/sesh.lua
 ```
 
 `--key KEY` adds `rex.bind(KEY, "sesh_picker")`. Without it, the module ends
-with a commented example. `lua` takes no other arguments. See
+with a commented picker example. `--last-key KEY` independently binds `sesh_last`. See
 [Rex setup](rex-app.md) for what the module does.
 
 ## `root`

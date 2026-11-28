@@ -7,9 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"github.com/fullerzz/rex-plugin-sesh/internal/rex"
 )
 
 //go:embed sesh.lua.tmpl
@@ -25,7 +28,7 @@ var seshLua = template.Must(template.New("sesh.lua").Funcs(template.FuncMap{"lua
 // the app has another client ID on that host's server.
 const pickerStart = `if [ -x "$0" ]; then exec "$0" "$@"; fi
 for c in "$HOME/.local/bin/rex-sesh" "$(command -v rex-sesh)"; do
-  if [ -n "$c" ] && [ -x "$c" ]; then exec "$c" picker; fi
+  if [ -n "$c" ] && [ -x "$c" ]; then exec "$c" "$1"; fi
 done
 printf '%s\n' "Sesh cannot start: rex-sesh is not installed on this machine." \
   "On this machine, rebuild it with: just build" \
@@ -38,11 +41,12 @@ func (a *App) lua(_ context.Context, args []string) error {
 	fs := flag.NewFlagSet("lua", flag.ContinueOnError)
 	fs.SetOutput(a.Err)
 	key := fs.String("key", "", "a Rex key to bind, such as ctrl+a>s")
+	lastKey := fs.String("last-key", "", "a Rex key for the previous session, such as ctrl+a>shift+l")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("lua accepts only --key")
+		return errors.New("lua accepts only --key and --last-key")
 	}
 	bin, err := os.Executable()
 	if err != nil {
@@ -51,7 +55,18 @@ func (a *App) lua(_ context.Context, args []string) error {
 	if resolved, err := filepath.EvalSymlinks(bin); err == nil {
 		bin = resolved
 	}
-	return seshLua.Execute(a.Out, struct{ Bin, Key, Start string }{Bin: bin, Key: *key, Start: pickerStart})
+	rexBin, lookupErr := exec.LookPath(rex.Bin())
+	if lookupErr == nil {
+		rexBin, err = filepath.Abs(rexBin)
+		if err != nil {
+			return fmt.Errorf("resolve Rex executable path: %w", err)
+		}
+	} else {
+		rexBin = ""
+	}
+	return seshLua.Execute(a.Out, struct{ Bin, RexBin, Key, LastKey, Start string }{
+		Bin: bin, RexBin: rexBin, Key: *key, LastKey: *lastKey, Start: pickerStart,
+	})
 }
 
 // luaString quotes s as a Lua 5.1 string literal. Lua has no \x or \u
