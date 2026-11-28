@@ -63,3 +63,22 @@ func TestSortModesKeepRexOrderWithoutHistory(t *testing.T) {
 		assert.Equal(t, []string{"c", "a", "b"}, sessionNames(next.list.All), "after toggling from "+mode)
 	}
 }
+
+func TestRemoteDiscoveryPreservesFilteredSelection(t *testing.T) {
+	local := model.Session{Source: "rex", SessionID: "local", Name: "api-local"}
+	remote := model.Session{Source: "rex", Machine: "build", SessionID: "remote", Name: "api-remote"}
+	load := func() (ReloadResult, error) {
+		return ReloadResult{Sessions: []model.Session{remote, local}}, nil
+	}
+	m := newTeaModel([]model.Session{local}, Options{LoadSessions: load})
+	m.list.Filter("api")
+	result, err := load()
+	require.NoError(t, err)
+	updated, _ := m.Update(sessionsLoadedMsg{result: result})
+	list := updated.(teaModel).list
+	require.Len(t, list.Filtered, 2)
+	selected, ok := list.Current()
+	require.True(t, ok)
+	assert.Equal(t, local, selected)
+	assert.Equal(t, "api", list.Query)
+}

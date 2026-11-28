@@ -150,7 +150,8 @@ type Switcher interface {
 type Options struct {
 	DisplayOptions
 
-	Backend Backend
+	Backend      Backend
+	LoadSessions func() (ReloadResult, error)
 }
 
 type DisplayOptions struct {
@@ -217,6 +218,7 @@ func Run(items []sessionmodel.Session, opts Options) (sessionmodel.Session, bool
 
 type teaModel struct {
 	ui                *bloom.Root
+	loadSessions      func() (ReloadResult, error)
 	backend           Backend
 	settings          *settings.Model
 	settingsBusy      bool
@@ -400,6 +402,7 @@ func newTeaModel(items []sessionmodel.Session, opts Options) teaModel {
 		pointer:               &pointerInput{},
 		previewScroll:         &previewViewport{},
 		backend:               opts.Backend,
+		loadSessions:          opts.LoadSessions,
 		list:                  list,
 		input:                 input,
 		agentSpinner:          spinner.New(spinner.WithSpinner(agentStatusSpinner)),
@@ -442,8 +445,16 @@ func reduceMotionRequested() bool {
 	return value == "1" || strings.EqualFold(value, "true")
 }
 
+type sessionsLoadedMsg struct {
+	result ReloadResult
+	err    error
+}
+
 func (m teaModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.input.Focus(), m.ui.Init()}
+	if m.loadSessions != nil {
+		cmds = append(cmds, func() tea.Msg { result, err := m.loadSessions(); return sessionsLoadedMsg{result, err} })
+	}
 	if current, ok := m.list.Current(); ok && m.previewKey != "" {
 		cmds = append(cmds, previewCommand(m.previewContext, m.previewKey, m.previewRequestID, current, m.defaultPreviewCommand, m.panePreview), previewLoadingCommand(m.previewContext, m.previewRequestID))
 	}
@@ -587,6 +598,38 @@ func (m teaModel) syncToast() (teaModel, tea.Cmd) {
 
 //nolint:gocyclo,ireturn // Bubble Tea's central event dispatcher requires this return shape.
 func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if loaded, ok := msg.(sessionsLoadedMsg); ok {
+		if m.loadSessions == nil {
+			return m, nil
+		}
+		m.loadSessions = nil
+		if loaded.err != nil {
+			m.closeError = loaded.err.Error()
+			return m, nil
+		}
+		current, selected := m.list.Current()
+		m.list.All = loaded.result.Sessions
+		m.sessionOrder = rexSessionRefs(m.list.All)
+		m.recentSessionIDs = loaded.result.RecentSessionIDs
+		m.lastSessionID = loaded.result.LastSessionID
+		m.lastSessionUnknown = loaded.result.LastSessionUnknown
+		m.rexSessions = rexSessionsByID(loaded.result.RexSessions)
+		m.resortWorkspaces()
+		m.list.Filter(m.list.Query)
+		if selected {
+			for i, item := range m.list.Filtered {
+				if sessionmodel.Key(item) == sessionmodel.Key(current) {
+					m.list.Selected = i
+					break
+				}
+			}
+		}
+		if m.settings != nil || m.settingsBusy {
+			return m, nil
+		}
+		return m.refreshPreview()
+	}
+
 	if next, cmd, handled := m.updateSettings(msg); handled {
 		return next, cmd
 	}
