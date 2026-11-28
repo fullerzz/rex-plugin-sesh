@@ -7,9 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"github.com/fullerzz/rex-plugin-sesh/internal/rex"
 )
 
 //go:embed sesh.lua.tmpl
@@ -52,7 +55,10 @@ func (a *App) lua(_ context.Context, args []string) error {
 	if resolved, err := filepath.EvalSymlinks(bin); err == nil {
 		bin = resolved
 	}
-	return seshLua.Execute(a.Out, struct{ Bin, Key, LastKey, Start string }{Bin: bin, Key: *key, LastKey: *lastKey, Start: pickerStart})
+	rexBin, _ := exec.LookPath(rex.Bin())
+	return seshLua.Execute(a.Out, struct{ Bin, RexBin, Key, LastKey, Start string }{
+		Bin: bin, RexBin: rexBin, Key: *key, LastKey: *lastKey, Start: pickerStart,
+	})
 }
 
 // luaString quotes s as a Lua 5.1 string literal. Lua has no \x or \u

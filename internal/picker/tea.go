@@ -1282,7 +1282,7 @@ func (m teaModel) lastWorkspaceCompactText() string {
 }
 
 func (m teaModel) lastPrefix(compact bool) string {
-	label := "last"
+	label := config.DefaultLastWorkspaceLabel
 	if m.lastWorkspaceLabel != nil {
 		label = *m.lastWorkspaceLabel
 	}
@@ -1292,7 +1292,7 @@ func (m teaModel) lastPrefix(compact bool) string {
 	if compact {
 		return sectionStyle.Render(label+":") + " "
 	}
-	if m.lastWorkspaceLabel == nil {
+	if label == config.DefaultLastWorkspaceLabel {
 		label = "LAST SESSION"
 	}
 	return sectionStyle.Render(label) + countStyle.Render(" · ")

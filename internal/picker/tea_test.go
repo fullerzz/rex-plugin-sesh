@@ -22,6 +22,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/fullerzz/rex-plugin-sesh/internal/config"
 	"github.com/fullerzz/rex-plugin-sesh/internal/model"
 )
 
@@ -2336,4 +2337,11 @@ func TestFooterHonorsCustomAndEmptyHistoryLabel(t *testing.T) {
 		assert.Equal(t, full, ansi.Strip(m.lastWorkspaceText()))
 		assert.Equal(t, compact, ansi.Strip(m.lastWorkspaceCompactText()))
 	}
+}
+
+func TestFooterWithDefaultConfigLabel(t *testing.T) {
+	cfg := config.Default()
+	m := newTeaModel(nil, Options{DisplayOptions: DisplayOptions{LastWorkspaceLabel: &cfg.History.LastWorkspaceLabel, LastSessionID: "api"}})
+	assert.Equal(t, "LAST SESSION · api", ansi.Strip(m.lastWorkspaceText()))
+	assert.Equal(t, "last: api", ansi.Strip(m.lastWorkspaceCompactText()))
 }

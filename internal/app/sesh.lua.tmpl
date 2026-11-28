@@ -4,7 +4,7 @@
 
 local bin = {{ lua .Bin }}
 
-local function launch(ctx, command, focus)
+local function picker(ctx, focus)
   assert(ctx.block_id, "Sesh needs a focused terminal")
   local source = assert(rex.session.describe_block{ block_id = ctx.block_id })
   local window = assert(source.block.window_id, "The terminal must be in a tab")
@@ -13,7 +13,7 @@ local function launch(ctx, command, focus)
   -- says it is missing; Rex keeps a failed command's output on screen. The
   -- picker finds its own session from REX_BLOCK.
   local start = {{ lua .Start }}
-  local argv = { "/bin/sh", "-c", start, bin, command }
+  local argv = { "/bin/sh", "-c", start, bin, "picker" }
   -- From a key or the palette, ctx.client_id is the app that opened the
   -- picker: the app to switch, which shows the picker's session. From the
   -- CLI it is the rex command itself, so the picker finds the app instead.
@@ -40,7 +40,7 @@ rex.action{
   -- focus = false opens the picker without moving focus to it.
   args = { focus = "boolean?" },
   run = function(ctx, args)
-    return launch(ctx, "picker", not (args and args.focus == false))
+    return picker(ctx, not (args and args.focus == false))
   end,
 }
 rex.action{
@@ -49,7 +49,33 @@ rex.action{
   description = "Switch to the previous open session in this app's rex-sesh history.",
   keywords = "sesh previous last session workspace",
   run = function(ctx)
-    return launch(ctx, "last", true)
+    -- rex.exec runs beside this config. A layer runs on the server holding
+    -- the visible session, which can have unrelated history for this app.
+    local argv = { bin, "last" }
+    if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
+      argv[#argv + 1] = "--opener"
+      argv[#argv + 1] = ctx.client_id
+      if ctx.session_id then
+        argv[#argv + 1] = "--opener-session"
+        argv[#argv + 1] = ctx.session_id
+        if ctx.server then
+          argv[#argv + 1] = "--opener-host"
+          argv[#argv + 1] = ctx.server
+        end
+      end
+    end
+    -- A config action can run outside a terminal's PATH. Use the Rex CLI
+    -- found when this module was generated unless the server sets its own.
+    local env = {}
+    {{- if .RexBin }}
+    if not os.getenv("REX_BIN_DIR") and not os.getenv("REX_SESH_REX_BIN") then
+      env.REX_SESH_REX_BIN = {{ lua .RexBin }}
+    end
+    {{- end }}
+    local result, err = rex.exec(argv, { env = env })
+    if not result then error(err, 0) end
+    if not result.ok then error(result.stderr, 0) end
+    return true
   end,
 }
 {{ if .LastKey }}

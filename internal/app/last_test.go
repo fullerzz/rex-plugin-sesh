@@ -2,10 +2,12 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fullerzz/rex-plugin-sesh/internal/config"
 	"github.com/fullerzz/rex-plugin-sesh/internal/rex"
@@ -81,4 +83,53 @@ func TestLastResolvesRemoteVisitAndSkipsClosedSessions(t *testing.T) {
 	recordSwitches(t, key, [2]state.Visit{unavailable, localVisit("session:1")})
 	require.ErrorContains(t, last(), `host "away" did not list`)
 	assert.Len(t, selectCalls(t, os.Getenv("FAKE_REX_LOG")), 1)
+}
+
+func TestOverlappingLastActionsToggleFromTheLatestAcceptedVisit(t *testing.T) {
+	useHistoryDir(t)
+	dir := t.TempDir()
+	log, release := filepath.Join(dir, "rex.log"), filepath.Join(dir, "release")
+	t.Setenv("FAKE_REX_LOG", log)
+	t.Setenv("RELEASE", release)
+	t.Setenv("FAKE_REX_SESSIONS", `{"sessions":[{"session_id":"a","label":"A"},{"session_id":"c","label":"C","current":true}]}`)
+	useFakeRex(t, strings.Replace(fakeRexLabelled, `*"session.select"*) ;;`, `*"session.select"*"session_id=a"*) while [ ! -f "$RELEASE" ]; do sleep 0.01; done ;;`, 1))
+	key := "id:client:mac"
+	recordSwitches(t, key, [2]state.Visit{localVisit("a"), localVisit("c")})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	results := make(chan error, 2)
+	last := func() { results <- (&App{}).Run(ctx, []string{"last", "--opener", "client:mac"}) }
+	go last()
+	require.Eventually(t, func() bool { return len(callsMatching(t, log, "session.select")) == 1 }, 5*time.Second, 20*time.Millisecond)
+	go last()
+	// Both commands observed C and resolved their opener before A is recorded.
+	require.Eventually(t, func() bool {
+		return len(callsMatching(t, log, "client ls")) == 2
+	}, 5*time.Second, 20*time.Millisecond)
+	require.NoError(t, os.WriteFile(release, nil, 0o600))
+	require.NoError(t, <-results)
+	require.NoError(t, <-results)
+	assert.Equal(t, []string{
+		"--autostart=false -C client:mac do session.select session_id=a",
+		"--autostart=false -C client:mac do session.select session_id=c",
+	}, selectCalls(t, log))
+	assert.Equal(t, []state.Visit{localVisit("c"), localVisit("a")}, historyOf(t, key))
+}
+
+func TestLastRefusesAnotherAppOnThePreviousHost(t *testing.T) {
+	useHistoryDir(t)
+	log := filepath.Join(t.TempDir(), "rex.log")
+	t.Setenv("FAKE_REX_LOG", log)
+	script := strings.NewReplacer(
+		`"client_id":"client:app","info":{"kind":"app"}`, `"client_id":"client:app","info":{"kind":"app","label":"Mac"}`,
+		`"client_id":"client:devbox-app","info":{"kind":"app"}`, `"client_id":"client:devbox-app","info":{"kind":"app","label":"Tablet"}`,
+	).Replace(fakeRexHosts)
+	useFakeRex(t, script)
+	key := "id:client:app"
+	remote := state.Visit{Host: "devbox", SessionID: "session:9"}
+	recordSwitches(t, key, [2]state.Visit{remote, localVisit("session:1")})
+	err := (&App{}).Run(t.Context(), []string{"last", "--client", "client:app"})
+	require.ErrorContains(t, err, `cannot identify this app on host "devbox"`)
+	assert.Empty(t, selectCalls(t, log))
+	assert.Equal(t, []state.Visit{localVisit("session:1"), remote}, historyOf(t, key))
 }

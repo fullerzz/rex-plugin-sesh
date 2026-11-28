@@ -16,13 +16,28 @@ func (a *App) last(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("last", flag.ContinueOnError)
 	fs.SetOutput(a.Err)
 	var target switchTarget
+	var openerVisit state.Visit
 	fs.StringVar(&target.client, "client", "", "the Rex app to switch, as a client ID or label")
 	fs.StringVar(&target.opener, "opener", "", "the Rex app that opened the action, as a client ID")
+	fs.StringVar(&openerVisit.SessionID, "opener-session", "", "the session shown to the app that opened the action")
+	fs.StringVar(&openerVisit.Host, "opener-host", "", "the Rex host holding the opener session")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
 		return errors.New("last takes no positional arguments")
+	}
+	if openerVisit.Host != "" && openerVisit.SessionID == "" {
+		return errors.New("--opener-host requires --opener-session")
+	}
+	if openerVisit.SessionID != "" && target.opener == "" {
+		return errors.New("--opener-session requires --opener")
+	}
+	// Take the revision before observing the opener. Another switch can
+	// change the app's session while Rex is listing sessions or we wait.
+	before, err := state.LoadHistory(stateDir())
+	if err != nil {
+		return fmt.Errorf("read session history: %w", err)
 	}
 	src := a.rexSource(os.Getenv("REX_BLOCK"))
 	_, _ = src.List(ctx)
@@ -51,7 +66,15 @@ func (a *App) last(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("read session history: %w", err)
 	}
-	origin := state.Visit{SessionID: target.shownSessionID()}
+	var origin state.Visit
+	if h.Revision(key) == before.Revision(key) {
+		origin.SessionID = target.shownSessionID()
+		if openerVisit.SessionID != "" && target.opener == app.ID {
+			origin = openerVisit
+		}
+	}
+	// With no reliable opener, previousVisit takes the newest recorded
+	// visit as current and RecordSwitch retains it behind the destination.
 	stateOf := visitStates(src.rows, src.listedHosts)
 	previous, status := previousVisit(h.Visits(key), origin, stateOf)
 	switch status {

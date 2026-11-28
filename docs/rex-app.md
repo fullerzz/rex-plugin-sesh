@@ -49,8 +49,9 @@ key bound to `sesh_picker`.
 
 ## What the module does
 
-`rex-sesh lua` prints the module for the binary that runs it. Both actions launch that binary in the current session. The picker runs
-`picker` and the previous-session action runs `last`.
+`rex-sesh lua` prints the module for the binary that runs it. The picker runs in a layer on the machine holding the session.
+**Sesh: Last Session** runs `last` on the server that loaded the module,
+including while the app displays a remote session.
 
 - `bin` is the full path of the rex-sesh binary that printed the module. A
   symlink is resolved to the file it points to.
@@ -172,6 +173,15 @@ exit 127
 
     The layer stays open. Close it with its × button.
 
+**Sesh: Last Session** uses a different execution path. The config server runs
+the command directly with `rex.exec`. The key and command palette supply
+the active session, its host, and the app's client ID on the config server.
+For example, after the local picker takes you from local A to devbox/C, the
+shortcut in C reads the original history and returns to A. It also works if
+devbox has its own rex-sesh history or has no rex-sesh installed. If the
+config server uses a nondefault local socket, set `REX_SERVER` in its
+process environment to that socket.
+
 The picker on a host works from that host's point of view:
 
 - It lists the host's own sessions, the sessions on the hosts that its own
@@ -251,8 +261,10 @@ can't name the previous session.
 The history is `session-history.json` in the state directory: `REX_SESH_STATE_DIR`,
 or `$XDG_STATE_HOME/rex-sesh` (by default `~/.local/state/rex-sesh`). Each
 machine that runs the picker keeps its own. A picker opened in a host's
-session runs on that host, so it reads and writes that host's history. It
-runs without `--opener`, so it records only where the app went. See
+session runs on that host, so it reads and writes that host's history.
+When you use the shortcut, it reads the config server's history. To
+use visits recorded by a remote picker, run `rex-sesh last` in a terminal
+on that host. See
 [Open the picker on a host](#open-the-picker-on-a-host).
 
 ### What the history can't see

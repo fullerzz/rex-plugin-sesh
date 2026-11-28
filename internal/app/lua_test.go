@@ -25,7 +25,7 @@ func TestLuaPrintsTheActionForThisBinary(t *testing.T) {
 	assert.Contains(t, out.String(), "local bin = "+luaString(bin)+"\n")
 	assert.Contains(t, out.String(), `name = "sesh_picker"`)
 	// The layer runs on the session's machine, which may lack rex-sesh.
-	assert.Contains(t, out.String(), `local argv = { "/bin/sh", "-c", start, bin, command }`)
+	assert.Contains(t, out.String(), `local argv = { "/bin/sh", "-c", start, bin, "picker" }`)
 	assert.Contains(t, out.String(), "local start = "+luaString(pickerStart)+"\n")
 	// Only a key or the palette names the app that opened the picker.
 	assert.Contains(t, out.String(), `if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
@@ -38,7 +38,7 @@ func TestLuaPrintsTheActionForThisBinary(t *testing.T) {
 	require.NoError(t, (&App{Out: &out, Err: io.Discard}).Run(context.Background(), []string{"lua", "--key", "ctrl+a>s", "--last-key", "ctrl+a>shift+l"}))
 	assert.Contains(t, out.String(), "\nrex.bind(\"ctrl+a>s\", \"sesh_picker\")\n")
 	assert.Contains(t, out.String(), `rex.bind("ctrl+a>shift+l", "sesh_last")`)
-	assert.Contains(t, out.String(), `return launch(ctx, "last", true)`)
+	assert.Contains(t, out.String(), `local result, err = rex.exec(argv, { env = env })`)
 }
 
 func TestLuaStringEscapesForLua51(t *testing.T) {
@@ -134,4 +134,31 @@ func TestPickerStartSaysHowToInstallWhenMissing(t *testing.T) {
 	assert.Equal(t, 127, exitErr.ExitCode())
 	assert.Contains(t, out, "Sesh cannot start: rex-sesh is not installed on this machine.\n")
 	assert.Contains(t, out, "just install-host HOST")
+}
+
+// Execute the generated action when a Lua interpreter is available. Only the
+// config-server process runner is provided, so launching a remote layer fails.
+func TestLuaLastUsesConfigServerFromRemoteSession(t *testing.T) {
+	lua, err := exec.LookPath("lua")
+	if err != nil {
+		t.Skip("lua interpreter unavailable")
+	}
+	var module bytes.Buffer
+	require.NoError(t, (&App{Out: &module, Err: io.Discard}).Run(t.Context(), []string{"lua"}))
+	script := `local actions = {}
+local argv
+rex = {
+  action = function(action) actions[action.name] = action end,
+  exec = function(args) argv = args; return { ok = true } end,
+}
+` + module.String() + `
+actions.sesh_last.run({origin="key", client_id="client:config", session_id="session:9", server="devbox"})
+for i=2,#argv do print(argv[i]) end
+`
+	//nolint:gosec // execute only the generated module with a stub Rex API.
+	cmd := exec.CommandContext(t.Context(), lua, "-")
+	cmd.Stdin = strings.NewReader(script)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	assert.Equal(t, "last\n--opener\nclient:config\n--opener-session\nsession:9\n--opener-host\ndevbox\n", string(out))
 }

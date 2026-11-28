@@ -113,7 +113,9 @@ Without that information the command uses the newest recorded visit as current.
 You can target an app explicitly with `--client ID`. Closed sessions are
 skipped. An unreachable previous host, empty history, or a refused switch
 produces an error and preserves the visit order. A remote target requires
-an identifiable connection for the same app on that host.
+an identifiable connection for the same app on that host. Host discovery and
+concurrent session listings share a three-second timeout, so a slow host can
+delay even a local switch.
 
 ## `list`
 
