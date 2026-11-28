@@ -331,20 +331,24 @@ func (d *SettingsDocument) persistModeChecked(data []byte, modeOverride os.FileM
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if check != nil {
-		if err := check(); err != nil {
-			return err
+	// A Windows replace can retry, so it runs these again before each attempt.
+	preconditions := func() error {
+		if check != nil {
+			if err := check(); err != nil {
+				return err
+			}
 		}
+		return d.unchanged()
 	}
 	if d.Missing {
-		if err := d.unchanged(); err != nil {
+		if err := preconditions(); err != nil {
 			return err
 		}
 		// Linking an adjacent complete file gives atomic no-clobber creation.
 		if err := os.Link(tmp.Name(), d.Path); err != nil {
 			return err
 		}
-	} else if err := atomicfile.Replace(tmp.Name(), d.Path, d.unchanged); err != nil {
+	} else if err := atomicfile.Replace(tmp.Name(), d.Path, preconditions); err != nil {
 		return err
 	}
 	d.Missing = false

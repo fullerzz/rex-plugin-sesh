@@ -259,13 +259,14 @@ gh release download "$tag" --repo fullerzz/rex-plugin-sesh \
   --pattern "rex-sesh_${version}_windows_amd64.zip" --pattern checksums.txt
 shasum -a 256 --check --ignore-missing checksums.txt
 unzip -o "rex-sesh_${version}_windows_amd64.zip"
-ssh "$dest" 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA\Programs\rex-sesh | Out-Null"'
-scp "rex-sesh_${version}_windows_amd64/bin/rex-sesh.exe" "$dest:AppData/Local/Programs/rex-sesh/rex-sesh.exe.new"
+ssh "$dest" 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA\Programs\rex-sesh | Out-Null"' &&
+scp "rex-sesh_${version}_windows_amd64/bin/rex-sesh.exe" "$dest:AppData/Local/Programs/rex-sesh/rex-sesh.exe.new" &&
 ssh "$dest" 'powershell -NoProfile -Command "Remove-Item -Force -ErrorAction SilentlyContinue $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe.old; if (Test-Path $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe) { Move-Item -Force $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe.old }; Move-Item $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe.new $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe; & $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe --version"'
 ```
 
-The copy uploads beside the installed one as `rex-sesh.exe.new`. Only after
-the upload succeeds does the installed copy move aside to `rex-sesh.exe.old`,
+The copy uploads beside the installed one as `rex-sesh.exe.new`. The `&&`
+chain stops if a step fails, so only after the upload succeeds does the
+installed copy move aside to `rex-sesh.exe.old`,
 since Windows can rename a running `.exe` but not overwrite it. An interrupted
 upload leaves the installed copy working.
 
