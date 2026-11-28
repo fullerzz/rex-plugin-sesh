@@ -71,7 +71,7 @@ func TestRemoteDiscoveryPreservesFilteredSelection(t *testing.T) {
 		return ReloadResult{Sessions: []model.Session{remote, local}}, nil
 	}
 	m := newTeaModel([]model.Session{local}, Options{LoadSessions: load})
-	assert.Contains(t, ansi.Strip(m.View().Content), "Resolving hosts")
+	assert.Regexp(t, "╰─+ ∙∙∙ Resolving hosts ─*╯", ansi.Strip(m.View().Content))
 	m.list.Filter("api")
 	result, err := load()
 	require.NoError(t, err)
@@ -83,4 +83,32 @@ func TestRemoteDiscoveryPreservesFilteredSelection(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, local, selected)
 	assert.Equal(t, "api", list.Query)
+}
+
+func TestDiscoveryStatusInShortPane(t *testing.T) {
+	m := newTeaModel(nil, Options{LoadSessions: func() (ReloadResult, error) { return ReloadResult{}, nil }})
+	m.width, m.height = 80, 8
+	require.Less(t, m.bodyRows(), panelFrameRows+1)
+	assert.Contains(t, ansi.Strip(m.View().Content), "∙∙∙ Resolving hosts")
+}
+
+func TestDiscoverySpinnerTicks(t *testing.T) {
+	t.Setenv("REX_SESH_REDUCE_MOTION", "0")
+	m := newTeaModel(nil, Options{LoadSessions: func() (ReloadResult, error) { return ReloadResult{}, nil }})
+	frame, agent := m.discoverySpinner.View(), m.agentSpinner.View()
+	tick := m.discoverySpinner.Tick()
+	m.reduceMotion = true
+	still, cmd := m.update(tick)
+	assert.Nil(t, cmd)
+	assert.Equal(t, frame, still.(teaModel).discoverySpinner.View())
+	m.reduceMotion = false
+	next, cmd := m.update(tick)
+	require.NotNil(t, cmd)
+	m = next.(teaModel)
+	assert.NotEqual(t, frame, m.discoverySpinner.View())
+	assert.Equal(t, agent, m.agentSpinner.View())
+	done, _ := m.update(sessionsLoadedMsg{})
+	m = done.(teaModel)
+	_, cmd = m.update(m.discoverySpinner.Tick())
+	assert.Nil(t, cmd)
 }

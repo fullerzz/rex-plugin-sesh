@@ -228,6 +228,7 @@ type teaModel struct {
 	list              Model
 	input             textinput.Model
 	agentSpinner      spinner.Model
+	discoverySpinner  spinner.Model
 	width             int
 	height            int
 	choice            sessionmodel.Session
@@ -406,6 +407,7 @@ func newTeaModel(items []sessionmodel.Session, opts Options) teaModel {
 		list:                  list,
 		input:                 input,
 		agentSpinner:          spinner.New(spinner.WithSpinner(agentStatusSpinner)),
+		discoverySpinner:      spinner.New(spinner.WithSpinner(spinner.Points)),
 		defaultPreviewCommand: opts.DefaultPreviewCommand,
 		hidePath:              opts.HidePath,
 		hidePreview:           opts.HidePreview,
@@ -454,6 +456,9 @@ func (m teaModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.input.Focus(), m.ui.Init()}
 	if m.loadSessions != nil {
 		cmds = append(cmds, func() tea.Msg { result, err := m.loadSessions(); return sessionsLoadedMsg{result, err} })
+		if !m.reduceMotion {
+			cmds = append(cmds, m.discoverySpinner.Tick)
+		}
 	}
 	if current, ok := m.list.Current(); ok && m.previewKey != "" {
 		cmds = append(cmds, previewCommand(m.previewContext, m.previewKey, m.previewRequestID, current, m.defaultPreviewCommand, m.panePreview), previewLoadingCommand(m.previewContext, m.previewRequestID))
@@ -598,6 +603,14 @@ func (m teaModel) syncToast() (teaModel, tea.Cmd) {
 
 //nolint:gocyclo,ireturn // Bubble Tea's central event dispatcher requires this return shape.
 func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if tick, ok := msg.(spinner.TickMsg); ok && tick.ID == m.discoverySpinner.ID() {
+		if m.loadSessions == nil || m.reduceMotion {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.discoverySpinner, cmd = m.discoverySpinner.Update(tick)
+		return m, cmd
+	}
 	if loaded, ok := msg.(sessionsLoadedMsg); ok {
 		if m.loadSessions == nil {
 			return m, nil
