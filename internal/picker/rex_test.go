@@ -71,10 +71,12 @@ func TestRemoteDiscoveryPreservesFilteredSelection(t *testing.T) {
 		return ReloadResult{Sessions: []model.Session{remote, local}}, nil
 	}
 	m := newTeaModel([]model.Session{local}, Options{LoadSessions: load})
+	assert.Contains(t, ansi.Strip(m.View().Content), "Resolving hosts")
 	m.list.Filter("api")
 	result, err := load()
 	require.NoError(t, err)
 	updated, _ := m.Update(sessionsLoadedMsg{result: result})
+	assert.NotContains(t, ansi.Strip(updated.View().Content), "Resolving hosts")
 	list := updated.(teaModel).list
 	require.Len(t, list.Filtered, 2)
 	selected, ok := list.Current()

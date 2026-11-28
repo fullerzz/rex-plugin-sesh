@@ -143,8 +143,17 @@ func (m teaModel) filterBox(width int) bloom.SlotNode {
 	if m.countRoll.Animating() {
 		count = bloom.Transition(m.countRoll.Float(), count, fx.Roll{From: m.countFrom})
 	}
+	title := "rex / sesh"
+	if m.loadSessions != nil {
+		status := m.agentSpinner.View() + " Resolving hosts"
+		if lipgloss.Width(title+" · "+status+"  "+m.countText())+6 <= width {
+			title += " · " + status
+		} else {
+			title = status
+		}
+	}
 	box := bloom.Box(panel(!m.listFocused).Padding(0, 1), bloom.Column(line.ID(inputID))).
-		Edge(bloom.Top, bloom.Start, edgeText(titleStyle.Render("rex / sesh"))).
+		Edge(bloom.Top, bloom.Start, edgeText(titleStyle.Render(title))).
 		Edge(bloom.Top, bloom.End, count)
 	return bloom.Fixed(rows+panelFrameRows, box)
 }
