@@ -8,8 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestWindowsShellQuote(t *testing.T) {
-	assert.Equal(t, `dir "C:\Users\Jo Doe"`, SubstitutePath("dir {}", `C:\Users\Jo Doe`))
-	assert.Equal(t, `dir "C:\\"`, SubstitutePath("dir {}", `C:\`))
-	assert.Equal(t, `dir ""`, SubstitutePath("dir {}", ``))
+func TestWindowsPreviewCommandPassesThePathInTheEnvironment(t *testing.T) {
+	got, env := PreviewCommand("dir {}", `C:\work\%USERNAME% & more`)
+	assert.Equal(t, `dir "%REX_SESH_PREVIEW_PATH%"`, got)
+	assert.Equal(t, []string{`REX_SESH_PREVIEW_PATH=C:\work\%USERNAME% & more`}, env)
+	_, env = PreviewCommand("dir {}", `C:\`)
+	assert.Equal(t, []string{`REX_SESH_PREVIEW_PATH=C:\\`}, env)
 }

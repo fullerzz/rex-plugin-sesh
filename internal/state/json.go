@@ -37,5 +37,5 @@ func writeFile(path string, contents []byte) error {
 	if err := os.Chmod(tmpName, 0600); err != nil {
 		return err
 	}
-	return atomicfile.Replace(tmpName, path)
+	return atomicfile.Replace(tmpName, path, nil)
 }

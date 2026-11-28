@@ -15,7 +15,7 @@ import (
 // runProcessTree runs command with sh -lc in a process group of its own and
 // kills the group when the shell exits or ctx ends. A stopped sentinel
 // process leads the group, so its ID can't be reused while the command runs.
-func runProcessTree(ctx context.Context, command string, stdout, stderr io.Writer) error {
+func runProcessTree(ctx context.Context, command string, env []string, stdout, stderr io.Writer) error {
 	sentinel := exec.Command("sh", "-c", `kill -s STOP "$$"`)
 	sentinel.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := sentinel.Start(); err != nil {
@@ -34,6 +34,9 @@ func runProcessTree(ctx context.Context, command string, stdout, stderr io.Write
 	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pgid: processGroupID}
 	c.Cancel = killProcessGroup
 	c.WaitDelay = 250 * time.Millisecond
+	if env != nil {
+		c.Env = append(os.Environ(), env...)
+	}
 	c.Stdout = stdout
 	c.Stderr = stderr
 	err := c.Run()

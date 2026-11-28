@@ -1,6 +1,7 @@
 package atomicfile
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,7 +16,7 @@ func TestReplaceOverwritesTheFile(t *testing.T) {
 	path, tmp := filepath.Join(dir, "state.json"), filepath.Join(dir, "state.json.tmp")
 	require.NoError(t, os.WriteFile(path, []byte("old"), 0o600))
 	require.NoError(t, os.WriteFile(tmp, []byte("new"), 0o600))
-	require.NoError(t, Replace(tmp, path))
+	require.NoError(t, Replace(tmp, path, nil))
 	data, err := os.ReadFile(path) //nolint:gosec // under t.TempDir().
 	require.NoError(t, err)
 	assert.Equal(t, "new", string(data))
@@ -37,9 +38,21 @@ func TestReplaceWaitsForAReaderToClose(t *testing.T) {
 		_ = reader.Close()
 		close(closed)
 	}()
-	require.NoError(t, Replace(tmp, path))
+	require.NoError(t, Replace(tmp, path, nil))
 	<-closed
 	data, err := os.ReadFile(path) //nolint:gosec // under t.TempDir().
 	require.NoError(t, err)
 	assert.Equal(t, "new", string(data))
+}
+
+func TestReplaceStopsWhenCheckFails(t *testing.T) {
+	dir := t.TempDir()
+	path, tmp := filepath.Join(dir, "state.json"), filepath.Join(dir, "state.json.tmp")
+	require.NoError(t, os.WriteFile(path, []byte("old"), 0o600))
+	require.NoError(t, os.WriteFile(tmp, []byte("new"), 0o600))
+	changed := errors.New("changed on disk")
+	require.ErrorIs(t, Replace(tmp, path, func() error { return changed }), changed)
+	data, err := os.ReadFile(path) //nolint:gosec // under t.TempDir().
+	require.NoError(t, err)
+	assert.Equal(t, "old", string(data))
 }

@@ -4,11 +4,16 @@ package config
 
 import "strings"
 
-// shellQuote quotes s for cmd.exe and the program it starts. A Windows path
-// can't contain a double quote, so double quotes keep spaces and & | < > ^
-// literal. Trailing backslashes are doubled, so a path such as C:\ doesn't
-// escape the closing quote.
-func shellQuote(s string) string {
-	trimmed := strings.TrimRight(s, `\`)
-	return `"` + s + strings.Repeat(`\`, len(s)-len(trimmed)) + `"`
+// PreviewPathEnv holds the selected path for a Windows preview command.
+const PreviewPathEnv = "REX_SESH_PREVIEW_PATH"
+
+// cmd.exe expands %NAME% even inside double quotes, but it expands the
+// command line only once, so a path passed in PreviewPathEnv stays literal.
+// A Windows path can't contain a double quote, so the quotes keep spaces and
+// & | < > ^ literal. Trailing backslashes are doubled, so a path such as C:\
+// doesn't escape the closing quote for the program cmd.exe starts.
+func previewCommand(command, path string) (string, []string) {
+	trailing := len(path) - len(strings.TrimRight(path, `\`))
+	value := path + strings.Repeat(`\`, trailing)
+	return strings.ReplaceAll(command, "{}", `"%`+PreviewPathEnv+`%"`), []string{PreviewPathEnv + "=" + value}
 }

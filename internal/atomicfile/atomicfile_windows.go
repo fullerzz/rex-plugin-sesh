@@ -15,9 +15,14 @@ import (
 // brief, so retry for a while before giving up.
 const retryFor = 2 * time.Second
 
-func replace(tmp, path string) error {
+func replace(tmp, path string, check func() error) error {
 	deadline := time.Now().Add(retryFor)
 	for {
+		if check != nil {
+			if err := check(); err != nil {
+				return err
+			}
+		}
 		err := os.Rename(tmp, path)
 		if err == nil || !busy(err) || time.Now().After(deadline) {
 			return err

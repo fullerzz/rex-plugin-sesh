@@ -267,6 +267,45 @@ func TestLuaPickerRunsThisWindowsMachinesBinary(t *testing.T) {
 	assert.Equal(t, "none", shell)
 }
 
+// On Windows, Go's os.UserHomeDir reads USERPROFILE even when HOME is set,
+// so the module must look for history there too.
+func TestLuaLastReadsWindowsHistoryUnderUserProfile(t *testing.T) {
+	lua, err := exec.LookPath("lua")
+	if err != nil {
+		t.Skip("lua interpreter unavailable")
+	}
+	home, profile := t.TempDir(), t.TempDir()
+	t.Setenv("REX_SESH_STATE_DIR", "")
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", profile)
+	write := func(root, history string) {
+		dir := filepath.Join(root, ".local", "state", "rex-sesh")
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "session-history.json"), []byte(history), 0o600))
+	}
+	write(home, `{"from":"HOME"}`)
+	write(profile, `{"from":"USERPROFILE"}`)
+	var module bytes.Buffer
+	require.NoError(t, (&App{Out: &module, Err: io.Discard}).Run(t.Context(), []string{"lua"}))
+	src := strings.Replace(module.String(), `local config_os = "`+runtime.GOOS+`"`, `local config_os = "windows"`, 1)
+	script := `local actions = {}
+rex = {
+  action = function(action) actions[action.name] = action end,
+  bind = function() end,
+  exec = function(args, opts) io.write(opts.stdin); return { ok = true } end,
+}
+` + src + `
+actions.sesh_last.run({origin="key", client_id="client:config", session_id="session:9"})
+`
+	//nolint:gosec // execute only the generated module with a stub Rex API.
+	cmd := exec.CommandContext(t.Context(), lua, "-")
+	cmd.Stdin = strings.NewReader(script)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	assert.JSONEq(t, `{"from":"USERPROFILE"}`, string(out))
+}
+
 func TestLuaEmbedsAbsoluteRexPath(t *testing.T) {
 	dir := t.TempDir()
 	writeEcho(t, filepath.Join(dir, "rex"))

@@ -4,6 +4,9 @@
 
 local bin = {{ lua .Bin }}
 
+-- The OS that printed this module, and so the OS bin runs on.
+local config_os = {{ lua .OS }}
+
 -- Read before rex.exec launches the child. Two shortcuts may already have
 -- captured the same visible session when the first child records its switch.
 local function captured_history()
@@ -11,9 +14,9 @@ local function captured_history()
   if not dir or dir == "" then
     local base = os.getenv("XDG_STATE_HOME")
     if not base or base == "" then
-      -- os.UserHomeDir: HOME, or USERPROFILE on Windows.
-      local home = os.getenv("HOME")
-      if not home or home == "" then home = os.getenv("USERPROFILE") end
+      -- Match Go's os.UserHomeDir: USERPROFILE on Windows, even when HOME
+      -- is set, and HOME elsewhere.
+      local home = os.getenv(config_os == "windows" and "USERPROFILE" or "HOME")
       if not home or home == "" then return "{}" end
       base = home .. "/.local/state"
     end
@@ -33,8 +36,6 @@ local function captured_history()
   return assert(data, read_err)
 end
 
--- The OS that printed this module, and so the OS bin runs on.
-local config_os = {{ lua .OS }}
 -- Each host's OS, by label, from its server. Failures are not cached.
 local host_os = {}
 
@@ -46,7 +47,9 @@ local function session_os(ctx)
   if not host_os[host] then
     local ok, version = pcall(function() return rex.server(host).call("server.version") end)
     local platform = ok and type(version) == "table" and version.platform
-    host_os[host] = type(platform) == "string" and platform:match("^(%w+)_") or nil
+    -- platform is OS_ARCH, such as windows_amd64. Read the leading letters,
+    -- so another separator still gives the OS.
+    host_os[host] = type(platform) == "string" and platform:match("^(%a+)") or nil
   end
   return host_os[host]
 end

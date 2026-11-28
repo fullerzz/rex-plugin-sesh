@@ -25,8 +25,10 @@ func FindWildcard(cfg Config, path, home string) (WildcardConfig, bool) {
 	return WildcardConfig{}, false
 }
 
-// SubstitutePath replaces each {} in command with path, quoted for the shell
-// that runs preview commands: sh on Unix, cmd.exe on Windows.
-func SubstitutePath(command, path string) string {
-	return strings.ReplaceAll(command, "{}", shellQuote(path))
+// PreviewCommand returns command with each {} standing for path, and any
+// environment entries its shell needs to read path: on Unix, path quoted for
+// sh in place of {}; on Windows, a quoted reference to PreviewPathEnv, so
+// cmd.exe can't expand %NAME% text in the path itself.
+func PreviewCommand(command, path string) (string, []string) {
+	return previewCommand(command, path)
 }

@@ -35,7 +35,7 @@ func TestRunShellCleansUpDescendantAfterShellExit(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, err := runShell(ctx, `sh -c 'printf ready > "$READY_FILE"; while [ ! -e "$RELEASE_FILE" ]; do sleep 0.01; done; printf survived > "$SURVIVED_FILE"' &`)
+		_, err := runShell(ctx, `sh -c 'printf ready > "$READY_FILE"; while [ ! -e "$RELEASE_FILE" ]; do sleep 0.01; done; printf survived > "$SURVIVED_FILE"' &`, nil)
 		done <- err
 	}()
 
@@ -87,7 +87,7 @@ func TestRunShellCleansUpRedirectedDescendantAfterShellExit(t *testing.T) {
 	t.Setenv("SURVIVED_FILE", survived)
 	t.Cleanup(func() { _ = os.WriteFile(release, []byte("release"), 0600) })
 
-	_, err := runShell(context.Background(), `sh -c 'printf ready > "$READY_FILE"; while [ ! -e "$RELEASE_FILE" ]; do sleep 0.01; done; printf survived > "$SURVIVED_FILE"' >/dev/null 2>&1 & while [ ! -e "$READY_FILE" ]; do sleep 0.01; done`)
+	_, err := runShell(context.Background(), `sh -c 'printf ready > "$READY_FILE"; while [ ! -e "$RELEASE_FILE" ]; do sleep 0.01; done; printf survived > "$SURVIVED_FILE"' >/dev/null 2>&1 & while [ ! -e "$READY_FILE" ]; do sleep 0.01; done`, nil)
 	require.NoError(t, err)
 	_, err = os.Stat(ready)
 	require.NoError(t, err, "descendant process did not start")
@@ -116,7 +116,7 @@ func TestRunShellCancellationKillsDescendantProcess(t *testing.T) {
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
-		_, _ = runShell(ctx, `sh -c 'printf ready > "$READY_FILE"; while [ ! -e "$RELEASE_FILE" ]; do sleep 0.01; done; printf survived > "$SURVIVED_FILE"' & wait`)
+		_, _ = runShell(ctx, `sh -c 'printf ready > "$READY_FILE"; while [ ! -e "$RELEASE_FILE" ]; do sleep 0.01; done; printf survived > "$SURVIVED_FILE"' & wait`, nil)
 		close(done)
 	}()
 

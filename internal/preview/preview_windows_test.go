@@ -94,8 +94,10 @@ func assertNeverWritten(t *testing.T, files helperFiles) {
 	}
 }
 
-func TestRenderUsesPreviewCommandWithQuotedPath(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "has space & more")
+// cmd.exe must not expand %USERNAME% in the path, nor treat & as a separator.
+func TestRenderUsesPreviewCommandWithLiteralPath(t *testing.T) {
+	t.Setenv("USERNAME", "someone-else")
+	dir := filepath.Join(t.TempDir(), "has space & %USERNAME%")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "inside.txt"), nil, 0o600))
 	out, err := Render(context.Background(), model.Session{Path: dir, PreviewCommand: "dir /b {}"}, "")
@@ -109,7 +111,7 @@ func TestRunShellCancellationKillsDescendantProcess(t *testing.T) {
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
-		_, _ = runShell(ctx, start)
+		_, _ = runShell(ctx, start, nil)
 		close(done)
 	}()
 	waitForFile(t, files.ready)
@@ -128,7 +130,7 @@ func TestRunShellCleansUpBackgroundDescendantAfterShellExit(t *testing.T) {
 	// helper keeps cmd.exe alive until the first has started. The background
 	// helper inherits cmd.exe's output pipes, so runShell stops waiting for
 	// them after WaitDelay, then ends the job, as sh does on Unix.
-	_, err := runShell(context.Background(), `start "" /b `+start+` & `+start+` -- wait`)
+	_, err := runShell(context.Background(), `start "" /b `+start+` & `+start+` -- wait`, nil)
 	require.ErrorIs(t, err, exec.ErrWaitDelay)
 	_, err = os.Stat(files.ready)
 	require.NoError(t, err, "descendant process did not start")

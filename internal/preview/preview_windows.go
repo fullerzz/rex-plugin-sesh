@@ -19,7 +19,7 @@ import (
 // ends the job when the shell exits or ctx ends. The shell starts suspended
 // and resumes only once it is in the job, so every process it starts joins
 // the job too. Closing the job also kills anything left in it.
-func runProcessTree(ctx context.Context, command string, stdout, stderr io.Writer) error {
+func runProcessTree(ctx context.Context, command string, env []string, stdout, stderr io.Writer) error {
 	job, err := newKillOnCloseJob()
 	if err != nil {
 		return err
@@ -38,6 +38,9 @@ func runProcessTree(ctx context.Context, command string, stdout, stderr io.Write
 	}
 	c.Cancel = func() error { return windows.TerminateJobObject(job, 1) }
 	c.WaitDelay = 250 * time.Millisecond
+	if env != nil {
+		c.Env = append(os.Environ(), env...)
+	}
 	c.Stdout = stdout
 	c.Stderr = stderr
 	if err := c.Start(); err != nil {

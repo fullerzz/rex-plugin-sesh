@@ -336,15 +336,15 @@ func (d *SettingsDocument) persistModeChecked(data []byte, modeOverride os.FileM
 			return err
 		}
 	}
-	if err := d.unchanged(); err != nil {
-		return err
-	}
 	if d.Missing {
+		if err := d.unchanged(); err != nil {
+			return err
+		}
 		// Linking an adjacent complete file gives atomic no-clobber creation.
 		if err := os.Link(tmp.Name(), d.Path); err != nil {
 			return err
 		}
-	} else if err := atomicfile.Replace(tmp.Name(), d.Path); err != nil {
+	} else if err := atomicfile.Replace(tmp.Name(), d.Path, d.unchanged); err != nil {
 		return err
 	}
 	d.Missing = false

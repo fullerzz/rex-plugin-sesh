@@ -259,10 +259,15 @@ gh release download "$tag" --repo fullerzz/rex-plugin-sesh \
   --pattern "rex-sesh_${version}_windows_amd64.zip" --pattern checksums.txt
 shasum -a 256 --check --ignore-missing checksums.txt
 unzip -o "rex-sesh_${version}_windows_amd64.zip"
-ssh "$dest" 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA\Programs\rex-sesh | Out-Null; Remove-Item -Force -ErrorAction SilentlyContinue $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe.old; Move-Item -Force -ErrorAction SilentlyContinue $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe.old"'
-scp "rex-sesh_${version}_windows_amd64/bin/rex-sesh.exe" "$dest:AppData/Local/Programs/rex-sesh/rex-sesh.exe"
-ssh "$dest" 'powershell -NoProfile -Command "& $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe --version"'
+ssh "$dest" 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA\Programs\rex-sesh | Out-Null"'
+scp "rex-sesh_${version}_windows_amd64/bin/rex-sesh.exe" "$dest:AppData/Local/Programs/rex-sesh/rex-sesh.exe.new"
+ssh "$dest" 'powershell -NoProfile -Command "Remove-Item -Force -ErrorAction SilentlyContinue $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe.old; if (Test-Path $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe) { Move-Item -Force $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe.old }; Move-Item $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe.new $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe; & $env:LOCALAPPDATA\Programs\rex-sesh\rex-sesh.exe --version"'
 ```
+
+The copy uploads beside the installed one as `rex-sesh.exe.new`. Only after
+the upload succeeds does the installed copy move aside to `rex-sesh.exe.old`,
+since Windows can rename a running `.exe` but not overwrite it. An interrupted
+upload leaves the installed copy working.
 
 These commands make some assumptions:
 
@@ -288,7 +293,9 @@ On the Windows host, check that the copy lists the host's sessions:
 
 On Windows, rex-sesh keeps its state in `%USERPROFILE%\.local\state\rex-sesh`,
 or in `XDG_STATE_HOME` or `REX_SESH_STATE_DIR` when they are set. It runs
-preview commands with `cmd.exe /d /s /c`, and puts `{}` in double quotes. The
+preview commands with `cmd.exe /d /s /c`. In a preview command, `{}` becomes
+`"%REX_SESH_PREVIEW_PATH%"`, and rex-sesh sets that variable to the path, so
+`cmd.exe` keeps `%` and `&` in the path literal. The
 native picker works on Windows. `--fzf` does not, because its preview script
 needs `sh`.
 

@@ -59,7 +59,8 @@ func Render(ctx context.Context, s model.Session, fallbackCommand string) (strin
 		cmd = fallbackCommand
 	}
 	if cmd != "" {
-		return runShell(ctx, config.SubstitutePath(cmd, s.Path))
+		command, env := config.PreviewCommand(cmd, s.Path)
+		return runShell(ctx, command, env)
 	}
 	if s.SessionID != "" {
 		return fmt.Sprintf("session: %s\nid: %s\npath: %s\n", s.Name, s.SessionID, s.Path), nil
@@ -74,14 +75,15 @@ func remoteSummary(s model.Session) string {
 	return fmt.Sprintf("workspace: %s\nmachine: %s\nid: %s\npath: %s\n", s.Name, s.Machine, s.SessionID, s.Path)
 }
 
-// runShell runs a user's preview command through this platform's shell and
-// returns its output. It ends every process the command started, both when
-// the command finishes and when ctx ends or the 5 second limit passes.
-func runShell(ctx context.Context, command string) (string, error) {
+// runShell runs a user's preview command through this platform's shell, with
+// env added to its environment, and returns its output. It ends every process
+// the command started, both when the command finishes and when ctx ends or
+// the 5 second limit passes.
+func runShell(ctx context.Context, command string, env []string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var out, errb bytes.Buffer
-	if err := runProcessTree(ctx, command, &out, &errb); err != nil {
+	if err := runProcessTree(ctx, command, env, &out, &errb); err != nil {
 		return out.String() + errb.String(), err
 	}
 	return out.String(), nil
