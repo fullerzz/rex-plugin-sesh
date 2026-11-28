@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/fullerzz/rex-plugin-sesh/internal/config"
@@ -129,10 +130,16 @@ func TestStateDirPrefersOverrideThenXDGStateHome(t *testing.T) {
 }
 
 func TestLocalPickerCollectionSkipsHostLookup(t *testing.T) {
+	bin := t.TempDir()
+	t.Setenv("PATH", bin)
+	t.Setenv("ZOXIDE_LOG", filepath.Join(bin, "calls"))
+	//nolint:gosec // The temporary zoxide stub must be executable.
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "zoxide"), []byte("#!/bin/sh\necho query >> \"$ZOXIDE_LOG\"\n"), 0o700))
 	log := filepath.Join(t.TempDir(), "rex.log")
 	t.Setenv("FAKE_REX_LOG", log)
 	useFakeRex(t, fakeRexHosts)
-	col, err := (&App{}).collectPickerRows(t.Context(), config.Default(), false)
+	collect := (&App{}).startupRows(t.Context(), config.Default())
+	col, err := collect(false)
 	require.NoError(t, err)
 	require.NoError(t, col.RexErr)
 	assert.Equal(t, []string{"api"}, sessionNames(col.RexSessions))
@@ -140,4 +147,13 @@ func TestLocalPickerCollectionSkipsHostLookup(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(calls), "hosts --json")
 	assert.NotContains(t, string(calls), "-S ")
+	full, err := collect(true)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"api", "[devbox] train"}, sessionNames(full.RexSessions))
+	later, err := os.ReadFile(log) //nolint:gosec // The test owns this log.
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(later), string(calls)))
+	queries, err := os.ReadFile(filepath.Join(bin, "calls")) //nolint:gosec // The test owns this log.
+	require.NoError(t, err)
+	assert.Equal(t, "query\n", string(queries))
 }

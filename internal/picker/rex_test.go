@@ -68,8 +68,10 @@ func TestSortModesKeepRexOrderWithoutHistory(t *testing.T) {
 func TestRemoteDiscoveryPreservesFilteredSelection(t *testing.T) {
 	local := model.Session{Source: "rex", SessionID: "local", Name: "api-local"}
 	remote := model.Session{Source: "rex", Machine: "build", SessionID: "remote", Name: "api-remote"}
+	moved := local
+	moved.Path = "/new/path"
 	load := func() (ReloadResult, error) {
-		return ReloadResult{Sessions: []model.Session{remote, local}}, nil
+		return ReloadResult{Sessions: []model.Session{remote, moved}}, nil
 	}
 	m := newTeaModel([]model.Session{local}, Options{LoadSessions: load})
 	assert.Regexp(t, "╰─+ ∙∙∙ Resolving hosts ─*╯", ansi.Strip(m.View().Content))
@@ -82,7 +84,7 @@ func TestRemoteDiscoveryPreservesFilteredSelection(t *testing.T) {
 	require.Len(t, list.Filtered, 2)
 	selected, ok := list.Current()
 	require.True(t, ok)
-	assert.Equal(t, local, selected)
+	assert.Equal(t, moved, selected)
 	assert.Equal(t, "api", list.Query)
 }
 
@@ -124,4 +126,12 @@ func TestDiscoverySpinnerTicks(t *testing.T) {
 	m = done.(teaModel)
 	_, cmd = m.update(m.discoverySpinner.Tick())
 	assert.Nil(t, cmd)
+}
+
+func TestEnterWaitsForRemoteMatch(t *testing.T) {
+	m := newTeaModel(nil, Options{LoadSessions: func() (ReloadResult, error) { return ReloadResult{}, nil }})
+	m.list.Filter("remote")
+	next, cmd := m.chooseCurrent()
+	assert.Nil(t, cmd)
+	assert.False(t, next.chosen)
 }

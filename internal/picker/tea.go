@@ -631,7 +631,7 @@ func (m teaModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.Filter(m.list.Query)
 		if selected {
 			for i, item := range m.list.Filtered {
-				if sessionmodel.Key(item) == sessionmodel.Key(current) {
+				if sameDiscoveryRow(item, current) {
 					m.list.Selected = i
 					break
 				}
@@ -934,11 +934,21 @@ func (m teaModel) busy() bool {
 	return m.closingSessionID != "" || m.switchingKey != ""
 }
 
+func sameDiscoveryRow(a, b sessionmodel.Session) bool {
+	if b.SessionID != "" {
+		return a.Ref() == b.Ref()
+	}
+	return sessionmodel.Key(a) == sessionmodel.Key(b)
+}
+
 func (m teaModel) chooseCurrent() (teaModel, tea.Cmd) {
 	if m.busy() {
 		return m.refuse()
 	}
 	choice, ok := m.list.Current()
+	if !ok && m.loadSessions != nil {
+		return m, nil
+	}
 	if switcher, canSwitch := m.backend.(Switcher); ok && canSwitch {
 		// Quit only once the host has switched; a failure keeps the picker.
 		m.switchingKey = sessionmodel.Key(choice)
