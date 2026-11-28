@@ -127,3 +127,17 @@ func TestStateDirPrefersOverrideThenXDGStateHome(t *testing.T) {
 	t.Setenv("HOME", home)
 	assert.Equal(t, filepath.Join(home, ".local", "state", "rex-sesh"), stateDir())
 }
+
+func TestLocalPickerCollectionSkipsHostLookup(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "rex.log")
+	t.Setenv("FAKE_REX_LOG", log)
+	useFakeRex(t, fakeRexHosts)
+	col, err := (&App{}).collectPickerRows(t.Context(), config.Default(), false)
+	require.NoError(t, err)
+	require.NoError(t, col.RexErr)
+	assert.Equal(t, []string{"api"}, sessionNames(col.RexSessions))
+	calls, err := os.ReadFile(log) //nolint:gosec // The test owns this temporary command log.
+	require.NoError(t, err)
+	assert.NotContains(t, string(calls), "hosts --json")
+	assert.NotContains(t, string(calls), "-S ")
+}

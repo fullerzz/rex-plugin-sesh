@@ -54,7 +54,11 @@ func (b *pickerBackend) CloseWorkspace(context.Context, string) error {
 }
 
 func (b *pickerBackend) ReloadPicker(ctx context.Context) (pickerpkg.ReloadResult, error) {
-	col, err := b.collect(ctx, b.cfg)
+	return b.loadRows(ctx, b.cfg)
+}
+
+func (b *pickerBackend) loadRows(ctx context.Context, cfg config.Config) (pickerpkg.ReloadResult, error) {
+	col, err := b.collect(ctx, cfg)
 	if err != nil {
 		return pickerpkg.ReloadResult{}, err
 	}

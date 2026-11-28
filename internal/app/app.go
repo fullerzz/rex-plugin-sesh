@@ -395,11 +395,7 @@ func (a *App) runPicker(ctx context.Context, cfgPath string, jsonOut, fzfPicker 
 	} else {
 		// The native picker switches through the backend before it exits.
 		selected, ok, err = pickerpkg.Run(col.Sessions, pickerpkg.Options{DisplayOptions: opts, Backend: backend, LoadSessions: func() (pickerpkg.ReloadResult, error) {
-			col, err := backend.collect(ctx, cfg)
-			if err != nil {
-				return pickerpkg.ReloadResult{}, err
-			}
-			return backend.reloadResult(col), nil
+			return backend.loadRows(ctx, cfg)
 		}})
 	}
 	if err != nil || !ok {

@@ -2,6 +2,7 @@ package picker
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -90,6 +91,18 @@ func TestDiscoveryStatusInShortPane(t *testing.T) {
 	m.width, m.height = 80, 8
 	require.Less(t, m.bodyRows(), panelFrameRows+1)
 	assert.Contains(t, ansi.Strip(m.View().Content), "∙∙∙ Resolving hosts")
+}
+
+func TestDiscoveryFailureKeepsLocalRows(t *testing.T) {
+	local := []model.Session{{Source: "rex", Name: "api", SessionID: "local"}}
+	load := func() (ReloadResult, error) { return ReloadResult{}, errors.New("discovery failed") }
+	m := newTeaModel(local, Options{LoadSessions: load})
+	result, err := load()
+	next, _ := m.Update(sessionsLoadedMsg{result: result, err: err})
+	m = next.(teaModel)
+	assert.Equal(t, local, m.list.All)
+	assert.NotContains(t, ansi.Strip(m.View().Content), "Resolving hosts")
+	assert.Equal(t, "discovery failed", m.toastText)
 }
 
 func TestDiscoverySpinnerTicks(t *testing.T) {
