@@ -86,7 +86,7 @@ func abc(current string) collection {
 	for i := range sessions {
 		sessions[i].Attached = sessions[i].Machine == "" && sessions[i].Name == current
 	}
-	return collection{ListedHosts: map[string]bool{"devbox": true}, Sessions: sessions, CurrentSessionID: currentOf(sessions)}
+	return collection{RexSessions: sessions[:4], ListedHosts: map[string]bool{"devbox": true}, Sessions: sessions, CurrentSessionID: currentOf(sessions)}
 }
 
 // shownHistory is pickerHistory for an app known to show the picker's

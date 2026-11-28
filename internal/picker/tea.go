@@ -163,6 +163,7 @@ type DisplayOptions struct {
 	ShowIcons                      bool
 	HerdrThemeInherit              bool
 	DisableWorktreeIconReplacement bool
+	LastWorkspaceLabel             *string
 	HideLastWorkspace              bool
 	// DisableClose refuses ctrl+x and leaves it out of the footer, for a
 	// backend that cannot close sessions.
@@ -269,6 +270,7 @@ type teaModel struct {
 	recentSessionIDs        []string
 	workspaceSort           string
 	lastSessionID           string
+	lastWorkspaceLabel      *string
 	lastSessionUnknown      bool
 	rexSessions             map[string]sessionmodel.Session
 	workspaceCloseContext   context.Context
@@ -415,6 +417,7 @@ func newTeaModel(items []sessionmodel.Session, opts Options) teaModel {
 		recentSessionIDs:      append([]string(nil), opts.RecentSessionIDs...),
 		workspaceSort:         workspaceSort,
 		lastSessionID:         opts.LastSessionID,
+		lastWorkspaceLabel:    opts.LastWorkspaceLabel,
 		lastSessionUnknown:    opts.LastSessionUnknown,
 		rexSessions:           rexSessionsByID(opts.RexSessions),
 		workspaceCloseContext: closeContext,
@@ -1262,7 +1265,7 @@ func (m teaModel) lastWorkspaceStatus() (label, path string) {
 
 func (m teaModel) lastWorkspaceText() string {
 	label, path := m.lastWorkspaceStatus()
-	line := sectionStyle.Render("LAST SESSION") + countStyle.Render(" · ") + rowLabelStyle.Render(label)
+	line := m.lastPrefix(false) + rowLabelStyle.Render(label)
 	shownPath := compactHome(path)
 	if item, ok := m.rexSessions[m.lastSessionID]; ok && item.Machine != "" {
 		shownPath = path
@@ -1275,7 +1278,24 @@ func (m teaModel) lastWorkspaceText() string {
 
 func (m teaModel) lastWorkspaceCompactText() string {
 	label, _ := m.lastWorkspaceStatus()
-	return sectionStyle.Render("last:") + rowLabelStyle.Render(" "+label)
+	return m.lastPrefix(true) + rowLabelStyle.Render(label)
+}
+
+func (m teaModel) lastPrefix(compact bool) string {
+	label := "last"
+	if m.lastWorkspaceLabel != nil {
+		label = *m.lastWorkspaceLabel
+	}
+	if label == "" {
+		return ""
+	}
+	if compact {
+		return sectionStyle.Render(label+":") + " "
+	}
+	if m.lastWorkspaceLabel == nil {
+		label = "LAST SESSION"
+	}
+	return sectionStyle.Render(label) + countStyle.Render(" · ")
 }
 
 // footerLine keeps the keybind help (or a close error, which gets the whole

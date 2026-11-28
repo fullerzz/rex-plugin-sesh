@@ -25,18 +25,20 @@ func TestLuaPrintsTheActionForThisBinary(t *testing.T) {
 	assert.Contains(t, out.String(), "local bin = "+luaString(bin)+"\n")
 	assert.Contains(t, out.String(), `name = "sesh_picker"`)
 	// The layer runs on the session's machine, which may lack rex-sesh.
-	assert.Contains(t, out.String(), `local argv = { "/bin/sh", "-c", start, bin, "picker" }`)
+	assert.Contains(t, out.String(), `local argv = { "/bin/sh", "-c", start, bin, command }`)
 	assert.Contains(t, out.String(), "local start = "+luaString(pickerStart)+"\n")
 	// Only a key or the palette names the app that opened the picker.
 	assert.Contains(t, out.String(), `if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
-      argv[#argv + 1] = "--opener"
-      argv[#argv + 1] = ctx.client_id`)
+    argv[#argv + 1] = "--opener"
+    argv[#argv + 1] = ctx.client_id`)
 	assert.NotContains(t, out.String(), `"--client"`)
 	assert.NotContains(t, out.String(), "\nrex.bind(", "no key without --key")
 
 	out.Reset()
-	require.NoError(t, (&App{Out: &out, Err: io.Discard}).Run(context.Background(), []string{"lua", "--key", "ctrl+a>s"}))
+	require.NoError(t, (&App{Out: &out, Err: io.Discard}).Run(context.Background(), []string{"lua", "--key", "ctrl+a>s", "--last-key", "ctrl+a>shift+l"}))
 	assert.Contains(t, out.String(), "\nrex.bind(\"ctrl+a>s\", \"sesh_picker\")\n")
+	assert.Contains(t, out.String(), `rex.bind("ctrl+a>shift+l", "sesh_last")`)
+	assert.Contains(t, out.String(), `return launch(ctx, "last", true)`)
 }
 
 func TestLuaStringEscapesForLua51(t *testing.T) {
@@ -87,10 +89,10 @@ func TestPickerDoesNotWaitWithoutAnError(t *testing.T) {
 
 // runStart runs the layer's start script as Rex would, with bin as $0, and
 // returns what it printed.
-func runStart(t *testing.T, home, bin string) (string, error) {
+func runStart(t *testing.T, home, bin, command string) (string, error) {
 	t.Helper()
 	//nolint:gosec // the script is pickerStart, run on test fixtures.
-	cmd := exec.Command("/bin/sh", "-c", pickerStart, bin, "picker", "--client", "client:mac")
+	cmd := exec.Command("/bin/sh", "-c", pickerStart, bin, command, "--client", "client:mac")
 	cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin"}
 	out, err := cmd.CombinedOutput()
 	return string(out), err
@@ -106,7 +108,7 @@ func writeEcho(t *testing.T, path string) {
 func TestPickerStartRunsThisMachinesBinaryWithItsArguments(t *testing.T) {
 	bin := filepath.Join(t.TempDir(), "rex-sesh")
 	writeEcho(t, bin)
-	out, err := runStart(t, t.TempDir(), bin)
+	out, err := runStart(t, t.TempDir(), bin, "picker")
 	require.NoError(t, err)
 	assert.Equal(t, bin+" picker --client client:mac\n", out)
 }
@@ -117,13 +119,16 @@ func TestPickerStartFallsBackToTheHostsCopy(t *testing.T) {
 	home := t.TempDir()
 	hostBin := filepath.Join(home, ".local", "bin", "rex-sesh")
 	writeEcho(t, hostBin)
-	out, err := runStart(t, home, "/Users/me/rex-sesh/bin/rex-sesh")
+	out, err := runStart(t, home, "/Users/me/rex-sesh/bin/rex-sesh", "picker")
 	require.NoError(t, err)
 	assert.Equal(t, hostBin+" picker\n", out)
+	out, err = runStart(t, home, "/Users/me/rex-sesh/bin/rex-sesh", "last")
+	require.NoError(t, err)
+	assert.Equal(t, hostBin+" last\n", out)
 }
 
 func TestPickerStartSaysHowToInstallWhenMissing(t *testing.T) {
-	out, err := runStart(t, t.TempDir(), "/Users/me/rex-sesh/bin/rex-sesh")
+	out, err := runStart(t, t.TempDir(), "/Users/me/rex-sesh/bin/rex-sesh", "picker")
 	var exitErr *exec.ExitError
 	require.ErrorAs(t, err, &exitErr)
 	assert.Equal(t, 127, exitErr.ExitCode())

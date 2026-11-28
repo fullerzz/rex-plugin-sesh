@@ -1,12 +1,13 @@
 # Rex setup
 
-rex-sesh adds one action to Rex, `sesh_picker`. The command palette lists it as
-**Sesh: Pick Session**. It opens the picker in a floating layer over the current
-tab. When you choose a row, the picker asks the Rex app to switch to that
-session, and the layer closes.
+The Lua module registers two actions in the Rex command palette.
+**Sesh: Pick Session** opens the picker in a floating layer.
+**Sesh: Last Session** returns directly to the previous open session
+recorded for your app. To bind both, pass their keys when generating the module:
 
-You add the action to Rex with a Lua module, `sesh.lua`, that rex-sesh prints
-for you.
+```bash
+./bin/rex-sesh lua --key 'ctrl+a>s' --last-key 'ctrl+a>shift+l' > ~/.config/rex/sesh.lua
+```
 
 ## Install
 
@@ -48,35 +49,8 @@ key bound to `sesh_picker`.
 
 ## What the module does
 
-`rex-sesh lua` prints the module for the binary that runs it. This is the
-output of `rex-sesh lua --key 'ctrl+a>s'`, shortened:
-
-```lua
-local bin = "/path/to/rex-plugin-sesh/bin/rex-sesh"
-
-rex.action{
-  name = "sesh_picker",
-  title = "Sesh: Pick Session",
-  -- ...
-  args = { focus = "boolean?" },
-  run = function(ctx, args)
-    -- ...
-    local argv = { "/bin/sh", "-c", start, bin, "picker" }
-    if ctx.client_id and (ctx.origin == "key" or ctx.origin == "palette") then
-      argv[#argv + 1] = "--opener"
-      argv[#argv + 1] = ctx.client_id
-    end
-    return assert(rex.session.new_layer{
-      window_id = window,
-      bounds = { 0.1, 0.1, 0.8, 0.8 },
-      focus = not (args and args.focus == false),
-      -- ...
-    })
-  end,
-}
-
-rex.bind("ctrl+a>s", "sesh_picker")
-```
+`rex-sesh lua` prints the module for the binary that runs it. Both actions launch that binary in the current session. The picker runs
+`picker` and the previous-session action runs `last`.
 
 - `bin` is the full path of the rex-sesh binary that printed the module. A
   symlink is resolved to the file it points to.
@@ -236,8 +210,7 @@ again after you update rex-sesh.
 ## Session history
 
 Rex doesn't report which session an app shows, or the order in which the app
-showed sessions. So rex-sesh keeps its own history of the switches the picker
-makes. The picker's `recent` order comes from it.
+showed sessions. So rex-sesh keeps its own history of accepted picker and last-session switches. The picker's `recent` order comes from it.
 
 The picker records a switch when the Rex app accepts it, in the native picker
 and with `--fzf`. It records the session it switched to. For a directory row,
@@ -289,7 +262,7 @@ change the session, so the history leaves these out:
 
 | Change | Recorded |
 | --- | --- |
-| Choose a session in the picker | Yes |
+| Choose a session in the picker or invoke **Sesh: Last Session** | Yes |
 | Rex's session commands, such as **Change Session…**, **Next Session**, **Previous Session** and **Go to Session** | No |
 | **Navigate Back** and **Navigate Forward** | No |
 | Change tabs or panes in a session | No. This doesn't change the session. |

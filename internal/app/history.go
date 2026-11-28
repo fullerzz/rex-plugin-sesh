@@ -113,26 +113,9 @@ const (
 // cancelling the picker keeps the previous session. Without an app, or with
 // a history that cannot be read, the previous session is unknown.
 func pickerHistory(app, current string, col collection) pickerpkg.ReloadResult {
-	open := map[string]bool{}
-	var rexSessions []model.Session
-	for _, s := range col.Sessions {
-		if s.Source == "rex" && s.SessionID != "" {
-			open[s.Ref()] = true
-			rexSessions = append(rexSessions, s)
-		}
-	}
-	stateOf := func(v state.Visit) visitState {
-		if open[visitRef(v)] {
-			return visitOpen
-		}
-		if v.Host != "" && !col.ListedHosts[v.Host] {
-			return visitUnknown
-		}
-		return visitClosed
-	}
-
+	stateOf := visitStates(col.RexSessions, col.ListedHosts)
 	shown := state.Visit{SessionID: current}
-	result := pickerpkg.ReloadResult{RecentSessionIDs: []string{}, RexSessions: rexSessions}
+	result := pickerpkg.ReloadResult{RecentSessionIDs: []string{}, RexSessions: col.RexSessions}
 	if shown.SessionID != "" {
 		result.RecentSessionIDs = append(result.RecentSessionIDs, visitRef(shown))
 	}
@@ -155,6 +138,22 @@ func pickerHistory(app, current string, col collection) pickerpkg.ReloadResult {
 	case visitClosed:
 	}
 	return result
+}
+
+func visitStates(sessions []model.Session, listedHosts map[string]bool) func(state.Visit) visitState {
+	open := make(map[string]bool, len(sessions))
+	for _, session := range sessions {
+		open[session.Ref()] = true
+	}
+	return func(v state.Visit) visitState {
+		if open[visitRef(v)] {
+			return visitOpen
+		}
+		if v.Host != "" && !listedHosts[v.Host] {
+			return visitUnknown
+		}
+		return visitClosed
+	}
 }
 
 // previousVisit finds the newest visit other than current that is not

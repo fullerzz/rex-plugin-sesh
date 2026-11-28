@@ -35,8 +35,8 @@ that `rex-sesh list --json` or `rex-sesh picker --json` prints.
 | `workspace_sort` | `"workspace"` | How Rex sessions are ordered when the picker opens: `workspace`, `recent`, or `agent`. See [Sort modes](#sort-modes). |
 | `herdr_theme_inherit` | `true` | Take the picker's colors from Herdr's theme file. `false` uses the built-in colors. See [Picker colors](#picker-colors). |
 | `replace_worktree_icon` | `true` | Accepted, but has no effect. rex-sesh doesn't detect Git worktrees. |
-| `show_last_workspace` | `true` | Accepted, but has no effect yet. The footer doesn't show a last session. |
-| `show_last_workspace_path` | `true` | Accepted, but has no effect yet, for the same reason. |
+| `show_last_workspace` | `true` | Show the previous open session in the native footer when space allows. |
+| `show_last_workspace_path` | `true` | Include its directory when the footer has room. |
 
 The keys keep their herdr-sesh names, such as `workspace_sort`, so older
 configs still load.

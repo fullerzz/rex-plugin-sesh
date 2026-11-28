@@ -2325,3 +2325,15 @@ func TestCloseReloadRecentMetadataNilPreservesEmptyClears(t *testing.T) {
 		})
 	}
 }
+
+func TestFooterHonorsCustomAndEmptyHistoryLabel(t *testing.T) {
+	for _, label := range []string{"↩", ""} {
+		m := newTeaModel(nil, Options{DisplayOptions: DisplayOptions{LastWorkspaceLabel: &label, LastSessionID: "api"}})
+		full, compact := "api", "api"
+		if label != "" {
+			full, compact = "↩ · api", "↩: api"
+		}
+		assert.Equal(t, full, ansi.Strip(m.lastWorkspaceText()))
+		assert.Equal(t, compact, ansi.Strip(m.lastWorkspaceCompactText()))
+	}
+}

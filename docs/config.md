@@ -238,7 +238,7 @@ with parent elements added where two directories would share a name, such as
 
 | Field | Default | Effect |
 | --- | --- | --- |
-| `last_workspace_label` | `"last"` | Accepted, but has no effect yet. Nothing shows the last session's label. |
+| `last_workspace_label` | `"last"` | Text before the previous session in the native picker footer. An empty string shows the session without a prefix. |
 
 The value must be at most 80 characters, must not contain control characters,
 and must not start or end with whitespace.
